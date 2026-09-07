@@ -82,6 +82,8 @@ func dispatch(cmd string) error {
 		return status(m, flag.Args()[1:])
 	case "doctor":
 		return doctor(m)
+	case "domain":
+		return domain(m, flag.Args()[1:])
 	case "brief":
 		return brief(flag.Args()[1:])
 	case "schema":
@@ -187,6 +189,83 @@ func logs(m *stack.Machine, args []string) error {
 		return fmt.Errorf("logs needs exactly one service; this group has %d", len(targets))
 	}
 	return stack.Logs(targets[0].ContainerName, *follow, *tail, os.Stdout)
+}
+
+// domain lists or changes the machine's domains. A domain is delegated once for
+// the machine, so it is managed here rather than in a project.
+func domain(m *stack.Machine, args []string) error {
+	if len(args) == 0 {
+		return listDomains(m)
+	}
+	action := args[0]
+	if len(args) < 2 {
+		return fmt.Errorf("%s needs a domain name", action)
+	}
+	name := args[1]
+
+	// The settings file records the change and the resolver entries apply it.
+	// When applying fails, the settings are restored, so a refused
+	// authorization does not leave a domain recorded but not delegated.
+	before, err := m.Settings()
+	if err != nil {
+		return err
+	}
+	switch action {
+	case "add":
+		err = m.AddDomain(name)
+	case "remove":
+		err = m.RemoveDomain(name)
+	case "default":
+		err = m.SetDefaultDomain(name)
+	default:
+		return fmt.Errorf("unknown domain action %q; use add, remove or default", action)
+	}
+	if err != nil {
+		return err
+	}
+
+	if err := applyDomains(m); err != nil {
+		if restore := m.SaveSettings(before); restore != nil {
+			return fmt.Errorf("%w (and the settings could not be restored: %v)", err, restore)
+		}
+		return err
+	}
+	return listDomains(m)
+}
+
+// applyDomains writes the resolver entries for the recorded domains and
+// republishes the proxy.
+func applyDomains(m *stack.Machine) error {
+	rt, err := newRuntime(m)
+	if err != nil {
+		return err
+	}
+	if err := rt.EnsureInstalled(); err != nil {
+		return err
+	}
+	_, err = stack.SyncProxy(m)
+	return err
+}
+
+func listDomains(m *stack.Machine) error {
+	snap, err := stack.Take(m, *addr)
+	if err != nil {
+		return err
+	}
+	if len(snap.Machine.DomainList) == 0 {
+		fmt.Println("no domains are delegated on this machine")
+		return nil
+	}
+	for _, d := range snap.Machine.DomainList {
+		note := "delegated"
+		if d.Default {
+			note = "default, used by projects that name none"
+		} else if len(d.PinnedBy) > 0 {
+			note = "pinned by " + strings.Join(d.PinnedBy, ", ")
+		}
+		fmt.Printf("  *.%-20s %s\n", d.Name, note)
+	}
+	return nil
 }
 
 // brief prints the usage contract. A caller that installed only the binaries

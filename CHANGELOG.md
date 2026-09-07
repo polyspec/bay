@@ -5,6 +5,23 @@ the day the change was made.
 
 ## 2026-09-07
 
+### Domains can be managed from the command line
+
+`bay domain` lists the machine's domains, and `add`, `remove` and
+`default` change them. Until now domains could only be changed in the
+application, so a caller with the command line could not set one up.
+
+A failed apply restores the settings file, so a refused authorization no longer
+leaves a domain recorded but not delegated.
+
+`bay brief` now carries the first steps, what `up` does, a complete
+Compose example and the domain commands, so one command covers the whole
+contract.
+
+Verification: `bay domain` lists the delegated domains; adding an
+existing domain, removing the default and an unknown action are each refused by
+name; after a refused authorization `~/.bay/machine.json` is unchanged.
+
 ### Installation
 
 `make install` copies the built binaries to `PREFIX/bin` and the application to

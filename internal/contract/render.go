@@ -15,12 +15,41 @@ func Brief(w io.Writer) {
 	fmt.Fprintln(w, "COMMANDS")
 	CommandList(w)
 
+	fmt.Fprintln(w, "\nFIRST STEPS")
+	fmt.Fprintln(w, "  bay doctor        is this machine set up")
+	fmt.Fprintln(w, "  bay status        what is already running here")
+	fmt.Fprintln(w, "  bay domain        which domains this machine serves")
+	fmt.Fprintln(w, "  cd <your project>")
+	fmt.Fprintln(w, "  bay up            start it and serve it over HTTPS")
+
+	fmt.Fprintln(w, "\nWHAT UP DOES")
+	fmt.Fprintln(w, "  Reads the Compose file, starts one container per service, issues a")
+	fmt.Fprintln(w, "  certificate for each domain, and adds the routes to the machine's")
+	fmt.Fprintln(w, "  proxy. It returns after the proxy serves them. Nothing is published")
+	fmt.Fprintln(w, "  to a host port and /etc/hosts is not touched.")
+
 	fmt.Fprintln(w, "\nCOMPOSE FILE")
 	fmt.Fprintln(w, "  A project is a Compose file: compose.yaml, compose.yml,")
 	fmt.Fprintln(w, "  docker-compose.yaml or docker-compose.yml. Settings live under the")
 	fmt.Fprintln(w, "  top-level x-bay mapping and in bay.* service labels.")
 	fmt.Fprintln(w, "  A service with no label is served at <service>.<project domain>.")
-	fmt.Fprintln(w, "\n  Run \"bay schema\" for the full key list.")
+	fmt.Fprint(w, "\n", indent(Example(), "    "))
+	fmt.Fprintln(w, "\n  Run \"bay schema\" for every key and its default.")
+
+	fmt.Fprintln(w, "\nDOMAINS")
+	fmt.Fprintln(w, "  A domain is delegated once for the whole machine. A project uses the")
+	fmt.Fprintln(w, "  machine default unless its Compose file names one under")
+	fmt.Fprintln(w, "  x-bay.domain.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "    bay domain                 list them")
+	fmt.Fprintln(w, "    bay domain add lab.test    delegate another, asks for the password")
+	fmt.Fprintln(w, "    bay domain default lab.test")
+	fmt.Fprintln(w, "    bay domain remove lab.test")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "  A two-label domain such as lab.test also covers names that have no")
+	fmt.Fprintln(w, "  route: they receive 404 instead of a certificate warning. A")
+	fmt.Fprintln(w, "  single-label domain does not, because clients reject a wildcard whose")
+	fmt.Fprintln(w, "  parent is one label.")
 
 	fmt.Fprintln(w, "\nSERVICE TO SERVICE")
 	fmt.Fprintln(w, "  Reach another service at <project>-<service>.container.test:<port>.")
@@ -50,7 +79,10 @@ func Brief(w io.Writer) {
 		}
 		fmt.Fprintf(w, "  %s\n", s.Path)
 	}
-	fmt.Fprintln(w, "\n  Read the current state with \"bay status --json\".")
+	fmt.Fprintln(w, "\nMORE")
+	fmt.Fprintln(w, "  bay schema        every Compose key and its default")
+	fmt.Fprintln(w, "  bay help <cmd>    what one command changes")
+	fmt.Fprintln(w, "  bay status --json the current state, for another program")
 }
 
 // BriefJSON writes the same contract as JSON.

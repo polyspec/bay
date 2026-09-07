@@ -16,6 +16,7 @@ verifies that this file matches the code.
 | `stop [service...]` | Stop services. The containers remain and can be started again. | No |
 | `restart [service...]` | Stop then start services. | No |
 | `logs [-f] [-n N] <service>` | Print one service's output. | No |
+| `domain [add|remove|default] [name]` | List the machine's domains, or change them. | Can require |
 | `status [--json]` | Print the proxy, the DNS server and every registered project. | No |
 | `doctor` | Report what machine setup is missing. Changes nothing. | No |
 | `install` | Apply the machine setup now instead of during the next up. | Can require |
@@ -45,6 +46,10 @@ Stops containers and withdraws their routes.
 ### `restart`
 
 Recreates missing containers and updates the proxy.
+
+### `domain`
+
+add writes an /etc/resolver entry for the domain. remove deletes it. default changes the domain projects use when their Compose file names none.
 
 ### `install`
 

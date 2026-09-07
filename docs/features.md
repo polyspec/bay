@@ -21,6 +21,7 @@ changes, its evidence is replaced by the verification run for that change.
 | Certificate issue and reissue | Implemented | `go test ./internal/stack` covers listing, expiry reporting, removal and authority rotation | Yes |
 | Certificate authority trusted without administrator rights | Implemented | `security add-trusted-cert` run against the authority returned success, `security verify-cert` confirmed trust | Yes |
 | Resolver entries written with acquired rights | Implemented | `/etc/resolver/test` created by the application through the system authentication panel | Yes |
+| Domain management from the command line | Implemented | `bay domain` lists, and `add`, `remove` and `default` were exercised: adding an existing domain, removing the default and an unknown action are each refused by name, and a failed apply restores `~/.bay/machine.json` | Yes |
 | Machine state snapshot | Implemented | `go test ./internal/stack` compares the snapshot against a running project | Yes |
 | Menu bar application | Implemented | `open -n bin/baybar.app` followed by a synthetic click on a row button opened the log window, confirming the button to callback path | Yes |
 | Source list window with dashboard | Implemented | `open -n bin/baybar.app` and `screencapture -l <window>` produced the dashboard with the sidebar, project rows and address list | Yes |

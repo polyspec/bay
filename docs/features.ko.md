@@ -20,6 +20,7 @@
 | 인증서 발급과 재발급 | 구현됨 | `go test ./internal/stack`이 목록, 만료 보고, 삭제, 기관 교체를 검사 | 예 |
 | 관리자 권한 없이 인증 기관 신뢰 | 구현됨 | 기관에 대한 `security add-trusted-cert`가 성공하고 `security verify-cert`가 신뢰를 확인 | 예 |
 | 권한을 획득해 resolver 항목 작성 | 구현됨 | 앱이 시스템 인증 창을 통해 `/etc/resolver/test`를 생성 | 예 |
+| 명령줄에서 도메인 관리 | 구현됨 | `bay domain`이 목록을 출력하고 `add`, `remove`, `default`를 실행함. 이미 있는 도메인 추가, 기본 도메인 삭제, 잘못된 동작을 각각 이름을 대며 거부하고, 적용 실패 시 `~/.bay/machine.json`을 되돌림 | 예 |
 | 머신 상태 스냅샷 | 구현됨 | `go test ./internal/stack`이 실행 중인 프로젝트와 스냅샷을 비교 | 예 |
 | 메뉴바 앱 | 구현됨 | `open -n bin/baybar.app` 실행 후 행 버튼에 합성 클릭을 보내 로그 창이 열림. 버튼에서 콜백까지의 경로를 확인 | 예 |
 | 사이드바와 대시보드가 있는 창 | 구현됨 | `open -n bin/baybar.app`과 `screencapture -l <창>`으로 사이드바, 프로젝트 행, 주소 목록이 있는 대시보드를 캡처 | 예 |
