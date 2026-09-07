@@ -560,3 +560,89 @@ services:
 		t.Fatalf("routes = %+v, want the holder's route only", got)
 	}
 }
+
+// TestStartingIsDistinctFromRunning covers the window a container is running
+// but the process inside is not listening. The proxy returns 502 during it, so
+// the state has to be reported separately.
+func TestStartingIsDistinctFromRunning(t *testing.T) {
+	requireE2E(t)
+
+	dir := t.TempDir()
+	m := NewMachine(dir)
+	// The process listens after a delay, so the container is running well
+	// before it accepts a connection.
+	svc := &Service{
+		Name: "late", ContainerName: "e2elate-web", Image: e2eImage,
+		Command: []string{"node", "-e",
+			"setTimeout(()=>require('http').createServer((q,s)=>s.end('late')).listen(80),20000)"},
+		Domain: "late.start.test", Port: 80, Network: ProxyNetwork,
+	}
+	t.Cleanup(func() { Remove(svc.ContainerName); StopProxy() })
+
+	mustRegister(t, m, GroupRef{Name: "e2elate", Domains: []string{"start.test"}})
+	if err := StartService("e2elate", svc); err != nil {
+		t.Fatal(err)
+	}
+	waitRunning(t, svc.ContainerName)
+
+	// The container is running and has an address, and is not ready.
+	instances, err := Instances()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var found bool
+	for _, in := range instances {
+		if in.Container != svc.ContainerName {
+			continue
+		}
+		found = true
+		if !in.Running() {
+			t.Fatalf("container state = %q, want running", in.State)
+		}
+		if in.Ready() {
+			t.Fatal("a container that is not listening reported as ready")
+		}
+	}
+	if !found {
+		t.Fatal("the container is not listed")
+	}
+
+	// The snapshot reports it as starting, not running.
+	snap, err := Take(m, DefaultDNSAddr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var status ServiceStatus
+	for _, g := range snap.Groups {
+		for _, s := range g.Services {
+			if s.Container == svc.ContainerName {
+				status = s
+			}
+		}
+	}
+	if status.State != "starting" {
+		t.Fatalf("state = %q, want starting", status.State)
+	}
+	if status.Running() {
+		t.Error("a starting service reported as running")
+	}
+	if !status.Live() {
+		t.Error("a starting service reported as not live")
+	}
+
+	// WaitReady reports it as pending rather than blocking until it listens.
+	pending, err := WaitReady([]string{svc.ContainerName}, 2*time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(pending) != 1 || pending[0] != svc.ContainerName {
+		t.Fatalf("pending = %v, want the container", pending)
+	}
+
+	// Once the process listens, the same container reports ready.
+	if pending, err := WaitReady([]string{svc.ContainerName}, 40*time.Second); err != nil {
+		t.Fatal(err)
+	} else if len(pending) != 0 {
+		t.Fatalf("still not ready after the process listens: %v", pending)
+	}
+}

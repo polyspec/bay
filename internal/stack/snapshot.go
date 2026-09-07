@@ -89,7 +89,9 @@ type ServiceStatus struct {
 	Image     string `json:"image"`
 	Port      int    `json:"port"`
 	Scheme    string `json:"scheme"`
-	// State is "running", "stopped" or "absent" when no container exists.
+	// State is "running", "starting", "stopped", or "absent" when no container
+	// exists. "starting" means the container runs but does not yet accept a
+	// connection on its port.
 	State string `json:"state"`
 	IPv4  string `json:"ipv4"`
 	// Routed says the proxy currently forwards this service's domain to it.
@@ -102,7 +104,12 @@ type ServiceStatus struct {
 	Address string `json:"address"`
 }
 
+// Running reports that the service accepts connections. A starting service is
+// not counted, because nothing can use it yet.
 func (s ServiceStatus) Running() bool { return s.State == "running" }
+
+// Live reports that the container is running, whether or not it is ready.
+func (s ServiceStatus) Live() bool { return s.State == "running" || s.State == "starting" }
 
 // Take reads the machine's current state. addr is the address bayd
 // listens on.
@@ -264,6 +271,9 @@ func groupStatus(m *Machine, g GroupRef, byContainer map[string]ServiceInstance,
 		}
 		if in, ok := byContainer[s.ContainerName]; ok {
 			st.State, st.IPv4 = in.State, in.IPv4
+			if in.Running() && !in.Ready() {
+				st.State = "starting"
+			}
 		}
 		st.Routed = routed[s.Domain] && st.Running()
 		out.Services = append(out.Services, st)
@@ -272,13 +282,17 @@ func groupStatus(m *Machine, g GroupRef, byContainer map[string]ServiceInstance,
 }
 
 func serviceFromInstance(in ServiceInstance, routed map[string]bool) ServiceStatus {
+	state := in.State
+	if in.Running() && !in.Ready() {
+		state = "starting"
+	}
 	st := ServiceStatus{
 		Name:      in.Service,
 		Container: in.Container,
 		Domain:    in.Domain,
 		Port:      in.Port,
 		Scheme:    in.Scheme,
-		State:     in.State,
+		State:     state,
 		IPv4:      in.IPv4,
 		Routed:    routed[in.Domain] && in.Running(),
 		Internal:  in.Domain == "",

@@ -4,6 +4,21 @@
 
 ## 2026-09-07
 
+### running과 구분되는 starting 상태
+
+컨테이너는 안의 프로세스가 포트를 듣기 전에 running으로 보고된다. 그 구간의
+요청은 실패한다. 프록시가 502를 반환하고 다른 서비스의 연결은 시간 초과된다.
+도구는 그런 서비스를 running으로 보고했다.
+
+`status`, 스냅샷, 앱이 이제 `starting`으로 보고하고, `up`, `start`, `restart`는
+프로세스가 연결을 받을 때까지 최대 20초 기다리며 더 걸리는 서비스의 이름을
+표시한다.
+
+검증: `BAY_E2E=1 go test ./internal/stack -run
+TestStartingIsDistinctFromRunning`. 25초 뒤에 듣는 서비스를 가진 프로젝트가
+`still starting after 20s`를 출력했고, `status`가 그 서비스를 `starting`으로
+표시하는 동안 프록시가 502를 반환했다.
+
 ### 사용 문서를 재작성하고 실행으로 검증
 
 `docs/operations/using.md`와 한국어 문서가 머신 확인, 프로젝트 추가, 서비스 이름

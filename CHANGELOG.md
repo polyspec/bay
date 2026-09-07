@@ -5,6 +5,21 @@ the day the change was made.
 
 ## 2026-09-07
 
+### Starting is reported separately from running
+
+A container reports as running before the process inside listens on its port.
+Requests during that window fail: the proxy returns 502 and a connection from
+another service times out. The tool reported such a service as running.
+
+`status`, the snapshot and the application now report it as `starting`, and
+`up`, `start` and `restart` wait up to 20 seconds for the processes to accept
+connections, naming any service that takes longer.
+
+Verification: `BAY_E2E=1 go test ./internal/stack -run
+TestStartingIsDistinctFromRunning`. A project with a service that listens after
+25 seconds reported `still starting after 20s`, and `status` showed the service
+as `starting` while the proxy returned 502 for it.
+
 ### Usage document rewritten and executed
 
 `docs/operations/using.md` and its Korean twin now cover checking the machine,

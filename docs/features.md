@@ -17,6 +17,7 @@ changes, its evidence is replaced by the verification run for that change.
 | Commands wait for the proxy to serve the new configuration | Implemented | `BAY_E2E=1 go test ./internal/stack` completes in under four seconds where it previously failed on a fifteen second client timeout | Yes |
 | Internal services without a domain | Implemented | `go test ./internal/stack` covers the label, and an end-to-end test confirms no route and no certificate | Yes |
 | A project cannot take a domain another running project serves | Implemented | `BAY_E2E=1 go test ./internal/stack -run TestUpRefusesADomainAnotherProjectServes` confirms the refusal names the holding project and creates no container | Yes |
+| Starting reported separately from running | Implemented | `BAY_E2E=1 go test ./internal/stack -run TestStartingIsDistinctFromRunning` confirms a container that is running but not listening reports as `starting`, is not counted as running, and is named by `WaitReady` | Yes |
 | Service-level start, stop, restart, logs | Implemented | `BAY_E2E=1 go test ./internal/stack -run TestStoppingOneServiceWithdrawsOnlyItsRoute` and `-run TestLogsReachTheCaller` | Yes |
 | Certificate issue and reissue | Implemented | `go test ./internal/stack` covers listing, expiry reporting, removal and authority rotation | Yes |
 | Certificate authority trusted without administrator rights | Implemented | `security add-trusted-cert` run against the authority returned success, `security verify-cert` confirmed trust | Yes |

@@ -33,7 +33,7 @@ const (
 func stateOf(g stack.GroupStatus) (groupState, int) {
 	running := 0
 	for _, s := range g.Services {
-		if s.Running() {
+		if s.Live() {
 			running++
 		}
 	}
@@ -204,7 +204,14 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 		}
 		dots := make([]string, 0, len(g.Services))
 		for _, s := range g.Services {
-			dots = append(dots, dotFor(s.Running()))
+			dot := ""
+			switch {
+			case s.Running():
+				dot = "on"
+			case s.Live():
+				dot = "warn"
+			}
+			dots = append(dots, dot)
 		}
 		projects.Rows = append(projects.Rows, row{
 			Text: g.Name, Dot: sideDot(state), Chip: g.Domain, Dots: dots,
@@ -275,8 +282,8 @@ func projectView(p *panel, g stack.GroupStatus, busy bool) {
 		services.Rows = append(services.Rows, row{
 			Text: s.Name, Dot: serviceDot(s), Link: link, LinkText: linkText, Detail: detail,
 			Buttons: []button{
-				{ID: "start:" + g.Name + ":" + s.Name, Title: "Start", Disabled: busy || s.Running()},
-				{ID: "stop:" + g.Name + ":" + s.Name, Title: "Stop", Disabled: busy || !s.Running()},
+				{ID: "start:" + g.Name + ":" + s.Name, Title: "Start", Disabled: busy || s.Live()},
+				{ID: "stop:" + g.Name + ":" + s.Name, Title: "Stop", Disabled: busy || !s.Live()},
 				{ID: "logs:" + g.Name + ":" + s.Name, Title: "Logs", Disabled: s.State == "absent"},
 			},
 		})
@@ -411,7 +418,7 @@ func serviceDot(s stack.ServiceStatus) string {
 	switch {
 	case s.Running() && (s.Routed || s.Internal):
 		return "on"
-	case s.Running():
+	case s.Live():
 		return "warn"
 	default:
 		return ""

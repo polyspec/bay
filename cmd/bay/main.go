@@ -431,6 +431,9 @@ func printSnapshot(snap stack.Snapshot) {
 			if s.Internal {
 				route, where = "internal", "reachable at "+s.Container+"."+stack.BackendDomain
 			}
+			if s.State == "starting" {
+				where += " · not accepting connections yet"
+			}
 			fmt.Printf("  %-8s %-8s %-16s %-16s %s\n", s.State, route, s.Name, s.IPv4, where)
 		}
 	}

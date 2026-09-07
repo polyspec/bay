@@ -92,8 +92,26 @@ name; the proxy and the services resolve it on each request.
 
 A restarted service takes a few seconds to become reachable by name again.
 Connections from other services fail with a timeout until the runtime publishes
-the new address. Requests through the proxy are not affected: `start`, `stop`
-and `restart` return only after the proxy serves the new routes.
+the new address.
+
+## Starting and running
+
+A container reports as running as soon as the runtime starts it, which is before
+the process inside listens on its port. During that window the proxy returns 502
+and a connection from another service fails.
+
+`status` reports such a service as `starting` and states that it is not
+accepting connections yet:
+
+```
+running  routed   web    192.168.64.89   web.test
+starting -        api    192.168.64.74   api.test · not accepting connections yet
+```
+
+`up`, `start` and `restart` wait up to 20 seconds for the processes to accept
+connections. A service that takes longer is named in the output and the command
+returns; the containers are running and the service becomes available on its
+own.
 
 ## Ports
 

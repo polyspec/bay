@@ -58,7 +58,37 @@ func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
 			return SyncResult{}, err
 		}
 	}
-	return r.sync()
+	res, err := r.sync()
+	if err != nil {
+		return res, err
+	}
+	names := make([]string, 0, len(cfg.Services))
+	for _, s := range cfg.Sorted() {
+		names = append(names, s.ContainerName)
+	}
+	r.reportReady(names)
+	return res, nil
+}
+
+// ReadyTimeout bounds how long a command waits for the processes inside the
+// containers to accept connections. A service that takes longer is reported as
+// starting rather than failing the command.
+const ReadyTimeout = 20 * time.Second
+
+// reportReady waits for the named containers to accept connections and reports
+// the ones that did not. The command does not fail: a service may take longer
+// than the wait, and the containers are already running.
+func (r *Runtime) reportReady(containers []string) {
+	pending, err := WaitReady(containers, ReadyTimeout)
+	if err != nil {
+		r.say("could not check readiness: %v", err)
+		return
+	}
+	if len(pending) == 0 {
+		r.say("all services accept connections")
+		return
+	}
+	r.say("still starting after %s: %s", ReadyTimeout, strings.Join(pending, ", "))
 }
 
 // checkDomainsFree reports an error when another running project already serves
@@ -117,7 +147,12 @@ func (r *Runtime) StartServices(cfg *Config, names []string) (SyncResult, error)
 			return SyncResult{}, err
 		}
 	}
-	return r.sync()
+	res, err := r.sync()
+	if err != nil {
+		return res, err
+	}
+	r.reportReady(containerNames(targets))
+	return res, nil
 }
 
 // StopServices stops the named services and leaves their containers in place.
@@ -147,7 +182,21 @@ func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, erro
 			return SyncResult{}, err
 		}
 	}
-	return r.sync()
+	res, err := r.sync()
+	if err != nil {
+		return res, err
+	}
+	r.reportReady(containerNames(targets))
+	return res, nil
+}
+
+// containerNames returns the container name of each service.
+func containerNames(services []*Service) []string {
+	out := make([]string, 0, len(services))
+	for _, s := range services {
+		out = append(out, s.ContainerName)
+	}
+	return out
 }
 
 func (r *Runtime) startOne(cfg *Config, s *Service) error {
