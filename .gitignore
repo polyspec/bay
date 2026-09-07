@@ -1,13 +1,35 @@
 # Build output.
 bin/
 
-# The seeded design canvas is generated from the .dc.html sources by the
-# design skill's helper.
-design/bay-window.html
-
 # Binaries built without -o land in the working directory.
 /baybar
 /bay
 /bayd
 /docscheck
 /docsgen
+
+# Go test and coverage output.
+*.test
+*.out
+coverage.*
+
+# The seeded design canvas is generated from the .dc.html sources and the
+# canvas manifest, both of which are tracked.
+design/bay-window.html
+
+# Scratch files written next to a Compose file while an edit is validated.
+# They are removed on success; an interrupted run can leave one behind.
+*.bay-edit
+*.bay-check
+
+# Certificates and keys are issued per machine by the local authority in
+# ~/.bay. Nothing of the sort belongs in a repository.
+*.crt
+*.key
+*.pem
+*.p12
+
+# macOS and editors.
+.DS_Store
+.idea/
+.vscode/
