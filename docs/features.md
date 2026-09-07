@@ -26,11 +26,11 @@ changes, its evidence is replaced by the verification run for that change.
 | Menu bar application | Implemented | `open -n bin/baybar.app` followed by a synthetic click on a row button opened the log window, confirming the button to callback path | Yes |
 | Source list window with dashboard | Implemented | `open -n bin/baybar.app` and `screencapture -l <window>` produced the dashboard with the sidebar, project rows and address list | Yes |
 | Appearance control: Auto, Dark, Light | Implemented | Read path: with the system set to Dark, `defaults write dev.bay.bar appearance light` and a restart produced a light window with Light selected. Write path: selecting Light in the running window changed the window to light and `defaults read dev.bay.bar appearance` returned `light` | Yes |
-| Operations documents match the commands | Implemented | Each claim in `docs/operations/using.md` was executed: `bay up`, `stop`, `start`, `logs`, `status --json` against a project created from the document | Yes |
 | Installation from the public module | Implemented | `GOBIN=/tmp/x go install github.com/polyspec/bay/cmd/bay@latest` and the same for `bayd` produced working binaries, and `bay brief` ran from them | Yes |
 | Installation from a clone | Implemented | `git clone` of the public repository followed by `make` produced all three outputs and `bin/bay brief` ran | Yes |
 | `make install` and `make uninstall` | Implemented | `make install PREFIX=/tmp/prefix APPDIR=/tmp/apps` installed both binaries and the application; the installed application launched from its new location; `make uninstall` emptied both directories | Yes |
 | Prebuilt downloads rejected as a distribution path | Implemented | A release archive marked with `com.apple.quarantine` was terminated on launch with exit 137, so the paths above build on the machine instead | Yes |
+| Operations documents match the commands | Implemented | Each claim in `docs/operations/using.md` was executed against a project created from the document: `bay up`, `stop`, `start`, `logs`, `status --json`, the HTTP redirect, service-to-service access by name, and the refusal of a domain another project serves | Yes |
 | Usage contract in the commands | Implemented | `bay brief`, `schema` and `help <command>` produce output | Yes |
 | Generated specification sections | Implemented | `make docs-generate` writes the tables and `make docs-check` compares them | Yes |
 | Korean documents for reader-facing files | Implemented | `make docs-check` reports every twin present with matching heading counts | Yes |

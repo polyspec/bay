@@ -1,39 +1,71 @@
 # Using bay
 
-Adding a project, running it, and the daily commands.
+Adding a project, serving it over HTTPS, and the daily commands.
 
-## If it is already installed on this machine
-
-Nothing to install and nothing to set up. Check with:
+## Check the machine first
 
 ```sh
 bay doctor     # prints "nothing to do" when the machine is ready
 bay status     # the proxy, and every project already registered
+bay domain     # the domains this machine serves
 ```
 
-`status` also shows the domains other projects already serve. Pick a different
-name for yours; `up` refuses a domain another running project serves and names
-that project.
+`doctor` changes nothing. When it reports missing steps, run
+`bay install`; see [Install](install.md).
 
-The menu bar application is `/Applications/baybar.app` when it was
-installed with `make install`. Open it for the same actions in a window.
-
-Everything else is in `bay brief`.
+`status` lists the domains other projects already serve. Choose a different name
+for yours: `up` refuses a domain another running project serves and names that
+project.
 
 ## Add a project
 
 A project is a Compose file. A service with no extra settings is served at
-`<service>.<machine default domain>`.
+`<service>.<project domain>`, and the project domain is the machine default
+unless the file names one.
 
 ```yaml
-name: shop
+name: myapp
 
 services:
   web:
     image: node:26-slim
     ports: ["3000"]
     command: ["npm", "run", "dev"]
+    volumes:
+      - ./src:/app/src
+```
 
+```sh
+cd ~/work/myapp
+bay up
+```
+
+`https://web.test/` is served.
+
+`ports: ["3000"]` states the port the container listens on. Nothing is published
+to a host port: each container has its own address, and the proxy connects to it
+directly.
+
+## Choose the name a service is served at
+
+The default is `<service>.<project domain>`. A label sets it explicitly:
+
+```yaml
+  web:
+    image: node:26-slim
+    labels:
+      bay.domain: shop.test
+```
+
+The name must be under one of the project's domains. Two services in a project
+cannot claim the same name.
+
+## Services with no domain
+
+A database, a queue or a worker is marked internal. It receives no domain, no
+route and no certificate:
+
+```yaml
   db:
     image: postgres:18
     expose: ["5432"]
@@ -43,42 +75,25 @@ services:
       bay.internal: "true"
 ```
 
-```sh
-cd ~/work/shop
-bay up
-```
+The container runs and other services reach it by name.
 
-`https://web.test/` is served. `db` runs without a domain because it is marked
-internal.
+## Service to service
 
-Run `bay schema` for every key this tool reads.
-
-## Domains
-
-A domain is delegated once per machine. A project uses the machine default
-unless its Compose file pins one:
+Reach another service at `<project>-<service>.container.test:<port>`:
 
 ```yaml
-x-bay:
-  domain: shop.test
+  web:
+    environment:
+      DATABASE_URL: postgres://myapp-db.container.test:5432/app
 ```
 
-Manage the machine's domains from the command line:
+Container addresses are assigned by DHCP and change on every start. Use the
+name; the proxy and the services resolve it on each request.
 
-```sh
-bay domain                    # list them
-bay domain add lab.test       # delegate another; asks for the password
-bay domain default lab.test   # what projects use when they name none
-bay domain remove lab.test
-```
-
-The application's **Domains** screen does the same. Adding a domain writes an
-`/etc/resolver` entry, which is why it asks for the password. `remove` refuses
-the default domain and a domain a project pins.
-
-A domain with two labels, such as `shop.test`, also gives a valid wildcard
-certificate for names that have no route. A single-label domain such as `test`
-does not, so a mistyped name produces a certificate warning instead of a 404.
+A restarted service takes a few seconds to become reachable by name again.
+Connections from other services fail with a timeout until the runtime publishes
+the new address. Requests through the proxy are not affected: `start`, `stop`
+and `restart` return only after the proxy serves the new routes.
 
 ## Ports
 
@@ -89,44 +104,89 @@ The container port is read from the first of:
 3. the container side of the first entry of `ports`;
 4. 80.
 
-Host ports are ignored. Each container has its own address, so nothing is
-published to the host.
+The host side of `ports` is ignored.
 
-## Service to service
+## Domains
 
-Reach another service at `<project>-<service>.container.test:<port>`:
+A domain is delegated once for the whole machine. Manage the list from the
+command line:
 
-```yaml
-    environment:
-      DATABASE_URL: postgres://shop-db.container.test:5432/app
+```sh
+bay domain                    # list them
+bay domain add lab.test       # delegate another; asks for the password
+bay domain default lab.test   # what projects use when they name none
+bay domain remove lab.test
 ```
 
-Container addresses change on every start, so use the name.
+Adding a domain writes `/etc/resolver/<domain>`, which tells macOS to resolve
+names under it with this tool. That write requires administrator rights, so the
+command asks for the password once per domain. `remove` refuses the default
+domain and a domain a project pins.
+
+A project uses its own domain by naming it in the Compose file:
+
+```yaml
+x-bay:
+  domain: myteam.test
+```
+
+Its services are then served at `<service>.myteam.test`.
+
+A two-label domain such as `myteam.test` also covers names that have no route:
+they receive 404. A single-label domain such as `test` does not, because clients
+reject a wildcard whose parent is one label, so a mistyped name produces a
+certificate warning instead.
+
+The application's **Domains** screen performs the same actions.
 
 ## Daily commands
 
 ```sh
 bay up                 # start the project and register its routes
 bay down               # remove the project and withdraw its routes
-bay restart web        # one service
-bay stop db            # keep the container, withdraw the route
-bay logs -f web        # follow the output
+bay stop db            # stop a service; the container remains
+bay start db           # start it again
+bay restart web
+bay logs -f web        # follow one service's output
 bay status             # the proxy and every registered project
 bay status --json      # the same, for another program
-bay doctor             # what setup is missing
 ```
 
 The application performs the same actions. The project screen carries Start,
-Restart and Stop for the project; each service row carries Start, Stop and
-Logs.
+Restart and Stop; each service row carries Start, Stop and Logs.
 
-## Onboarding another person
+## How a request is served
+
+```
+browser
+  → /etc/resolver/<domain>     delegates the domain to the local DNS server
+  → bayd               returns the proxy's address
+  → bay-edge:443      selects the service by Host header
+  → <project>-<service>.container.test
+  → the container
+```
+
+One proxy serves the whole machine and every project shares it. Its
+configuration is generated from the labels on running containers, so removing a
+project removes its routes without editing a file, and two projects cannot
+overwrite each other's configuration.
+
+Plain HTTP on port 80 returns 308 to the HTTPS address.
+
+## When something fails
+
+[Troubleshooting](troubleshooting.md) lists each symptom with its cause and the
+command that reports more. The three that cover most cases: a name that does not
+resolve means the DNS agent is not registered, 502 means the container is not
+listening on the resolved port, and 404 means no route claims the name.
+
+## Handing the project to someone else
 
 Commit the Compose file. Do not commit certificates or keys: each machine issues
 its own from its own authority.
 
 ```sh
-git clone ... && cd shop
+git clone ... && cd myapp
 bay up
 ```
 

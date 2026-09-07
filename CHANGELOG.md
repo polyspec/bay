@@ -5,6 +5,22 @@ the day the change was made.
 
 ## 2026-09-07
 
+### Usage document rewritten and executed
+
+`docs/operations/using.md` and its Korean twin now cover checking the machine,
+adding a project, how a service's name is chosen, services with no domain,
+service-to-service addressing, port resolution, domain management from the
+command line, the daily commands, and the path a request takes.
+
+Every claim was executed against a project created from the document. One
+behavior the document did not state was found and added: a restarted service
+takes a few seconds to become reachable by name from other services, because
+the runtime publishes the new address after the container is running.
+
+Verification: `bay up`, `stop`, `start`, `status --json`, the HTTP
+redirect, service-to-service access by name, and the refusal of a domain
+another project serves were each run against that project.
+
 ### Domains can be managed from the command line
 
 `bay domain` lists the machine's domains, and `add`, `remove` and
