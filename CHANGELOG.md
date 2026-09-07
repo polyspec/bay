@@ -34,6 +34,10 @@ Changing the choice redraws the window without a restart. The command line stays
 in English, because its output is the specification the generated documents come
 from.
 
+The resolver files are named as a set, `/etc/resolver/{devel,staging,test}`,
+because a list of whole paths did not fit the row and was truncated in the
+middle, which hid a name.
+
 The sidebar and the pane meet on a line, drawn at the weight a card is outlined
 with. The project screen opens its Compose file in the text window, read from
 the first line, so the file the project is edited in can be read without leaving

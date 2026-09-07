@@ -631,15 +631,11 @@ func domainsView(p *panel, snap stack.Snapshot, busy bool) {
 	}
 	p.Sections = append(p.Sections, list)
 
-	resolvers := make([]string, 0, len(snap.Machine.Domains))
-	for _, d := range snap.Machine.Domains {
-		resolvers = append(resolvers, "/etc/resolver/"+d)
-	}
 	p.Sections = append(p.Sections, section{
 		Header: text.T("HOW IT WORKS"),
 		Rows: []row{
 			{Text: text.T("Resolver"), Kind: "kv", Mono: true,
-				Detail: strings.Join(resolvers, ", ") + " → " + snap.Machine.DNS.Addr},
+				Detail: resolverPaths(snap.Machine.Domains) + " → " + snap.Machine.DNS.Addr},
 			{Text: text.T("Adding one"), Kind: "kv",
 				Detail: text.T("asks for your password once")},
 			{Text: text.T("Pinned domains"), Kind: "kv",
@@ -753,6 +749,20 @@ func settingsView(p *panel, snap stack.Snapshot, busy bool) {
 				Buttons: []button{quiet("machine-uninstall", text.T("Remove…"), busy)}},
 		},
 	})
+}
+
+// resolverPaths names the files that delegate the domains. Several names share
+// one directory, so they are written as a set: a list of whole paths does not
+// fit the row and truncating it in the middle hides a name.
+func resolverPaths(domains []string) string {
+	switch len(domains) {
+	case 0:
+		return "/etc/resolver/"
+	case 1:
+		return "/etc/resolver/" + domains[0]
+	default:
+		return "/etc/resolver/{" + strings.Join(domains, ",") + "}"
+	}
 }
 
 // defaultDomain returns the domain projects fall back to.
