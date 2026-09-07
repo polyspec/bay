@@ -217,7 +217,7 @@ services:
 	if web.Env["DATABASE_URL"] == "" || web.Env["DEBUG"] != "1" {
 		t.Errorf("web environment = %v", web.Env)
 	}
-	if len(web.Volumes) != 1 || web.Volumes[0] != "./src:/app/src" {
+	if len(web.Volumes) != 1 || web.Volumes[0] != filepath.Join(filepath.Dir(cfg.Path()), "src")+":/app/src" {
 		t.Errorf("web volumes = %v", web.Volumes)
 	}
 

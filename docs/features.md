@@ -9,6 +9,7 @@ changes, its evidence is replaced by the verification run for that change.
 
 | Feature | Status | Evidence | Shipped |
 | --- | --- | --- | --- |
+| Compose runtime constraints and ordered, reusable service startup | Implemented | `make check` covers interpolation, mounts, dependency errors, ownership, unchanged reuse and completion evidence; `BAY_SERVICE_E2E=1 go test ./internal/stack -run TestServiceLifecycleActualRuntime` checks actual restrictions, initialization and preexisting container preservation | Local build; not installed |
 | Compose file as the project format | Implemented | `go test ./internal/stack` and `go test ./internal/contract` cover key parsing, both label spellings, port resolution, file search and the documented example | Yes |
 | Machine-level domains with per-project override | Implemented | `go test ./internal/stack` covers add, remove, default change and pinned-domain refusal | Yes |
 | Routes derived from container labels | Implemented | `BAY_E2E=1 go test ./internal/stack -run TestTwoGroupsShareOneProxy` starts two projects and confirms each answers on its own domain | Yes |
@@ -17,7 +18,7 @@ changes, its evidence is replaced by the verification run for that change.
 | Commands wait for the proxy to serve the new configuration | Implemented | `BAY_E2E=1 go test ./internal/stack` completes in under four seconds where it previously failed on a fifteen second client timeout | Yes |
 | Internal services without a domain | Implemented | `go test ./internal/stack` covers the label, and an end-to-end test confirms no route and no certificate | Yes |
 | A project cannot take a domain another running project serves | Implemented | `BAY_E2E=1 go test ./internal/stack -run TestUpRefusesADomainAnotherProjectServes` confirms the refusal names the holding project and creates no container | Yes |
-| Starting reported separately from running | Implemented | `BAY_E2E=1 go test ./internal/stack -run TestStartingIsDistinctFromRunning` confirms a container that is running but not listening reports as `starting`, is not counted as running, and is named by `WaitReady` | Yes |
+| Starting reported separately from running | Implemented | `TestReadinessActualRuntime` checks both snapshot paths, Ready/Live and WaitReady with an isolated listener; lifecycle tests exclude completed initializers and empty selections. The original `TestStartingIsDistinctFromRunning` is preserved and skips while the shared proxy is in use | Local build; not installed |
 | Service-level start, stop, restart, logs | Implemented | `BAY_E2E=1 go test ./internal/stack -run TestStoppingOneServiceWithdrawsOnlyItsRoute` and `-run TestLogsReachTheCaller` | Yes |
 | Certificate issue and reissue | Implemented | `go test ./internal/stack` covers listing, expiry reporting, removal and authority rotation | Yes |
 | Certificate authority trusted without administrator rights | Implemented | `security add-trusted-cert` run against the authority returned success, `security verify-cert` confirmed trust | Yes |

@@ -30,8 +30,8 @@ func Commands() []Command {
 		{
 			Name: "up", Args: "",
 			Summary: "Start this project's services and register their routes.",
-			Effect: "Creates or replaces the project's containers, issues certificates, " +
-				"and updates the proxy. Delegates a new domain when the project uses one.",
+			Effect: "Reuses unchanged owned containers and proven completed initializers; replaces changed configuration or local image digests. " +
+				"Starts dependencies in order, checks declared health, issues certificates and updates the proxy. Delegates new project domains.",
 			Root:    true,
 			Example: "bay up",
 		},
@@ -44,7 +44,7 @@ func Commands() []Command {
 		{
 			Name: "start", Args: "[service...]",
 			Summary: "Start services. With no name, starts every service in the project.",
-			Effect:  "Starts existing containers, creates missing ones, then updates the proxy.",
+			Effect:  "Reconciles selected services and their dependencies, reuses unchanged containers, checks startup conditions, then updates the proxy.",
 			Example: "bay start web",
 		},
 		{
@@ -56,7 +56,7 @@ func Commands() []Command {
 		{
 			Name: "restart", Args: "[service...]",
 			Summary: "Stop then start services.",
-			Effect:  "Recreates missing containers and updates the proxy.",
+			Effect:  "Recreates selected owned containers, including explicitly retried initializers, after preparing their dependencies; updates the proxy.",
 			Example: "bay restart web",
 		},
 		{
@@ -161,6 +161,7 @@ func InternalLabels() []Key {
 		{"bay.group", "string", "none", "Project the container belongs to."},
 		{"bay.service", "string", "none", "Service name within the project."},
 		{"bay.scheme", "string", "http", "Scheme the proxy uses to reach the service."},
+		{"bay.config", "string", "none", "Digest of the resolved service configuration and local image."},
 	}
 }
 
@@ -181,7 +182,12 @@ func ComposeKeys() []Key {
 		{"command", "string or list", "the image's command", "Process arguments."},
 		{"entrypoint", "string or list", "the image's entrypoint", "Placed before command."},
 		{"environment", "mapping or list", "empty", "Environment variables."},
-		{"volumes", "list of string", "empty", "Bind mounts, `host:container[:ro]`."},
+		{"volumes", "list of string", "empty", "Compose-relative bind mounts or declared external named volumes, `source:target[:ro]`. Top-level volumes supports external: true and name only."},
+		{"user", "string", "image default", "Process user, name or uid[:gid]. Values may use project .env and environment interpolation."},
+		{"read_only", "boolean", "false", "Mount the container root filesystem read-only."},
+		{"cap_drop", "list of string", "empty", "Linux capabilities to drop, including ALL."},
+		{"depends_on", "list or mapping", "empty", "Startup dependencies: service_started, service_healthy or service_completed_successfully. Unsupported options and cycles are rejected."},
+		{"healthcheck", "mapping", "empty", "Startup CMD/CMD-SHELL test; interval, timeout, retries, start_period and disable. No continuous background monitoring."},
 		{"container_name", "string", "<project>-<service>", "Container name."},
 		{"networks", "list or mapping", "the project network", "First entry is used."},
 		{"mem_limit", "string", "runtime default", "Memory limit."},

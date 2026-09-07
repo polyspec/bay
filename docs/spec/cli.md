@@ -29,7 +29,7 @@ verifies that this file matches the code.
 
 ### `up`
 
-Creates or replaces the project's containers, issues certificates, and updates the proxy. Delegates a new domain when the project uses one.
+Reuses unchanged owned containers and proven completed initializers; replaces changed configuration or local image digests. Starts dependencies in order, checks declared health, issues certificates and updates the proxy. Delegates new project domains.
 
 ### `down`
 
@@ -37,7 +37,7 @@ Removes the project's containers. Removes the proxy when no route remains.
 
 ### `start`
 
-Starts existing containers, creates missing ones, then updates the proxy.
+Reconciles selected services and their dependencies, reuses unchanged containers, checks startup conditions, then updates the proxy.
 
 ### `stop`
 
@@ -45,7 +45,7 @@ Stops containers and withdraws their routes.
 
 ### `restart`
 
-Recreates missing containers and updates the proxy.
+Recreates selected owned containers, including explicitly retried initializers, after preparing their dependencies; updates the proxy.
 
 ### `domain`
 

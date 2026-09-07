@@ -49,7 +49,12 @@ First match wins.
 | `command` | string or list | the image's command | Process arguments. |
 | `entrypoint` | string or list | the image's entrypoint | Placed before command. |
 | `environment` | mapping or list | empty | Environment variables. |
-| `volumes` | list of string | empty | Bind mounts, `host:container[:ro]`. |
+| `volumes` | list of string | empty | Compose-relative bind mounts or declared external named volumes, `source:target[:ro]`. Top-level volumes supports external: true and name only. |
+| `user` | string | image default | Process user, name or uid[:gid]. Values may use project .env and environment interpolation. |
+| `read_only` | boolean | false | Mount the container root filesystem read-only. |
+| `cap_drop` | list of string | empty | Linux capabilities to drop, including ALL. |
+| `depends_on` | list or mapping | empty | Startup dependencies: service_started, service_healthy or service_completed_successfully. Unsupported options and cycles are rejected. |
+| `healthcheck` | mapping | empty | Startup CMD/CMD-SHELL test; interval, timeout, retries, start_period and disable. No continuous background monitoring. |
 | `container_name` | string | <project>-<service> | Container name. |
 | `networks` | list or mapping | the project network | First entry is used. |
 | `mem_limit` | string | runtime default | Memory limit. |

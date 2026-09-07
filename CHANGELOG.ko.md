@@ -2,6 +2,18 @@
 
 동작 변경과 각 변경에 대해 실행한 검증을 기록한다. 날짜는 변경한 날이다.
 
+## 2026-09-08
+
+### Compose 시작이 소유 서비스를 보존하고 의존성을 기다림
+
+Compose 값은 프로젝트 `.env`와 shell 치환을 해석한다. 상대 bind 경로는 Compose 디렉터리를 기준으로 하며 시작 전에 external named volume을 확인한다. `user`·`read_only`·`cap_drop`를 런타임에 전달한다. 의존성 순환·없는 서비스·미지원 생명주기 옵션은 거부한다.
+
+`up`은 변경 없는 설정과 로컬 이미지 digest를 재사용해 실행 중 DB를 보존한다. 다른 프로젝트의 소유 label 또는 소유 label이 없는 컨테이너는 변경 전에 거부한다. 선언한 healthcheck와 실제 성공한 일회성 종료를 기다린다. 비공개 완료 기록은 설정·이미지·런타임 생성 및 시작 시각으로 중지한 초기화를 식별한다. 명시적 restart는 초기화를 재시도하며 없거나 바뀐 증거를 성공으로 간주하지 않는다. 프로젝트 변경은 advisory 잠금을 사용하고 종료는 의존성 역순을 지키며 볼륨을 제거하지 않는다.
+
+검증: `make check`, `go test -race ./internal/stack ./internal/contract`, `BAY_SERVICE_E2E=1 go test ./internal/stack -run TestServiceLifecycleActualRuntime -count=1 -timeout=120s`. 격리 서비스 검사는 기존 모든 컨테이너를 보존하면서 실제 프로세스 제한·초기화·실패·변경 없는 재사용을 확인한다. 라우트 등록·공유 프록시 교체·애플리케이션 DB 실행·바이너리 설치는 하지 않는다. 런타임 식별 정보의 제한과 지원 문법은 [생명주기 명세](docs/spec/service-lifecycle.ko.md)에 기록한다.
+
+경로 동기화 후 TCP 준비 상태 보고를 유지한다. 완료된 초기화는 제외하고 빈 선택은 조회하거나 연결 성공을 보고하지 않는다. 두 경우는 수정 전에 실패했고 tracked lifecycle 테스트에서 통과한다. 공유 프록시를 사용하는 기존 준비 상태 테스트는 변경 없이 유지하며 해당 프록시 사용 중에는 건너뛴다. `TestReadinessActualRuntime`은 격리 서비스로 두 snapshot 경로·지연된 listening·WaitReady를 검증한다.
+
 ## 2026-09-07
 
 ### running과 구분되는 starting 상태

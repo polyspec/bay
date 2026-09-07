@@ -17,6 +17,8 @@ and how each item is removed.
 | `~/.bay/machine.json` | Domain changes | No | Delete the file |
 | `~/.bay/groups.json` | Project registration | No | Delete the file |
 | `~/.bay/logs/` | The launchd agent | No | Delete the directory |
+| `~/.bay/completions/` | Successful foreground initializers | No | Delete the record; initialization then requires an explicit retry |
+| `~/.bay/locks/` | Project lifecycle commands | No | Inactive files can remain; active locks release when the command ends |
 
 ## System state
 

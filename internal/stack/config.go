@@ -50,14 +50,22 @@ type Config struct {
 type Service struct {
 	Name string
 	// ContainerName is <project>-<service> unless the file names it.
-	ContainerName string
-	Image         string
-	Command       []string
-	Env           map[string]string
-	Volumes       []string
-	Network       string
-	CPUs          int
-	Memory        string
+	ContainerName      string
+	Image              string
+	Command            []string
+	Env                map[string]string
+	Volumes            []string
+	Network            string
+	CPUs               int
+	Memory             string
+	User               string
+	ReadOnly           bool
+	CapDrop            []string
+	DependsOn          map[string]string
+	Healthcheck        *Healthcheck
+	OneShot            bool
+	ExternalVolumes    []string
+	dependencyIdentity map[string]string
 
 	// Internal marks a service that receives no domain. The container runs and
 	// other services reach it by name, but the proxy does not route to it and
@@ -77,6 +85,7 @@ type composeFile struct {
 	Name         string                     `yaml:"name"`
 	Services     map[string]*composeService `yaml:"services"`
 	Bay *projectSettings           `yaml:"x-bay"`
+	Volumes      map[string]yaml.Node       `yaml:"volumes"`
 }
 
 type projectSettings struct {
@@ -98,6 +107,11 @@ type composeService struct {
 	Networks      yaml.Node    `yaml:"networks"`
 	CPUs          string       `yaml:"cpus"`
 	MemLimit      string       `yaml:"mem_limit"`
+	User          string       `yaml:"user"`
+	ReadOnly      bool         `yaml:"read_only"`
+	CapDrop       []string     `yaml:"cap_drop"`
+	DependsOn     yaml.Node    `yaml:"depends_on"`
+	Healthcheck   yaml.Node    `yaml:"healthcheck"`
 }
 
 // FindComposeFile returns the path when it names a file, or the first known
@@ -153,8 +167,19 @@ func load(path, fallback string) (*Config, error) {
 		return nil, err
 	}
 
+	var document yaml.Node
+	if err := yaml.Unmarshal(b, &document); err != nil {
+		return nil, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
+	variables, err := composeEnvironment(filepath.Dir(abs))
+	if err != nil {
+		return nil, err
+	}
+	if err := interpolateValues(&document, variables); err != nil {
+		return nil, err
+	}
 	var file composeFile
-	if err := yaml.Unmarshal(b, &file); err != nil {
+	if err := document.Decode(&file); err != nil {
 		return nil, fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
 	cfg := &Config{Name: file.Name, path: abs}
@@ -173,6 +198,11 @@ func load(path, fallback string) (*Config, error) {
 }
 
 func (c *Config) build(file *composeFile) error {
+	for name, node := range file.Volumes {
+		if _, err := externalVolume(name, node); err != nil {
+			return err
+		}
+	}
 	if c.Name == "" {
 		c.Name = filepath.Base(filepath.Dir(c.path))
 	}
@@ -205,9 +235,17 @@ func (c *Config) build(file *composeFile) error {
 
 	c.Services = make(map[string]*Service, len(file.Services))
 	claimed := map[string]string{}
+	names := map[string]bool{}
 	for name, cs := range file.Services {
 		s, err := c.service(name, cs, network)
 		if err != nil {
+			return err
+		}
+		if names[s.ContainerName] || c.Services[s.Name] != nil {
+			return fmt.Errorf("duplicate service/container name %q", s.ContainerName)
+		}
+		names[s.ContainerName] = true
+		if err := normalizeVolumes(c, s, file.Volumes); err != nil {
 			return err
 		}
 		if s.Domain != "" {
@@ -218,7 +256,7 @@ func (c *Config) build(file *composeFile) error {
 		}
 		c.Services[s.Name] = s
 	}
-	return nil
+	return validateDependencies(c)
 }
 
 func (c *Config) service(name string, cs *composeService, network string) (*Service, error) {
@@ -238,6 +276,16 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 	s.Env = cs.Environment
 	s.Volumes = cs.Volumes
 	s.Memory = cs.MemLimit
+	s.User, s.ReadOnly, s.CapDrop = cs.User, cs.ReadOnly, cs.CapDrop
+	var err error
+	s.DependsOn, err = decodeDependencies(cs.DependsOn)
+	if err != nil {
+		return nil, fmt.Errorf("service %s: %w", name, err)
+	}
+	s.Healthcheck, err = decodeHealthcheck(cs.Healthcheck)
+	if err != nil {
+		return nil, fmt.Errorf("service %s: %w", name, err)
+	}
 	if cs.CPUs != "" {
 		if n, err := strconv.ParseFloat(cs.CPUs, 64); err == nil && n >= 1 {
 			s.CPUs = int(n)

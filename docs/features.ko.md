@@ -8,6 +8,7 @@
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
+| Compose 런타임 제한 및 순서·재사용을 지키는 서비스 시작 | 구현됨 | `make check`가 치환·mount·의존성 오류·소유권·재사용·완료 증거를 검사하고 `BAY_SERVICE_E2E=1 go test ./internal/stack -run TestServiceLifecycleActualRuntime`가 실제 제한·초기화·기존 컨테이너 보존을 검사 | 로컬 빌드; 설치 안 함 |
 | Compose 파일을 프로젝트 형식으로 사용 | 구현됨 | `go test ./internal/stack`과 `go test ./internal/contract`이 키 파싱, 두 가지 라벨 표기, 포트 결정, 파일 검색, 문서의 예제를 검사 | 예 |
 | 머신 단위 도메인과 프로젝트 지정 | 구현됨 | `go test ./internal/stack`이 추가, 제거, 기본값 변경, 지정된 도메인 제거 거부를 검사 | 예 |
 | 컨테이너 라벨에서 라우트 생성 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestTwoGroupsShareOneProxy`이 프로젝트 두 개를 띄워 각자 도메인으로 응답함을 확인 | 예 |
@@ -16,7 +17,7 @@
 | 프록시가 새 설정을 제공한 뒤 명령이 반환 | 구현됨 | `BAY_E2E=1 go test ./internal/stack`이 15초 클라이언트 시간 초과로 실패하던 자리에서 4초 이내에 완료 | 예 |
 | 도메인 없는 internal 서비스 | 구현됨 | `go test ./internal/stack`이 라벨을 검사하고, 종단 테스트가 라우트와 인증서가 없음을 확인 | 예 |
 | 실행 중인 프로젝트의 도메인을 다른 프로젝트가 가져가지 못함 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestUpRefusesADomainAnotherProjectServes`이 거부 메시지가 보유 프로젝트를 명시하고 컨테이너를 만들지 않음을 확인 | 예 |
-| running과 구분되는 starting 상태 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestStartingIsDistinctFromRunning`이 실행 중이지만 듣지 않는 컨테이너를 `starting`으로 보고하고, running으로 세지 않으며, `WaitReady`가 이름을 반환함을 확인 | 예 |
+| running과 구분되는 starting 상태 | 구현됨 | `TestReadinessActualRuntime`이 격리된 listener로 두 snapshot 경로·Ready/Live·WaitReady를 검사하고 lifecycle 테스트가 완료 초기화·빈 선택을 제외함. 기존 `TestStartingIsDistinctFromRunning`은 보존하며 공유 프록시 사용 중에는 건너뜀 | 로컬 빌드; 설치 안 함 |
 | 서비스 단위 start, stop, restart, logs | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestStoppingOneServiceWithdrawsOnlyItsRoute`와 `-run TestLogsReachTheCaller` | 예 |
 | 인증서 발급과 재발급 | 구현됨 | `go test ./internal/stack`이 목록, 만료 보고, 삭제, 기관 교체를 검사 | 예 |
 | 관리자 권한 없이 인증 기관 신뢰 | 구현됨 | 기관에 대한 `security add-trusted-cert`가 성공하고 `security verify-cert`가 신뢰를 확인 | 예 |

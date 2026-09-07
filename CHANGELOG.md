@@ -3,6 +3,18 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-09-08
+
+### Compose startup preserves owned services and waits for dependencies
+
+Compose values now resolve project `.env` and shell interpolation. Relative bind paths use the Compose directory; external named volumes are checked before startup. `user`, `read_only` and `cap_drop` are passed to the runtime. Dependency cycles, missing services and unsupported lifecycle options are rejected.
+
+`up` reuses unchanged configuration and local image digests, preserving a running database. Containers with another project's or missing ownership labels are refused before changes. Startup waits for declared healthchecks and actual successful one-shot exits. Private completion records identify the stopped initializer by configuration, image and runtime creation/start timestamps. Explicit restart retries initialization; missing or changed evidence never means success. Project mutations use an advisory lock and teardown respects dependency order without removing volumes.
+
+Verification: `make check`, `go test -race ./internal/stack ./internal/contract`, and `BAY_SERVICE_E2E=1 go test ./internal/stack -run TestServiceLifecycleActualRuntime -count=1 -timeout=120s`. The isolated service test checks actual process restrictions, initialization, failure and unchanged reuse while preserving every preexisting container. It does not register routes, replace the shared proxy, run an application database or install binaries. Runtime identity limits and supported syntax are stated in [the lifecycle specification](docs/spec/service-lifecycle.md).
+
+TCP readiness reporting remains after route synchronization. Completed initializers are excluded, and an empty selection neither probes nor reports connection success. Both cases failed before correction and pass in tracked lifecycle tests. The existing shared-proxy readiness test remains unchanged and skips while that proxy is in use; `TestReadinessActualRuntime` verifies both snapshot paths, delayed listening and WaitReady using an isolated service.
+
 ## 2026-09-07
 
 ### Starting is reported separately from running

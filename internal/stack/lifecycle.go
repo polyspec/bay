@@ -38,6 +38,9 @@ func (r *Runtime) say(format string, args ...any) {
 // Up registers the project, applies any missing machine setup, starts every
 // service and republishes the routes.
 func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
+	if err := newServiceEngine(r.Machine.Dir).preflight(cfg.Name, cfg.Sorted()); err != nil {
+		return SyncResult{}, err
+	}
 	if err := r.checkDomainsFree(cfg); err != nil {
 		return SyncResult{}, err
 	}
@@ -47,26 +50,14 @@ func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
 	if err := r.EnsureInstalled(); err != nil {
 		return SyncResult{}, err
 	}
-	for _, s := range cfg.Sorted() {
-		r.say("starting %s (%s)", s.Name, describe(s))
-		if err := StartService(cfg.Name, s); err != nil {
-			return SyncResult{}, err
-		}
-	}
-	for _, s := range cfg.Sorted() {
-		if _, err := WaitRunning(s.ContainerName, 60*time.Second); err != nil {
-			return SyncResult{}, err
-		}
+	if err := newServiceEngine(r.Machine.Dir).start(cfg, cfg.Sorted(), false); err != nil {
+		return SyncResult{}, err
 	}
 	res, err := r.sync()
 	if err != nil {
 		return res, err
 	}
-	names := make([]string, 0, len(cfg.Services))
-	for _, s := range cfg.Sorted() {
-		names = append(names, s.ContainerName)
-	}
-	r.reportReady(names)
+	r.reportReady(containerNames(cfg.Sorted()))
 	return res, nil
 }
 
@@ -79,6 +70,9 @@ const ReadyTimeout = 20 * time.Second
 // the ones that did not. The command does not fail: a service may take longer
 // than the wait, and the containers are already running.
 func (r *Runtime) reportReady(containers []string) {
+	if len(containers) == 0 {
+		return
+	}
 	pending, err := WaitReady(containers, ReadyTimeout)
 	if err != nil {
 		r.say("could not check readiness: %v", err)
@@ -120,11 +114,8 @@ func (r *Runtime) checkDomainsFree(cfg *Config) error {
 // Down removes the project's containers and withdraws its routes. Other
 // projects are not changed.
 func (r *Runtime) Down(cfg *Config) (SyncResult, error) {
-	for _, s := range cfg.Sorted() {
-		if err := Remove(s.ContainerName); err != nil {
-			return SyncResult{}, err
-		}
-		r.say("removed %s", s.Name)
+	if err := newServiceEngine(r.Machine.Dir).stop(cfg, cfg.Sorted(), true); err != nil {
+		return SyncResult{}, err
 	}
 	if err := r.Machine.Unregister(cfg.Name); err != nil {
 		return SyncResult{}, err
@@ -142,10 +133,8 @@ func (r *Runtime) StartServices(cfg *Config, names []string) (SyncResult, error)
 	if err := r.checkDomainsFree(cfg); err != nil {
 		return SyncResult{}, err
 	}
-	for _, s := range targets {
-		if err := r.startOne(cfg, s); err != nil {
-			return SyncResult{}, err
-		}
+	if err := newServiceEngine(r.Machine.Dir).start(cfg, targets, false); err != nil {
+		return SyncResult{}, err
 	}
 	res, err := r.sync()
 	if err != nil {
@@ -161,10 +150,8 @@ func (r *Runtime) StopServices(cfg *Config, names []string) (SyncResult, error) 
 	if err != nil {
 		return SyncResult{}, err
 	}
-	for _, s := range targets {
-		if err := r.stopOne(s); err != nil {
-			return SyncResult{}, err
-		}
+	if err := newServiceEngine(r.Machine.Dir).stop(cfg, targets, false); err != nil {
+		return SyncResult{}, err
 	}
 	return r.sync()
 }
@@ -174,13 +161,11 @@ func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, erro
 	if err != nil {
 		return SyncResult{}, err
 	}
-	for _, s := range targets {
-		if err := r.stopOne(s); err != nil {
-			return SyncResult{}, err
-		}
-		if err := r.startOne(cfg, s); err != nil {
-			return SyncResult{}, err
-		}
+	if err := r.checkDomainsFree(cfg); err != nil {
+		return SyncResult{}, err
+	}
+	if err := newServiceEngine(r.Machine.Dir).start(cfg, targets, true); err != nil {
+		return SyncResult{}, err
 	}
 	res, err := r.sync()
 	if err != nil {
@@ -190,54 +175,15 @@ func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, erro
 	return res, nil
 }
 
-// containerNames returns the container name of each service.
+// containerNames returns the long-running services that need TCP readiness.
 func containerNames(services []*Service) []string {
 	out := make([]string, 0, len(services))
 	for _, s := range services {
-		out = append(out, s.ContainerName)
+		if !s.OneShot {
+			out = append(out, s.ContainerName)
+		}
 	}
 	return out
-}
-
-func (r *Runtime) startOne(cfg *Config, s *Service) error {
-	in, found, err := Lookup(s.ContainerName)
-	if err != nil {
-		return err
-	}
-	switch {
-	case found && in.State == "running":
-		r.say("%s is already running", s.Name)
-		return nil
-	case found:
-		if err := StartContainer(s.ContainerName); err != nil {
-			return err
-		}
-	default:
-		if err := StartService(cfg.Name, s); err != nil {
-			return err
-		}
-	}
-	if _, err := WaitRunning(s.ContainerName, 60*time.Second); err != nil {
-		return err
-	}
-	r.say("started %s (%s)", s.Name, describe(s))
-	return nil
-}
-
-func (r *Runtime) stopOne(s *Service) error {
-	in, found, err := Lookup(s.ContainerName)
-	if err != nil {
-		return err
-	}
-	if !found || in.State != "running" {
-		r.say("%s is not running", s.Name)
-		return nil
-	}
-	if err := StopContainer(s.ContainerName); err != nil {
-		return err
-	}
-	r.say("stopped %s", s.Name)
-	return nil
 }
 
 func (r *Runtime) sync() (SyncResult, error) {

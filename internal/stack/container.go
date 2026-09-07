@@ -22,6 +22,7 @@ const (
 	LabelDomain  = "bay.domain"
 	LabelPort    = "bay.port"
 	LabelScheme  = "bay.scheme"
+	LabelConfig  = "bay.config"
 )
 
 const (
@@ -30,11 +31,14 @@ const (
 )
 
 type Instance struct {
-	Name    string
-	State   string
-	IPv4    string
-	Gateway string
-	Labels  map[string]string
+	Name        string
+	State       string
+	IPv4        string
+	Gateway     string
+	Labels      map[string]string
+	Created     string
+	Started     string
+	ImageDigest string
 }
 
 // List returns every container the runtime knows about.
@@ -43,14 +47,25 @@ func List() ([]Instance, error) {
 	if err != nil {
 		return nil, err
 	}
+	return decodeInstances(out)
+}
+
+func decodeInstances(out []byte) ([]Instance, error) {
 	var raw []struct {
 		Configuration struct {
-			ID     string            `json:"id"`
-			Labels map[string]string `json:"labels"`
+			ID           string            `json:"id"`
+			Labels       map[string]string `json:"labels"`
+			CreationDate string            `json:"creationDate"`
+			Image        struct {
+				Descriptor struct {
+					Digest string `json:"digest"`
+				} `json:"descriptor"`
+			} `json:"image"`
 		} `json:"configuration"`
 		Status struct {
-			State    string `json:"state"`
-			Networks []struct {
+			State       string `json:"state"`
+			StartedDate string `json:"startedDate"`
+			Networks    []struct {
 				IPv4Address string `json:"ipv4Address"`
 				IPv4Gateway string `json:"ipv4Gateway"`
 			} `json:"networks"`
@@ -62,9 +77,12 @@ func List() ([]Instance, error) {
 	list := make([]Instance, 0, len(raw))
 	for _, c := range raw {
 		in := Instance{
-			Name:   c.Configuration.ID,
-			State:  c.Status.State,
-			Labels: c.Configuration.Labels,
+			Name:        c.Configuration.ID,
+			State:       c.Status.State,
+			Labels:      c.Configuration.Labels,
+			Created:     c.Configuration.CreationDate,
+			Started:     c.Status.StartedDate,
+			ImageDigest: c.Configuration.Image.Descriptor.Digest,
 		}
 		if len(c.Status.Networks) > 0 {
 			// ipv4Address carries a prefix length, e.g. "192.168.64.61/24".
@@ -103,16 +121,17 @@ func Remove(name string) error {
 // StartService creates and starts one service container. The container is named
 // <project>-<service>, so two projects can use the same service names.
 func StartService(group string, s *Service) error {
-	if err := Remove(s.ContainerName); err != nil {
-		return err
-	}
+	return newServiceEngine("").reconcile(group, s, false)
+}
+
+func serviceArguments(group string, s *Service, fingerprint string) []string {
 	scheme := "http"
 	if s.TLS {
 		scheme = "https"
 	}
 	// An internal service is started with an empty domain label, so the proxy
 	// and the DNS server do not route to it.
-	args := []string{"run", "--detach", "--name", s.ContainerName,
+	args := []string{"run", "--name", s.ContainerName,
 		"--network", s.Network,
 		"--label", LabelRole + "=" + roleService,
 		"--label", LabelGroup + "=" + group,
@@ -120,6 +139,19 @@ func StartService(group string, s *Service) error {
 		"--label", LabelDomain + "=" + s.Domain,
 		"--label", LabelPort + "=" + strconv.Itoa(s.Port),
 		"--label", LabelScheme + "=" + scheme,
+		"--label", LabelConfig + "=" + fingerprint,
+	}
+	if !s.OneShot {
+		args = append(args, "--detach")
+	}
+	if s.User != "" {
+		args = append(args, "--user", s.User)
+	}
+	if s.ReadOnly {
+		args = append(args, "--read-only")
+	}
+	for _, capability := range s.CapDrop {
+		args = append(args, "--cap-drop", capability)
 	}
 	for k, v := range s.Env {
 		args = append(args, "--env", k+"="+v)
@@ -135,8 +167,7 @@ func StartService(group string, s *Service) error {
 	}
 	args = append(args, s.Image)
 	args = append(args, s.Command...)
-	_, err := run(args...)
-	return err
+	return args
 }
 
 // EnsureProxy makes sure the machine's single TLS-terminating nginx is running
