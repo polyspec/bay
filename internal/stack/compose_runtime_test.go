@@ -87,7 +87,7 @@ volumes:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.Services["db"].Volumes[0] != "existing-postgres:/var/lib/postgresql" || cfg.Services["db"].ExternalVolumes[0] != "existing-postgres" {
+	if cfg.Services["db"].Volumes[0] != "existing-postgres:/var/lib/postgresql" || cfg.Services["db"].NamedVolumes[0].Name != "existing-postgres" || !cfg.Services["db"].NamedVolumes[0].External {
 		t.Fatal("external volume name changed")
 	}
 }

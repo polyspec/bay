@@ -197,7 +197,7 @@ func dependencyOrder(c *Config, targets []*Service) ([]*Service, error) {
 	return out, nil
 }
 
-func normalizeVolumes(c *Config, s *Service, declarations map[string]yaml.Node) error {
+func normalizeVolumes(c *Config, s *Service) error {
 	for i, volume := range s.Volumes {
 		parts := strings.Split(volume, ":")
 		if len(parts) < 2 || len(parts) > 3 || parts[0] == "" || !filepath.IsAbs(parts[1]) {
@@ -212,41 +212,14 @@ func normalizeVolumes(c *Config, s *Service, declarations map[string]yaml.Node) 
 			}
 			parts[0] = filepath.Clean(parts[0])
 		} else {
-			node, ok := declarations[parts[0]]
+			volume, ok := c.Volumes[parts[0]]
 			if !ok {
 				return fmt.Errorf("service %s: volume %s is not declared", s.Name, parts[0])
 			}
-			resolved, err := externalVolume(parts[0], node)
-			if err != nil {
-				return err
-			}
-			parts[0] = resolved
-			s.ExternalVolumes = append(s.ExternalVolumes, parts[0])
+			parts[0] = volume.Name
+			s.NamedVolumes = append(s.NamedVolumes, volume)
 		}
 		s.Volumes[i] = strings.Join(parts, ":")
 	}
 	return nil
-}
-
-func externalVolume(name string, node yaml.Node) (string, error) {
-	if err := mappingKeys(node, "external", "name"); err != nil {
-		return "", fmt.Errorf("volume %s: %w", name, err)
-	}
-	var spec struct {
-		External bool   `yaml:"external"`
-		Name     string `yaml:"name"`
-	}
-	if err := node.Decode(&spec); err != nil {
-		return "", err
-	}
-	if !spec.External {
-		return "", fmt.Errorf("volume %s: only external named volumes are supported; create the volume explicitly", name)
-	}
-	if spec.Name != "" {
-		name = spec.Name
-	}
-	if !validName(name) {
-		return "", fmt.Errorf("invalid external volume name")
-	}
-	return name, nil
 }

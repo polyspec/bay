@@ -9,6 +9,7 @@ changes, its evidence is replaced by the verification run for that change.
 
 | Feature | Status | Evidence | Shipped |
 | --- | --- | --- | --- |
+| Compose-managed durable named volumes | Implemented | `make check` and `go test -race ./internal/stack` cover ownership and declaration validation; `BAY_SERVICE_E2E=1 go test -race ./internal/stack -run TestManagedVolumeActualRuntime` confirms data and volume identity survive service removal/recreation | Local build; not installed |
 | Compose runtime constraints and ordered, reusable service startup | Implemented | `make check` covers interpolation, mounts, dependency errors, ownership, unchanged reuse and completion evidence; `BAY_SERVICE_E2E=1 go test ./internal/stack -run TestServiceLifecycleActualRuntime` checks actual restrictions, initialization and preexisting container preservation | Local build; not installed |
 | Compose file as the project format | Implemented | `go test ./internal/stack` and `go test ./internal/contract` cover key parsing, both label spellings, port resolution, file search and the documented example | Yes |
 | Machine-level domains with per-project override | Implemented | `go test ./internal/stack` covers add, remove, default change and pinned-domain refusal | Yes |

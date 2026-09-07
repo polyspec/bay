@@ -5,6 +5,13 @@ the day the change was made.
 
 ## 2026-09-08
 
+### Compose declares and preserves managed named volumes
+
+Managed `volumes` declarations create missing local volumes with optional `driver_opts.size`. Existing volumes must match project/declaration ownership and exact configured size; another owner's data, implicit resizing and unsupported drivers/options are refused. `down` preserves volumes. External volumes still require existence and are never created or relabelled.
+
+Verification: `make check`, `go test -race ./internal/stack ./internal/contract`, and the tracked `BAY_SERVICE_E2E=1 go test -race ./internal/stack -run TestManagedVolumeActualRuntime -count=1 -timeout=120s` exercise creation, reuse, data preservation after service removal, foreign-owner rejection and resize rejection using only a unique fixture volume/container. Existing containers and shared proxy are preserved; binaries are not installed.
+
+
 ### Compose startup preserves owned services and waits for dependencies
 
 Compose values now resolve project `.env` and shell interpolation. Relative bind paths use the Compose directory; external named volumes are checked before startup. `user`, `read_only` and `cap_drop` are passed to the runtime. Dependency cycles, missing services and unsupported lifecycle options are rejected.

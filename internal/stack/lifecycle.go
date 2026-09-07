@@ -41,6 +41,9 @@ func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
 	if err := newServiceEngine(r.Machine.Dir).preflight(cfg.Name, cfg.Sorted()); err != nil {
 		return SyncResult{}, err
 	}
+	if err := newServiceEngine(r.Machine.Dir).prepareVolumes(cfg.Name, cfg.Sorted(), false); err != nil {
+		return SyncResult{}, err
+	}
 	if err := r.checkDomainsFree(cfg); err != nil {
 		return SyncResult{}, err
 	}

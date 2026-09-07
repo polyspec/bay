@@ -4,6 +4,13 @@
 
 ## 2026-09-08
 
+### Compose가 관리 named volume을 선언하고 보존
+
+관리 `volumes` 선언은 선택적 `driver_opts.size`로 없는 local 볼륨을 생성한다. 기존 볼륨은 프로젝트·선언 소유권과 정확한 설정 크기가 맞아야 하며 다른 소유자의 데이터·암묵적 크기 변경·미지원 driver 및 옵션은 거부한다. `down`은 볼륨을 보존한다. External 볼륨은 계속 존재해야 하며 생성하거나 label을 바꾸지 않는다.
+
+검증: `make check`, `go test -race ./internal/stack ./internal/contract`, 추적된 `BAY_SERVICE_E2E=1 go test -race ./internal/stack -run TestManagedVolumeActualRuntime -count=1 -timeout=120s`가 고유한 fixture 볼륨·컨테이너만 사용해 생성·재사용·서비스 제거 뒤 데이터 보존·다른 소유자 및 크기 변경 거부를 검사한다. 기존 컨테이너와 공유 프록시는 보존하며 바이너리는 설치하지 않는다.
+
+
 ### Compose 시작이 소유 서비스를 보존하고 의존성을 기다림
 
 Compose 값은 프로젝트 `.env`와 shell 치환을 해석한다. 상대 bind 경로는 Compose 디렉터리를 기준으로 하며 시작 전에 external named volume을 확인한다. `user`·`read_only`·`cap_drop`를 런타임에 전달한다. 의존성 순환·없는 서비스·미지원 생명주기 옵션은 거부한다.

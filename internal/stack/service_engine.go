@@ -91,19 +91,6 @@ func (e *serviceEngine) preflight(group string, services []*Service) error {
 	return nil
 }
 
-func (e *serviceEngine) volumes(services []*Service) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
-	for _, s := range services {
-		for _, name := range s.ExternalVolumes {
-			if _, err := e.command(ctx, "volume", "inspect", name); err != nil {
-				return fmt.Errorf("external volume %s is unavailable", name)
-			}
-		}
-	}
-	return nil
-}
-
 func (e *serviceEngine) image(ctx context.Context, reference string) (string, error) {
 	out, err := e.command(ctx, "image", "inspect", reference)
 	if err != nil {
@@ -384,7 +371,7 @@ func (e *serviceEngine) startLocked(cfg *Config, targets []*Service, restart boo
 	if err = e.preflight(cfg.Name, ordered); err != nil {
 		return err
 	}
-	if err = e.volumes(ordered); err != nil {
+	if err = e.prepareVolumes(cfg.Name, ordered, true); err != nil {
 		return err
 	}
 	selected := map[string]bool{}

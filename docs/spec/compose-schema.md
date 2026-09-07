@@ -49,7 +49,7 @@ First match wins.
 | `command` | string or list | the image's command | Process arguments. |
 | `entrypoint` | string or list | the image's entrypoint | Placed before command. |
 | `environment` | mapping or list | empty | Environment variables. |
-| `volumes` | list of string | empty | Compose-relative bind mounts or declared external named volumes, `source:target[:ro]`. Top-level volumes supports external: true and name only. |
+| `volumes` | list of string | empty | Compose-relative bind mounts or declared named volumes, `source:target[:ro]`. Top-level volumes supports name, external, driver: local and driver_opts.size; external volumes allow only name. |
 | `user` | string | image default | Process user, name or uid[:gid]. Values may use project .env and environment interpolation. |
 | `read_only` | boolean | false | Mount the container root filesystem read-only. |
 | `cap_drop` | list of string | empty | Linux capabilities to drop, including ALL. |

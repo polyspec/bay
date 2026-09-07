@@ -2,6 +2,8 @@
 
 [한국어](service-lifecycle.ko.md) · [Compose keys](compose-schema.md)
 
+Managed volume creation and data-preservation rules are in [Named volumes](volumes.md).
+
 Compose lifecycle support is implemented in source. Local verification and installed binaries are recorded separately in the feature table.
 
 The Compose directory supplies `.env`; the process environment takes precedence. Interpolation applies to YAML values, including `${NAME:?message}`, defaults, alternatives and `$$`. Missing required values are rejected without printing resolved values. Relative bind sources are resolved against the Compose file, regardless of the caller's directory. Named volumes must be declared; external names must already exist and are never removed by project lifecycle commands.
@@ -12,7 +14,7 @@ Services start in dependency order. `service_healthy` runs the declared `CMD` or
 
 Every selected name is checked before lifecycle changes. A container must carry this project's group, service and service-role labels; another project's or unowned container is refused. `up` reuses an unchanged running service and a proven completed initializer. Configuration or locally resolved image digest changes replace only the owned service. Image references are resolved before comparison; mutable tags are not polled against registries when a local image exists. Explicit restart remains a restart request. Bind-file content changes do not change the service digest; callers must explicitly restart a service that reads changed files only at startup.
 
-Project changes never remove volumes. Failed dependencies stop progression without claiming that the whole project started. Already completed steps remain inspectable for diagnosis and a later retry. Initializer fingerprints include direct dependencies' current configuration, image and container creation identity: a replaced database or volume requires another real initialization even when the initializer's own command is unchanged.
+Project changes never remove volumes. Failed dependencies stop progression without claiming that the whole project started. Already completed steps remain inspectable for diagnosis and a later retry. Initializer fingerprints include direct dependencies' current configuration, image and container creation identity: a replaced database container requires another real initialization even when the initializer's own command is unchanged. Changes made directly to volume contents are not detected by this identity; project lifecycle commands preserve volumes.
 
 An owned container created before configuration labels existed is not silently replaced: `up` requires an explicit restart because its previous service configuration cannot be proven. Other projects remain untouched.
 

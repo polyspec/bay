@@ -43,6 +43,7 @@ type Config struct {
 	// ExtraDomains are further local domains this project's services may claim.
 	ExtraDomains []string
 	Services     map[string]*Service
+	Volumes      map[string]*Volume
 
 	path string
 }
@@ -64,7 +65,7 @@ type Service struct {
 	DependsOn          map[string]string
 	Healthcheck        *Healthcheck
 	OneShot            bool
-	ExternalVolumes    []string
+	NamedVolumes       []*Volume
 	dependencyIdentity map[string]string
 
 	// Internal marks a service that receives no domain. The container runs and
@@ -198,17 +199,25 @@ func load(path, fallback string) (*Config, error) {
 }
 
 func (c *Config) build(file *composeFile) error {
-	for name, node := range file.Volumes {
-		if _, err := externalVolume(name, node); err != nil {
-			return err
-		}
-	}
 	if c.Name == "" {
 		c.Name = filepath.Base(filepath.Dir(c.path))
 	}
 	c.Name = strings.ToLower(c.Name)
 	if !validName(c.Name) {
 		return fmt.Errorf("project name %q must be letters, digits, - or _", c.Name)
+	}
+	c.Volumes = map[string]*Volume{}
+	volumeNames := map[string]bool{}
+	for name, node := range file.Volumes {
+		volume, err := decodeVolume(c.Name, name, node)
+		if err != nil {
+			return err
+		}
+		if volumeNames[volume.Name] {
+			return fmt.Errorf("duplicate volume name %s", volume.Name)
+		}
+		volumeNames[volume.Name] = true
+		c.Volumes[name] = volume
 	}
 
 	if c.Domain == "" {
@@ -245,7 +254,7 @@ func (c *Config) build(file *composeFile) error {
 			return fmt.Errorf("duplicate service/container name %q", s.ContainerName)
 		}
 		names[s.ContainerName] = true
-		if err := normalizeVolumes(c, s, file.Volumes); err != nil {
+		if err := normalizeVolumes(c, s); err != nil {
 			return err
 		}
 		if s.Domain != "" {
