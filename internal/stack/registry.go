@@ -23,6 +23,9 @@ type ServiceInstance struct {
 	Scheme    string
 	State     string
 	IPv4      string
+	// Started is when the runtime started the container, in RFC 3339. It is
+	// empty for a container that has never run.
+	Started string
 }
 
 func (s ServiceInstance) Running() bool { return s.State == "running" }
@@ -63,6 +66,7 @@ func Instances() ([]ServiceInstance, error) {
 			Scheme:    scheme,
 			State:     in.State,
 			IPv4:      in.IPv4,
+			Started:   in.Started,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {

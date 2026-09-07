@@ -102,6 +102,25 @@ type ServiceStatus struct {
 	URL      string `json:"url"`
 	// Address is how other services reach it from inside the network.
 	Address string `json:"address"`
+	// Started is when the runtime started the container, in RFC 3339. It is
+	// empty unless the container is running.
+	Started string `json:"started,omitempty"`
+}
+
+// Uptime returns how long the container has been running, or zero when the
+// start time is unknown.
+func (s ServiceStatus) Uptime() time.Duration {
+	if s.Started == "" {
+		return 0
+	}
+	t, err := time.Parse(time.RFC3339, s.Started)
+	if err != nil {
+		return 0
+	}
+	if d := time.Since(t); d > 0 {
+		return d
+	}
+	return 0
 }
 
 // Running reports that the service accepts connections. A starting service is
@@ -270,7 +289,7 @@ func groupStatus(m *Machine, g GroupRef, byContainer map[string]ServiceInstance,
 			st.Scheme = "https"
 		}
 		if in, ok := byContainer[s.ContainerName]; ok {
-			st.State, st.IPv4 = in.State, in.IPv4
+			st.State, st.IPv4, st.Started = in.State, in.IPv4, in.Started
 			if in.Running() && !in.Ready() {
 				st.State = "starting"
 			}
@@ -294,6 +313,7 @@ func serviceFromInstance(in ServiceInstance, routed map[string]bool) ServiceStat
 		Scheme:    in.Scheme,
 		State:     state,
 		IPv4:      in.IPv4,
+		Started:   in.Started,
 		Routed:    routed[in.Domain] && in.Running(),
 		Internal:  in.Domain == "",
 		Address:   fmt.Sprintf("%s.%s:%d", in.Container, BackendDomain, in.Port),

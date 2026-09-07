@@ -5,6 +5,47 @@ the day the change was made.
 
 ## 2026-09-08
 
+### The window is built from the design file, and reads in English or Korean
+
+`design/Mockups.dc.html` holds ten screens of the window and is the source of its
+sizes and colours. It was rendered and measured, and the window now takes those
+numbers: a sidebar row of 27 points, a group header of 29, a card row of 42 with
+a button and 35 without, a 9 point status dot with a 4 point halo on the verdict,
+a chip drawn as a border with no fill, and two separate weights for a card's
+outline and the hairline between its rows.
+
+Three screens the window did not have are implemented. Service shows one
+service's route, its container and the tail of its output. Settings holds the
+application's own settings, the machine's, and the maintenance actions. The
+dashboard reports a proxy that is not answering while containers run as a fault,
+with the addresses no longer offered as links. Adding a domain is asked on a
+sheet attached to the window, which shows the resulting name while it is typed.
+`Add project…` registers a Compose file chosen from the file panel.
+
+Selecting a project lists its services under it, indented, at the same row height
+as the project. There is no disclosure control, because the list follows the
+selection. Every row carries a status dot, so a stopped service keeps its place
+in the column.
+
+The window is shown in Korean when the system prefers Korean. English is the
+wording written at the call site and Korean is looked up by it, so a line with no
+translation is shown in English. The command line stays in English, because its
+output is the specification the generated documents come from.
+
+Two layout faults are corrected. A row aligned to the top did not grow to hold a
+two-line value, which cut the second line off at the card's edge; the padding
+under the value is now stated. A line in the output pane was as wide as the pane
+rather than its content, which covered the padding on both sides.
+
+Verification: `make check` passes, including `go test ./internal/i18n`, which
+reads the window's sources and fails on a line with no Korean, a translation
+taking different values than the English it replaces, or a rejected phrasing. The
+design file was rendered in a browser and measured; the built window was captured
+with `screencapture -l <window>` and measured against the same numbers, with the
+sidebar row pitch at 29 points for every row. Every screen was opened and
+captured: dashboard, project, service, domains, certificates, settings, the add
+domain sheet, and the first run and proxy down states.
+
 ### Local image creation verifies the selected digest before starting
 
 Locally available tags need not have equivalent name@digest aliases. Services now use the declared reference for `create`, verify the stopped container's actual image, ownership and configuration, then start that verified container. Initializers use `start --attach` and still require real exit zero. A tag change during creation is rejected before a process starts. Creation errors identify their stage and a bounded category without printing runtime arguments or process output.

@@ -92,3 +92,49 @@ uses the machine's default domain unless its Compose file names one under
 
 The set of delegated domains is the machine's domains plus any domain a project
 pins.
+
+## Window
+
+`baybar` shows one window with a source list: MACHINE holds Dashboard,
+Domains, Certificates and Settings; PROJECTS holds one row per registered
+project. Selecting a project lists its services under it, indented, so a service
+can be opened without leaving the sidebar. There is no disclosure control: the
+list follows the selection, so a mark would name an action that does not exist.
+
+Screens:
+
+| Screen | Subject |
+| --- | --- |
+| Dashboard | The whole machine: one verdict line, every project, every address the proxy serves |
+| Project | One project: its services, its domain and its Compose file |
+| Service | One service: its route, its container and the tail of its output |
+| Domains | The domains delegated on this machine, and what delegating one writes |
+| Certificates | The authority and what it issued |
+| Settings | The application's own settings, the machine's, and the maintenance actions |
+
+The dashboard reports three conditions the machine can be in. Setup is
+incomplete, which is a warning and offers the setup action. The proxy is not
+answering while containers run, which is a fault: the addresses stop being links
+and each says why. Otherwise it states the number of domains served.
+
+Sizes, colours and row heights come from `design/Mockups.dc.html`, which states
+them in points. Two things differ from that file on purpose:
+
+- A push button occupies less height in the layout than its bezel draws, so a
+  row holding one is measured from its padding rather than from the design's row
+  height.
+- A service row is indented under its project instead of being marked with a
+  disclosure triangle, and its status dot is drawn at half size.
+
+## Language
+
+The window is written in English and shown in Korean when the system prefers
+Korean, read from `NSLocale.preferredLanguages`. English is the wording written
+at the call site and Korean is looked up by it, so a line with no translation is
+shown in English rather than left blank. `go test ./internal/i18n` reads the
+window's sources and fails when a line has no Korean, when a translation takes
+different values than the English it replaces, or when it uses a phrasing the
+project does not use.
+
+The command line stays in English: its output is the specification the generated
+documents are produced from.

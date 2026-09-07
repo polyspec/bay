@@ -40,11 +40,15 @@ type sideGroup struct {
 
 type sideItem struct {
 	// ID is the action delivered when the row is clicked.
-	ID       string `json:"id"`
-	Label    string `json:"label"`
-	Dot      string `json:"dot,omitempty"`
-	Count    string `json:"count,omitempty"`
-	Selected bool   `json:"selected,omitempty"`
+	ID    string `json:"id"`
+	Label string `json:"label"`
+	Dot   string `json:"dot,omitempty"`
+	Count string `json:"count,omitempty"`
+	// Sub indents the row under the project above it. A project lists its
+	// services while it is the subject, so there is nothing to disclose by
+	// clicking and no disclosure mark is drawn.
+	Sub      bool `json:"sub,omitempty"`
+	Selected bool `json:"selected,omitempty"`
 }
 
 type header struct {
@@ -60,9 +64,11 @@ type verdict struct {
 }
 
 type banner struct {
-	Title  string  `json:"title"`
-	Text   string  `json:"text"`
-	Button *button `json:"button,omitempty"`
+	Title string `json:"title"`
+	Text  string `json:"text"`
+	// Kind is "bad" for a fault and empty for a warning.
+	Kind    string   `json:"kind,omitempty"`
+	Buttons []button `json:"buttons,omitempty"`
 }
 
 type section struct {
@@ -71,6 +77,12 @@ type section struct {
 	Note    string   `json:"note,omitempty"`
 	Buttons []button `json:"buttons,omitempty"`
 	Rows    []row    `json:"rows,omitempty"`
+	// Log holds the tail of a container's output, drawn on the code background
+	// under the section's rows.
+	Log []string `json:"log,omitempty"`
+	// LogNote names what the pane is showing; LogButtons act on it.
+	LogNote    string   `json:"logNote,omitempty"`
+	LogButtons []button `json:"logButtons,omitempty"`
 }
 
 type row struct {
@@ -87,16 +99,40 @@ type row struct {
 	Dot      string   `json:"dot,omitempty"` // on, warn, bad or empty
 	Link     string   `json:"link,omitempty"`
 	LinkText string   `json:"linkText,omitempty"`
+	// Wide widens the name column, for a list of certificate names.
+	Wide bool `json:"wide,omitempty"`
+	// Faint is a tertiary suffix after a kv row's value.
+	Faint string `json:"faint,omitempty"`
+	// Hint is a tertiary second line under a kv row's value.
+	Hint string `json:"hint,omitempty"`
+	// Mono draws a kv row's value in the monospaced font.
+	Mono bool `json:"mono,omitempty"`
+	// Appearance places the Auto/Dark/Light control in a kv row.
+	Appearance bool `json:"appearance,omitempty"`
+	// Toggle is the action a switch in a kv row delivers; On is its state.
+	Toggle   string   `json:"toggle,omitempty"`
+	On       bool     `json:"on,omitempty"`
+	Disabled bool     `json:"disabled,omitempty"`
 	Buttons  []button `json:"buttons,omitempty"`
 }
 
 type button struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
-	// Primary marks the screen's main action. AppKit draws it in the accent
-	// colour.
-	Primary  bool `json:"primary,omitempty"`
-	Disabled bool `json:"disabled,omitempty"`
+	// Style is "hero" for the screen's main action, "quiet" for a secondary
+	// one, and empty for the standard weight.
+	Style    string `json:"style,omitempty"`
+	Disabled bool   `json:"disabled,omitempty"`
+}
+
+// hero returns the screen's main action.
+func hero(id, title string, disabled bool) button {
+	return button{ID: id, Title: title, Style: "hero", Disabled: disabled}
+}
+
+// quiet returns a secondary action.
+func quiet(id, title string, disabled bool) button {
+	return button{ID: id, Title: title, Style: "quiet", Disabled: disabled}
 }
 
 // actionHandler receives every button and link identifier the window produces.
@@ -119,6 +155,33 @@ func goUIPrompt(id, value *C.char) {
 	if promptHandler != nil {
 		go promptHandler(C.GoString(id), C.GoString(value))
 	}
+}
+
+// sheetHandler receives the identifier, the typed value and the choice from the
+// sheet. Cancelling produces no call.
+var sheetHandler func(id, value string, option bool)
+
+//export goUISheet
+func goUISheet(id, value *C.char, option C.int) {
+	if sheetHandler != nil {
+		go sheetHandler(C.GoString(id), C.GoString(value), option != 0)
+	}
+}
+
+// sheet asks for one line of text and one choice on a sheet attached to the
+// window. suffix is shown beside the field so the resulting name is visible
+// before the sheet is accepted.
+func sheet(actionID, title, message, fieldLabel, placeholder, suffix, optionLabel, acceptTitle string, optionOn bool) {
+	cs := make([]*C.char, 8)
+	for i, s := range []string{actionID, title, message, fieldLabel, placeholder, suffix, optionLabel, acceptTitle} {
+		cs[i] = C.CString(s)
+		defer C.free(unsafe.Pointer(cs[i]))
+	}
+	var on C.int
+	if optionOn {
+		on = 1
+	}
+	C.ui_sheet(cs[0], cs[1], cs[2], cs[3], cs[4], cs[5], cs[6], on, cs[7])
 }
 
 // prompt asks for one line of text; the answer arrives at promptHandler.
@@ -185,6 +248,64 @@ func elevate(exe string, args []string) error {
 
 // errCancelled reports that the authentication panel was dismissed.
 var errCancelled = errors.New("cancelled")
+
+// pick asks for a directory or a file; the answer arrives at promptHandler.
+func pick(actionID, title, promptTitle string) {
+	cs := make([]*C.char, 3)
+	for i, s := range []string{actionID, title, promptTitle} {
+		cs[i] = C.CString(s)
+		defer C.free(unsafe.Pointer(cs[i]))
+	}
+	C.ui_pick(cs[0], cs[1], cs[2])
+}
+
+// language returns the locale identifier the system prefers.
+func language() string {
+	buf := (*C.char)(C.malloc(64))
+	defer C.free(unsafe.Pointer(buf))
+	C.ui_language(buf, 64)
+	return C.GoString(buf)
+}
+
+// setLabels supplies the words the window itself builds controls from.
+func setLabels(m map[string]string) {
+	b, err := json.Marshal(m)
+	if err != nil {
+		return
+	}
+	s := C.CString(string(b))
+	defer C.free(unsafe.Pointer(s))
+	C.ui_labels(s)
+}
+
+// boolSetting reads one of the window's own settings from the defaults
+// database.
+func boolSetting(key string) bool {
+	k := C.CString(key)
+	defer C.free(unsafe.Pointer(k))
+	var out C.int
+	C.ui_flag(k, &out)
+	return out != 0
+}
+
+// setBoolSetting writes one of the window's own settings to the defaults
+// database.
+func setBoolSetting(key string, value bool) {
+	k := C.CString(key)
+	defer C.free(unsafe.Pointer(k))
+	var v C.int
+	if value {
+		v = 1
+	}
+	C.ui_set_flag(k, v)
+}
+
+// copyText puts one string on the general pasteboard.
+func copyText(text string) {
+	s := C.CString(text)
+	defer C.free(unsafe.Pointer(s))
+	C.ui_copy(s)
+}
 
 // showLogs opens the text window with a service's output.
 func showLogs(title, body string) {

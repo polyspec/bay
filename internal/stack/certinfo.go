@@ -24,6 +24,14 @@ type CertInfo struct {
 	parseFail string
 }
 
+// DaysLeft returns the whole days remaining before the certificate expires. It
+// is negative once the certificate has expired.
+func (c CertInfo) DaysLeft() int { return c.daysLeft }
+
+// Unreadable returns why the certificate could not be parsed, or an empty
+// string when it was read.
+func (c CertInfo) Unreadable() string { return c.parseFail }
+
 // Status returns a short description of the certificate's validity.
 func (c CertInfo) Status() string {
 	switch {

@@ -70,6 +70,8 @@ func main() {
 			m.Register(cfg.Ref())
 		}
 	}
+	setLanguage(language())
+	setLabels(windowLabels())
 	a := &app{rt: &stack.Runtime{
 		Machine:   m,
 		Addr:      *addr,
@@ -79,6 +81,7 @@ func main() {
 	}, icon: fill(-1)}
 	actionHandler = a.handle
 	promptHandler = a.handlePrompt
+	sheetHandler = a.handleSheet
 	systray.Run(a.onReady, func() {})
 }
 
@@ -87,9 +90,9 @@ func (a *app) onReady() {
 	a.icon = fillNone
 	systray.SetTooltip("bay")
 
-	a.openItem = systray.AddMenuItem("Open bay", "")
+	a.openItem = systray.AddMenuItem(text.T("Open bay"), "")
 	systray.AddSeparator()
-	a.machineItem = systray.AddMenuItem("Reading the machine…", "")
+	a.machineItem = systray.AddMenuItem(text.T("Reading the machine…"), "")
 	systray.AddSeparator()
 	for i := 0; i < maxGroupLines; i++ {
 		it := systray.AddMenuItem("", "")
@@ -98,11 +101,11 @@ func (a *app) onReady() {
 		a.groupTitles = append(a.groupTitles, "")
 	}
 	systray.AddSeparator()
-	quit := systray.AddMenuItem("Quit", "")
+	quit := systray.AddMenuItem(text.T("Quit"), "")
 
 	go a.watch(quit)
 	go a.loop()
-	if *show {
+	if *show || showAtLaunch() {
 		go func() {
 			a.refresh()
 			a.openWindow()
@@ -133,12 +136,26 @@ func (a *app) openWindow() {
 
 func (a *app) currentPanel() panel {
 	a.mu.Lock()
-	defer a.mu.Unlock()
+	snap, busy, message, kind := a.snap, a.busy, a.message, a.kind
 	if a.selected == "" {
 		a.selected = viewDashboard
 	}
-	return buildPanel(a.snap, a.busy, a.selected, a.message, a.kind)
+	selected := a.selected
+	a.mu.Unlock()
+
+	// The service screen shows the tail of its container's output, so it is
+	// read on the way to building the panel rather than held in the snapshot.
+	var log []string
+	if rest, ok := strings.CutPrefix(selected, viewService); ok {
+		group, service, _ := strings.Cut(rest, ":")
+		log = a.serviceLogTail(group, service, logTail)
+	}
+	return buildPanel(snap, busy, selected, message, kind, log)
 }
+
+// showAtLaunch reports whether the window opens with the application. The
+// command line flag opens it once; the setting opens it every time.
+func showAtLaunch() bool { return boolSetting("showAtLaunch") }
 
 // report writes the outcome of an action to the window. Notifications require
 // a signed application and are not used.
@@ -174,7 +191,7 @@ func (a *app) loop() {
 func (a *app) refresh() {
 	snap, err := stack.Take(a.rt.Machine, a.rt.Addr)
 	if err != nil {
-		a.setMachine("Cannot read the machine - " + err.Error())
+		a.setMachine(text.T("Cannot read the machine - %s", err.Error()))
 		a.setIcon(fillNone)
 		return
 	}
@@ -211,9 +228,42 @@ func (a *app) handle(id string) {
 		return
 	}
 
+	// Reveal takes a path, which contains colons on no supported layout but is
+	// still read whole rather than split.
+	if path, ok := strings.CutPrefix(id, "reveal:"); ok {
+		exec.Command("open", "-R", path).Start()
+		return
+	}
+	if value, ok := strings.CutPrefix(id, "copy:"); ok {
+		copyText(value)
+		a.report("info", "%s", text.T("copied %s", value))
+		return
+	}
+
 	parts := strings.Split(id, ":")
 	if parts[0] == "logs" && len(parts) == 3 {
 		a.showServiceLogs(parts[1], parts[2])
+		return
+	}
+	if parts[0] == "copy-log" && len(parts) == 3 {
+		lines := a.serviceLogTail(parts[1], parts[2], 400)
+		copyText(strings.Join(lines, "\n"))
+		a.report("info", "%s", text.P("copied %d line", "copied %d lines",
+			len(lines), len(lines)))
+		return
+	}
+	if parts[0] == "doctor" {
+		a.showDoctor()
+		return
+	}
+	// The window re-reads the machine on a timer; this reads it now.
+	if parts[0] == "refresh" {
+		a.refresh()
+		return
+	}
+	if parts[0] == "toggle-show-at-launch" {
+		setBoolSetting("showAtLaunch", !showAtLaunch())
+		a.refreshWindowOnly()
 		return
 	}
 	// Anything that asks a question first returns here through the dialog, so
@@ -225,7 +275,7 @@ func (a *app) handle(id string) {
 	a.mu.Lock()
 	if a.busy {
 		a.mu.Unlock()
-		a.report("error", "another action is still running")
+		a.report("error", "%s", text.T("another action is still running"))
 		return
 	}
 	a.busy, a.message, a.kind = true, "", ""
@@ -245,10 +295,10 @@ func (a *app) handle(id string) {
 
 	if err := a.run(&rt, parts); err != nil {
 		if errors.Is(err, errCancelled) {
-			a.report("info", "cancelled")
+			a.report("info", "%s", text.T("cancelled"))
 			return
 		}
-		a.report("error", "%s failed: %v", parts[0], err)
+		a.report("error", "%s", text.T("%s failed: %v", parts[0], err))
 		return
 	}
 	if last != "" {
@@ -261,29 +311,49 @@ func (a *app) handle(id string) {
 // runs the action.
 func (a *app) ask(parts []string) bool {
 	switch parts[0] {
+	case "project-add":
+		pick("do-project-add", text.T("Choose a project directory or its Compose file"),
+			text.T("Add project"))
 	case "machine-domain-add":
-		prompt("do-machine-domain-add", "Add a domain",
-			"It is delegated for the whole machine, and every project can use it.",
-			"lab.test", "")
+		// The sheet shows the resulting name while it is typed, because a
+		// wildcard whose parent is a single label is rejected by clients.
+		sheet("do-machine-domain-add", text.T("Add a domain"),
+			text.T("bay will write /etc/resolver/<name> so every name under it "+
+				"resolves to the local agent. macOS asks for your password once."),
+			text.T("Domain"), "staging", ".",
+			text.T("Make it the default for new projects"), text.T("Add domain"), false)
+	case "machine-domain-default":
+		prompt("do-machine-domain-default", text.T("Default domain"),
+			text.T("Projects without a domain of their own use it. It has to be one of the "+
+				"domains this machine already delegates."), "test", "")
+	case "machine-uninstall":
+		confirm("do-machine-uninstall", text.T("Remove the machine setup?"),
+			text.T("The resolver entries and the DNS agent are removed, so names under the "+
+				"delegated domains stop resolving. The authority stays trusted in your "+
+				"keychain and the certificates stay in the state directory."),
+			text.T("Remove"), true)
 	case "machine-domain-remove":
-		confirm("do-machine-domain-remove:"+parts[1], "Stop delegating "+parts[1]+"?",
-			"Its resolver entry is removed. Nothing under it will resolve.", "Remove", false)
+		confirm("do-machine-domain-remove:"+parts[1], text.T("Stop delegating %s?", parts[1]),
+			text.T("Its resolver entry is removed. Nothing under it will resolve."),
+			text.T("Remove"), false)
 	case "domain-rename":
-		prompt("do-domain-rename:"+parts[1], "Domain for "+parts[1],
-			"Services in this project default into it. Naming one here pins it in "+
-				"the project's Compose file; the machine's default is used otherwise.",
+		prompt("do-domain-rename:"+parts[1], text.T("Domain for %s", parts[1]),
+			text.T("Services in this project default into it. Naming one here pins it in "+
+				"the project's Compose file; the machine's default is used otherwise."),
 			"test", parts[2])
 	case "service-domain":
-		prompt("do-service-domain:"+parts[1]+":"+parts[2], "Change the domain of "+parts[2],
-			"It has to sit under one of the project's domains.", "app.test", parts[3])
+		prompt("do-service-domain:"+parts[1]+":"+parts[2],
+			text.T("Change the domain of %s", parts[2]),
+			text.T("It has to sit under one of the project's domains."), "app.test", parts[3])
 	case "cert-remove":
-		confirm("do-cert-remove:"+parts[1], "Remove the certificate for "+parts[1]+"?",
-			"It is reissued automatically if a route still needs it.", "Remove", false)
+		confirm("do-cert-remove:"+parts[1], text.T("Remove the certificate for %s?", parts[1]),
+			text.T("It is reissued automatically if a route still needs it."),
+			text.T("Remove"), false)
 	case "ca-rotate":
-		confirm("do-ca-rotate", "Replace the certificate authority?",
-			"Every certificate it signed is discarded and reissued, and the keychain "+
+		confirm("do-ca-rotate", text.T("Replace the certificate authority?"),
+			text.T("Every certificate it signed is discarded and reissued, and the keychain "+
 				"is updated, which asks for your password. Browsers already holding a "+
-				"page open will need a reload.", "Replace", true)
+				"page open will need a reload."), text.T("Replace"), true)
 	default:
 		return false
 	}
@@ -294,9 +364,35 @@ func (a *app) handlePrompt(id, value string) {
 	a.handle(id + ":" + value)
 }
 
+// handleSheet turns the sheet's answer into actions: the name first, then the
+// choice made alongside it.
+func (a *app) handleSheet(id, value string, option bool) {
+	a.handle(id + ":" + value)
+	if option && id == "do-machine-domain-add" {
+		a.handle("do-machine-domain-default:" + value)
+	}
+}
+
 func (a *app) run(rt *stack.Runtime, parts []string) error {
 	if parts[0] == "setup" {
 		return rt.EnsureInstalled()
+	}
+	if parts[0] == "proxy-restart" {
+		// The proxy is generated from the containers that are running, so
+		// removing it and syncing again re-publishes every route.
+		if err := stack.StopProxy(); err != nil {
+			return err
+		}
+		_, err := stack.SyncProxy(rt.Machine)
+		return err
+	}
+	if parts[0] == "do-machine-uninstall" {
+		return a.uninstallMachine(rt)
+	}
+	if parts[0] == "do-project-add" {
+		// The chosen path holds colons on no supported layout, but the action
+		// was split on them, so it is joined back together.
+		return a.addProject(rt, strings.Join(parts[1:], ":"))
 	}
 	if handled, err := a.runEdit(rt, parts); handled {
 		return err
@@ -434,15 +530,85 @@ func (a *app) runEdit(rt *stack.Runtime, parts []string) (bool, error) {
 	return false, nil
 }
 
+// addProject registers a Compose file so the window lists it. It is the same
+// registration that "bay up" performs, without starting anything.
+func (a *app) addProject(rt *stack.Runtime, path string) error {
+	cfg, err := stack.LoadIn(rt.Machine, path)
+	if err != nil {
+		return err
+	}
+	if err := rt.Machine.Register(cfg.Ref()); err != nil {
+		return err
+	}
+	a.mu.Lock()
+	a.selected = viewProject + cfg.Name
+	a.mu.Unlock()
+	return nil
+}
+
+// uninstallMachine removes what the machine setup wrote: the resolver entries,
+// which needs root, and the DNS agent, which does not.
+func (a *app) uninstallMachine(rt *stack.Runtime) error {
+	domains, err := rt.Machine.Domains()
+	if err != nil {
+		return err
+	}
+	if err := stack.UninstallDNSAgent(); err != nil {
+		return err
+	}
+	return stack.UninstallResolver(rt.HelperBin, rt.Elevate, domains...)
+}
+
+// showDoctor runs the same report the command line prints and shows it in the
+// text window.
+func (a *app) showDoctor() {
+	if a.rt.HelperBin == "" {
+		a.report("error", "%s", text.T("doctor: bay is not beside this application"))
+		return
+	}
+	out, err := exec.Command(a.rt.HelperBin, "-state", a.rt.Machine.Dir,
+		"-addr", a.rt.Addr, "doctor").CombinedOutput()
+	body := string(out)
+	if err != nil {
+		body += "\n[" + err.Error() + "]"
+	}
+	showLogs(text.T("bay doctor"), body)
+}
+
+// serviceLogTail returns the last lines of a service's output. An unreadable
+// container reports why in place of the output.
+func (a *app) serviceLogTail(group, service string, lines int) []string {
+	cfg, err := a.rt.LoadGroup(group)
+	if err != nil {
+		return []string{err.Error()}
+	}
+	targets, err := stack.SelectServices(cfg, []string{service})
+	if err != nil {
+		return []string{err.Error()}
+	}
+	var buf strings.Builder
+	if err := stack.Logs(targets[0].ContainerName, false, lines, &buf); err != nil {
+		return []string{err.Error()}
+	}
+	out := strings.Split(strings.TrimRight(buf.String(), "\n"), "\n")
+	if len(out) == 1 && out[0] == "" {
+		return nil
+	}
+	if len(out) > lines {
+		out = out[len(out)-lines:]
+	}
+	return out
+}
+
 func (a *app) showServiceLogs(group, service string) {
 	cfg, err := a.rt.LoadGroup(group)
 	if err != nil {
-		a.report("error", "logs: %v", err)
+		a.report("error", "%s", text.T("logs: %v", err))
 		return
 	}
 	targets, err := stack.SelectServices(cfg, []string{service})
 	if err != nil {
-		a.report("error", "logs: %v", err)
+		a.report("error", "%s", text.T("logs: %v", err))
 		return
 	}
 	var buf strings.Builder
@@ -491,7 +657,7 @@ func (a *app) setGroups(groups []stack.GroupStatus) {
 			title = groupLine(groups[i])
 		}
 		if i == maxGroupLines-1 && len(groups) > maxGroupLines {
-			title = fmt.Sprintf("…and %d more", len(groups)-maxGroupLines+1)
+			title = text.T("…and %d more", len(groups)-maxGroupLines+1)
 		}
 		if title == a.groupTitles[i] {
 			continue

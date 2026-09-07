@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet data-dc-atomics>
+<meta name="design_doc_mode" content="canvas">
+<style>
+body{margin:0;background:#F0EEE9}
+.dv-turn{padding:40px 44px 32px;border-bottom:1px solid rgba(0,0,0,.08);scroll-margin-top:16px;font-family:-apple-system,"SF Pro Text",system-ui,sans-serif}
+.dv-thd{display:flex;align-items:baseline;gap:10px;margin:0 0 6px}
+.dv-tid{font:600 10px ui-monospace,Menlo,monospace;padding:3px 7px;background:#1A1A1A;color:#fff;border-radius:4px;text-decoration:none}
+.dv-tname{font:600 13px/1.2 -apple-system,system-ui,sans-serif;color:#1A1A1A}
+.dv-tnote{font:400 12px/1.55 -apple-system,system-ui,sans-serif;color:rgba(0,0,0,.5);max-width:760px;margin:0 0 22px;text-wrap:pretty}
+.dv-opts{display:flex;flex-wrap:wrap;gap:36px;align-items:flex-start}
+.dv-opt{flex:none;display:flex;flex-direction:column;gap:9px;scroll-margin-top:16px}
+.dv-oid{font:600 10.5px ui-monospace,Menlo,monospace;padding:3px 7px;background:rgba(0,0,0,.08);color:#1A1A1A;border-radius:5px;text-decoration:none}
+.dv-olabel{display:flex;align-items:baseline;gap:8px;font:400 11px/1.3 -apple-system,system-ui,sans-serif;color:rgba(0,0,0,.55)}
+.dv-opt:target .dv-oid{background:#2A78D6;color:#fff}
+.dv-cap{margin:2px 0 0;font:400 11px/1.5 -apple-system,system-ui,sans-serif;color:rgba(0,0,0,.42);max-width:880px;text-wrap:pretty}
+.board.no-notes .dv-cap{display:none}
+.dv-next{margin:26px 0 0;font:12px/1.5 -apple-system,system-ui,sans-serif;color:rgba(0,0,0,.5)}
+
+.win{
+  --bg:#2D3135;--titlebar:#313336;--sidebar:rgba(0,0,0,0.16);
+  --card:#1E1E1E;--border:#3A3A3A;--hairline:#303030;
+  --label:#DDDDDD;--secondary:#8E8E8E;--tertiary:#6E6E6E;
+  --muted:#7A7A7A;--link:#419CFF;--link-hover:#6FB4FF;
+  --accent:#0A84FF;--green:#32D74B;--amber:#FF9F0A;--red:#FF453A;
+  --off:rgba(255,255,255,0.24);--ring:rgba(255,255,255,0.12);
+  --btn:#3B3E40;--btn-border:#565656;--btn-label:#DDDDDD;
+  --btn-quiet-border:#4A4A4A;--btn-quiet-label:#B4B4B4;
+  --btn-dim:#2E3033;--btn-dim-label:#5C5C5C;--btn-dim-border:#444444;
+  --banner-bg:#24211A;--banner-border:#4A3D1E;
+  --banner-label:#E9DFC2;--banner-text:#C9BE9E;
+  --bad-bg:#2A1D1C;--bad-border:#5A2B27;--bad-label:#F3D3D0;--bad-text:#D2ABA7;
+  --halo:rgba(50,215,75,0.16);--halo-warn:rgba(255,159,10,0.16);--halo-bad:rgba(255,69,58,0.18);
+  --seg-bg:#2A2C2F;--seg-on:#4A4D50;--field:#26282B;--code:#191A1B;
+  --scrim:rgba(0,0,0,0.42);--sheet:#333638;
+}
+.win.lt{
+  --bg:#EEF1F3;--titlebar:#F2F6F8;--sidebar:rgba(0,0,0,0.035);
+  --card:#FFFFFF;--border:#C8CBCD;--hairline:#E6E8EA;
+  --label:#1A1A1A;--secondary:#808080;--tertiary:#9A9A9A;
+  --muted:#7C7C7C;--link:#0068DA;--link-hover:#0052AE;
+  --accent:#007AFF;--green:#34C759;--amber:#FF9500;--red:#FF3B30;
+  --off:rgba(0,0,0,0.2);--ring:rgba(0,0,0,0.10);
+  --btn:#FFFFFF;--btn-border:#C8CBCD;--btn-label:#1A1A1A;
+  --btn-quiet-border:#D2D5D7;--btn-quiet-label:#4A4A4A;
+  --btn-dim:#F3F4F5;--btn-dim-label:#B0B0B0;--btn-dim-border:#DCDEE0;
+  --banner-bg:#FFF6E0;--banner-border:#EBD9A8;
+  --banner-label:#6B4E11;--banner-text:#7C6329;
+  --bad-bg:#FFEFED;--bad-border:#F0C7C2;--bad-label:#7A2A22;--bad-text:#8C3A31;
+  --halo:rgba(52,199,89,0.20);--halo-warn:rgba(255,149,0,0.20);--halo-bad:rgba(255,59,48,0.18);
+  --seg-bg:#E7EAEC;--seg-on:#FFFFFF;--field:#FFFFFF;--code:#F7F8F9;
+  --scrim:rgba(0,0,0,0.18);--sheet:#F6F8F9;
+}
+.win a{color:var(--link);text-decoration:none}
+.win a:hover{color:var(--link-hover);text-decoration:underline}
+.win{width:900px;height:700px;box-sizing:border-box;position:relative;
+  background:var(--bg);color:var(--label);
+  font-family:-apple-system,"SF Pro Text",system-ui,sans-serif;
+  display:flex;flex-direction:column;overflow:hidden;border-radius:10px;
+  box-shadow:0 10px 34px rgba(0,0,0,.16),0 1px 2px rgba(0,0,0,.14)}
+.board.wide .win{width:1200px;height:800px}
+.titlebar{height:52px;flex:none;background:var(--titlebar);
+  border-bottom:1px solid var(--border);display:flex;align-items:center;
+  gap:8px;padding:0 20px}
+.light-btn{width:12px;height:12px;border-radius:50%;flex:none}
+.title{flex:1;text-align:center;font-size:13px;font-weight:600}
+.grow{flex:1}
+.split{flex:1;display:flex;overflow:hidden}
+
+.seg{display:flex;flex:none;font-size:12px;border-radius:6px;overflow:hidden;
+  background:var(--seg-bg);border:1px solid var(--border)}
+.seg span{padding:2px 11px;color:var(--btn-quiet-label)}
+.seg span + span{border-left:1px solid var(--border)}
+.seg span.on{background:var(--seg-on);color:var(--label);font-weight:500}
+
+.side{width:216px;flex:none;background:var(--sidebar);
+  border-right:1px solid var(--border);padding:10px 0;
+  display:flex;flex-direction:column;gap:2px}
+.sgroup{font-size:11px;font-weight:600;color:var(--tertiary);
+  padding:12px 16px 4px;letter-spacing:.02em}
+.sitem{display:flex;align-items:center;gap:9px;margin:0 8px;
+  padding:6px 8px;border-radius:6px;font-size:13px}
+.sitem.sel{background:var(--accent);color:#FFF}
+.sitem .count{margin-left:auto;font-size:11px;color:var(--muted);
+  font-variant-numeric:tabular-nums}
+.sitem.sel .count{color:rgba(255,255,255,.75)}
+.sitem.sel .dot{box-shadow:inset 0 0 0 1px rgba(255,255,255,.4)}
+.sitem.sub{margin-left:24px;font-size:12px;color:var(--secondary)}
+.stri{width:9px;flex:none;color:var(--tertiary);font-size:8px}
+
+.dot{width:9px;height:9px;border-radius:50%;flex:none;
+  box-shadow:inset 0 0 0 1px var(--ring)}
+.on{background:var(--green)}.warn{background:var(--amber)}
+.bad{background:var(--red)}.off{background:var(--off)}
+
+.detail{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.dhead{padding:18px 24px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px}
+.dhead h1{margin:0;font-size:20px;font-weight:600;letter-spacing:-.01em}
+.dhead .sub{font-size:12px;color:var(--muted)}
+.dbody{flex:1;padding:18px 24px 22px;display:flex;flex-direction:column;
+  gap:18px;overflow:hidden}
+
+.card{background:var(--card);border:1px solid var(--border);
+  border-radius:10px;overflow:hidden}
+.clabel{display:flex;align-items:baseline;gap:8px;
+  font-size:11px;font-weight:600;color:var(--secondary);
+  padding:0 4px 7px;letter-spacing:.02em}
+.clabel .note{font-weight:400;letter-spacing:0;color:var(--tertiary)}
+.row{display:flex;align-items:center;gap:12px;padding:10px 12px 10px 14px}
+.row + .row{border-top:1px solid var(--hairline)}
+.name{width:96px;flex:none;font-size:13px}
+.name.w140{width:140px}
+.addr{flex:1;font-size:12px}
+.addr.muted{color:var(--muted)}
+.meta{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.btn{font-size:12px;padding:3px 10px;border-radius:6px;
+  border:1px solid var(--btn-border);background:var(--btn);
+  color:var(--btn-label);flex:none}
+.btn.quiet{background:transparent;border-color:var(--btn-quiet-border);
+  color:var(--btn-quiet-label)}
+.btn.hero{background:var(--accent);border-color:var(--accent);
+  color:#FFF;font-weight:500}
+.btn.dim{background:var(--btn-dim);color:var(--btn-dim-label);
+  border-color:var(--btn-dim-border)}
+.kv{display:flex;align-items:center;padding:9px 14px;font-size:12px}
+.kv + .kv{border-top:1px solid var(--hairline)}
+.kv b{width:116px;flex:none;font-weight:400;color:var(--secondary)}
+.kv.tall{align-items:flex-start;padding:11px 14px}
+.kv .hint{display:block;color:var(--tertiary);margin-top:3px;line-height:1.45}
+.chip{font-size:11px;color:var(--secondary);border:1px solid var(--border);
+  border-radius:5px;padding:1px 6px;flex:none}
+.faint{color:var(--tertiary)}
+.strong{color:var(--label)}
+.mono{font-family:ui-monospace,"SF Mono",Menlo,monospace;font-size:11.5px}
+
+.verdict{display:flex;align-items:center;gap:10px}
+.beacon{width:11px;height:11px;border-radius:50%;background:var(--green);
+  box-shadow:0 0 0 4px var(--halo);flex:none}
+.beacon.warn{background:var(--amber);box-shadow:0 0 0 4px var(--halo-warn)}
+.beacon.bad{background:var(--red);box-shadow:0 0 0 4px var(--halo-bad)}
+.headline{font-size:15px;font-weight:600;letter-spacing:-.01em}
+.subline{font-size:12px;color:var(--muted);margin-top:2px}
+.banner{background:var(--banner-bg);border:1px solid var(--banner-border);
+  border-radius:10px;padding:14px 16px;display:flex;align-items:center;gap:14px}
+.banner .txt{font-size:12px;color:var(--banner-text);line-height:1.5}
+.banner .txt b{display:block;color:var(--banner-label);font-size:13px;
+  font-weight:600;margin-bottom:2px}
+.banner .txt em{font-style:normal;color:var(--banner-label)}
+.banner.bad{background:var(--bad-bg);border-color:var(--bad-border)}
+.banner.bad .txt{color:var(--bad-text)}
+.banner.bad .txt b{color:var(--bad-label)}
+.banner.bad .txt em{color:var(--bad-label)}
+.pdots{display:flex;gap:4px}
+
+.logpane{background:var(--code);border-top:1px solid var(--hairline);
+  padding:11px 14px 12px;display:flex;flex-direction:column;gap:3px}
+.logpane p{margin:0;font-family:ui-monospace,"SF Mono",Menlo,monospace;
+  font-size:11px;color:var(--muted);white-space:pre;overflow:hidden}
+.logpane p b{font-weight:400;color:var(--label)}
+.logpane p.err b{color:var(--red)}
+.logfoot{display:flex;align-items:center;gap:10px;padding:8px 12px;
+  border-top:1px solid var(--hairline);background:var(--card);font-size:12px;color:var(--muted)}
+
+.sw{width:34px;height:20px;border-radius:10px;background:var(--off);
+  position:relative;flex:none}
+.sw.on{background:var(--accent)}
+.sw i{position:absolute;top:2px;left:2px;width:16px;height:16px;
+  border-radius:50%;background:#FFF;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.sw.on i{left:16px}
+.field{background:var(--field);border:1px solid var(--border);border-radius:6px;
+  padding:5px 9px;font-size:12px;color:var(--label);flex:1}
+.field.ph{color:var(--tertiary)}
+
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.sheet{position:absolute;top:52px;left:50%;transform:translateX(-50%);
+  width:440px;background:var(--sheet);border:1px solid var(--border);
+  border-top:none;border-radius:0 0 12px 12px;padding:20px 22px 16px;
+  box-shadow:0 22px 50px rgba(0,0,0,.35);display:flex;flex-direction:column;gap:14px}
+.sheet h2{margin:0;font-size:14px;font-weight:600}
+.sheet p{margin:0;font-size:12px;line-height:1.5;color:var(--muted)}
+.frow{display:flex;align-items:center;gap:10px}
+.frow label{width:66px;flex:none;font-size:12px;color:var(--secondary)}
+.acts{display:flex;justify-content:flex-end;gap:8px;margin-top:2px}
+.acts .btn{padding:4px 14px}
+</style>
+</helmet>
+
+<div id="board" class="board {{ boardClass }}">
+
+<section class="dv-turn" id="t1">
+<div class="dv-thd"><a class="dv-tid" href="#t1">1</a><span class="dv-tname">bay — the window, screen by screen</span></div>
+<p class="dv-tnote">Built on the token blocks and copy already in <span class="mono">design/</span>, so these drop next to the existing artboards. Dashboard is a faithful recreation of the shipped window; Service detail, Settings, Add domain and Proxy down are new.</p>
+<div class="dv-opts">
+
+  <div class="dv-opt" id="1a">
+    <div class="dv-olabel"><a class="dv-oid" href="#1a">1a</a>Dashboard — light</div>
+    <div class="win lt">
+      <div class="titlebar">
+        <div class="light-btn" style="background:#FF5F57"></div>
+        <div class="light-btn" style="background:#FEBC2E"></div>
+        <div class="light-btn" style="background:#28C840"></div>
+        <div class="title">bay</div>
+        <div class="seg"><span>Auto</span><span>Dark</span><span class="on">Light</span></div>
+      </div>
+      <div class="split">
+        <div class="side">
+          <div class="sgroup">MACHINE</div>
+          <div class="sitem sel"><span class="dot on"></span>Dashboard</div>
+          <div class="sitem"><span class="dot on"></span>Domains<span class="count">2</span></div>
+          <div class="sitem"><span class="dot on"></span>Certificates<span class="count">9</span></div>
+          <div class="sgroup">PROJECTS</div>
+          <div class="sitem"><span class="dot on"></span>guidecheck<span class="count">2/2</span></div>
+          <div class="sitem"><span class="dot on"></span>platform<span class="count">3/3</span></div>
+          <div class="sitem"><span class="dot warn"></span>platform-dev<span class="count">2/3</span></div>
+        </div>
+        <div class="detail">
+          <div class="dhead"><h1>Dashboard</h1><span class="grow"></span><span class="btn quiet">Add project…</span></div>
+          <div class="dbody">
+            <div class="verdict">
+              <span class="beacon"></span>
+              <div>
+                <div class="headline">Serving 5 domains</div>
+                <div class="subline">3 of 3 projects running · 8 services · proxy 192.168.64.115</div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">PROJECTS</div>
+              <div class="card">
+                <div class="row">
+                  <span class="dot on"></span><span class="name">guidecheck</span>
+                  <span class="chip">test</span>
+                  <span class="pdots"><span class="dot on"></span><span class="dot on"></span></span>
+                  <span class="grow"></span>
+                  <span class="meta">2 of 2 running</span>
+                  <span class="btn quiet">Stop</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">platform</span>
+                  <span class="chip">test</span>
+                  <span class="pdots"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span></span>
+                  <span class="grow"></span>
+                  <span class="meta">3 of 3 running</span>
+                  <span class="btn quiet">Stop</span>
+                </div>
+                <div class="row">
+                  <span class="dot warn"></span><span class="name">platform-dev</span>
+                  <span class="chip">test</span>
+                  <span class="pdots"><span class="dot on"></span><span class="dot warn"></span><span class="dot on"></span></span>
+                  <span class="grow"></span>
+                  <span class="meta">2 of 3 running</span>
+                  <span class="btn hero">Start the rest</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">ADDRESSES <span class="note">everything the proxy is serving right now</span></div>
+              <div class="card">
+                <div class="row">
+                  <span class="dot on"></span><span class="name">web</span>
+                  <span class="addr"><a href="#1a">https://web.test/</a></span>
+                  <span class="meta">guidecheck</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">platform1</span>
+                  <span class="addr"><a href="#1a">https://platform1.test/</a></span>
+                  <span class="meta">platform</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">platform2</span>
+                  <span class="addr"><a href="#1a">https://platform2.test/</a></span>
+                  <span class="meta">platform</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">platform3</span>
+                  <span class="addr"><a href="#1a">https://api.platform3.test/</a></span>
+                  <span class="meta">platform</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">web</span>
+                  <span class="addr"><a href="#1a">https://console.platform-dev.test/</a></span>
+                  <span class="meta">platform-dev</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dv-cap">The shipped window, recreated: one verdict line, every project with its service dots, every address the proxy is serving. The only added control is <span class="mono">Add project…</span>, which the sidebar has no room for.</p>
+  </div>
+
+  <div class="dv-opt" id="1b">
+    <div class="dv-olabel"><a class="dv-oid" href="#1b">1b</a>Dashboard — dark</div>
+    <div class="win">
+      <div class="titlebar">
+        <div class="light-btn" style="background:#FF5F57"></div>
+        <div class="light-btn" style="background:#FEBC2E"></div>
+        <div class="light-btn" style="background:#28C840"></div>
+        <div class="title">bay</div>
+        <div class="seg"><span>Auto</span><span class="on">Dark</span><span>Light</span></div>
+      </div>
+      <div class="split">
+        <div class="side">
+          <div class="sgroup">MACHINE</div>
+          <div class="sitem sel"><span class="dot on"></span>Dashboard</div>
+          <div class="sitem"><span class="dot on"></span>Domains<span class="count">2</span></div>
+          <div class="sitem"><span class="dot on"></span>Certificates<span class="count">9</span></div>
+          <div class="sgroup">PROJECTS</div>
+          <div class="sitem"><span class="dot on"></span>guidecheck<span class="count">2/2</span></div>
+          <div class="sitem"><span class="dot on"></span>platform<span class="count">3/3</span></div>
+          <div class="sitem"><span class="dot warn"></span>platform-dev<span class="count">2/3</span></div>
+        </div>
+        <div class="detail">
+          <div class="dhead"><h1>Dashboard</h1><span class="grow"></span><span class="btn quiet">Add project…</span></div>
+          <div class="dbody">
+            <div class="verdict">
+              <span class="beacon"></span>
+              <div>
+                <div class="headline">Serving 5 domains</div>
+                <div class="subline">3 of 3 projects running · 8 services · proxy 192.168.64.115</div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">PROJECTS</div>
+              <div class="card">
+                <div class="row">
+                  <span class="dot on"></span><span class="name">guidecheck</span>
+                  <span class="chip">test</span>
+                  <span class="pdots"><span class="dot on"></span><span class="dot on"></span></span>
+                  <span class="grow"></span>
+                  <span class="meta">2 of 2 running</span>
+                  <span class="btn quiet">Stop</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">platform</span>
+                  <span class="chip">test</span>
+                  <span class="pdots"><span class="dot on"></span><span class="dot on"></span><span class="dot on"></span></span>
+                  <span class="grow"></span>
+                  <span class="meta">3 of 3 running</span>
+                  <span class="btn quiet">Stop</span>
+                </div>
+                <div class="row">
+                  <span class="dot warn"></span><span class="name">platform-dev</span>
+                  <span class="chip">test</span>
+                  <span class="pdots"><span class="dot on"></span><span class="dot warn"></span><span class="dot on"></span></span>
+                  <span class="grow"></span>
+                  <span class="meta">2 of 3 running</span>
+                  <span class="btn hero">Start the rest</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">ADDRESSES <span class="note">everything the proxy is serving right now</span></div>
+              <div class="card">
+                <div class="row">
+                  <span class="dot on"></span><span class="name">web</span>
+                  <span class="addr"><a href="#1b">https://web.test/</a></span>
+                  <span class="meta">guidecheck</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">platform1</span>
+                  <span class="addr"><a href="#1b">https://platform1.test/</a></span>
+                  <span class="meta">platform</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">platform2</span>
+                  <span class="addr"><a href="#1b">https://platform2.test/</a></span>
+                  <span class="meta">platform</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">platform3</span>
+                  <span class="addr"><a href="#1b">https://api.platform3.test/</a></span>
+                  <span class="meta">platform</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">web</span>
+                  <span class="addr"><a href="#1b">https://console.platform-dev.test/</a></span>
+                  <span class="meta">platform-dev</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dv-cap">Same markup, the dark token block. Light and dark stay one palette with two blocks, which is what AppKit resolves per appearance.</p>
+  </div>
+
+  <div class="dv-opt" id="1c">
+    <div class="dv-olabel"><a class="dv-oid" href="#1c">1c</a>Project — one service not up yet</div>
+    <div class="win lt">
+      <div class="titlebar">
+        <div class="light-btn" style="background:#FF5F57"></div>
+        <div class="light-btn" style="background:#FEBC2E"></div>
+        <div class="light-btn" style="background:#28C840"></div>
+        <div class="title">bay</div>
+        <div class="seg"><span>Auto</span><span>Dark</span><span class="on">Light</span></div>
+      </div>
+      <div class="split">
+        <div class="side">
+          <div class="sgroup">MACHINE</div>
+          <div class="sitem"><span class="dot on"></span>Dashboard</div>
+          <div class="sitem"><span class="dot on"></span>Domains<span class="count">2</span></div>
+          <div class="sitem"><span class="dot on"></span>Certificates<span class="count">9</span></div>
+          <div class="sgroup">PROJECTS</div>
+          <div class="sitem"><span class="dot on"></span>guidecheck<span class="count">2/2</span></div>
+          <div class="sitem"><span class="dot on"></span>platform<span class="count">3/3</span></div>
+          <div class="sitem sel"><span class="dot warn"></span>platform-dev<span class="count">2/3</span></div>
+        </div>
+        <div class="detail">
+          <div class="dhead">
+            <h1>platform-dev</h1>
+            <span class="sub">test · ~/Work/platform</span>
+            <span class="grow"></span>
+            <span class="btn quiet">Restart all</span>
+            <span class="btn">Stop</span>
+          </div>
+          <div class="dbody">
+            <div class="verdict">
+              <span class="beacon warn"></span>
+              <div>
+                <div class="headline">2 of 3 services running</div>
+                <div class="subline">worker is running but not listening yet, so it is not counted</div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">SERVICES</div>
+              <div class="card">
+                <div class="row">
+                  <span class="dot on"></span><span class="name">web</span>
+                  <span class="addr"><a href="#1c">https://console.platform-dev.test/</a></span>
+                  <span class="meta">192.168.64.118</span>
+                  <span class="btn quiet">Logs</span>
+                </div>
+                <div class="row">
+                  <span class="dot warn"></span><span class="name">worker</span>
+                  <span class="addr muted">internal · no route</span>
+                  <span class="meta">starting</span>
+                  <span class="btn quiet">Logs</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">db</span>
+                  <span class="addr muted">internal · no route</span>
+                  <span class="meta">192.168.64.120</span>
+                  <span class="btn quiet">Logs</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">PROJECT</div>
+              <div class="card">
+                <div class="kv"><b>Domain</b>test<span class="faint">&nbsp;· inherited from the machine</span><span class="grow"></span><span class="btn quiet">Use another…</span></div>
+                <div class="kv"><b>Compose file</b><span class="strong">compose.dev.yaml</span><span class="grow"></span><span class="btn quiet">Reveal</span></div>
+                <div class="kv"><b>Routes</b>1 of 3 services</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dv-cap">Services carry only Logs at rest; Start, Stop and Restart sit in the header where they act on the whole project. The verdict line says why 2 of 3 is not an error.</p>
+  </div>
+
+  <div class="dv-opt" id="1d">
+    <div class="dv-olabel"><a class="dv-oid" href="#1d">1d</a>Service detail — new screen</div>
+    <div class="win">
+      <div class="titlebar">
+        <div class="light-btn" style="background:#FF5F57"></div>
+        <div class="light-btn" style="background:#FEBC2E"></div>
+        <div class="light-btn" style="background:#28C840"></div>
+        <div class="title">bay</div>
+        <div class="seg"><span>Auto</span><span class="on">Dark</span><span>Light</span></div>
+      </div>
+      <div class="split">
+        <div class="side">
+          <div class="sgroup">MACHINE</div>
+          <div class="sitem"><span class="dot on"></span>Dashboard</div>
+          <div class="sitem"><span class="dot on"></span>Domains<span class="count">2</span></div>
+          <div class="sitem"><span class="dot on"></span>Certificates<span class="count">9</span></div>
+          <div class="sgroup">PROJECTS</div>
+          <div class="sitem"><span class="dot on"></span>guidecheck<span class="count">2/2</span></div>
+          <div class="sitem"><span class="stri">▼</span><span class="dot on"></span>platform<span class="count">3/3</span></div>
+          <div class="sitem sub"><span class="dot on"></span>platform1</div>
+          <div class="sitem sel sub"><span class="dot on"></span>platform2</div>
+          <div class="sitem sub"><span class="dot on"></span>platform3</div>
+          <div class="sitem"><span class="dot warn"></span>platform-dev<span class="count">2/3</span></div>
+        </div>
+        <div class="detail">
+          <div class="dhead">
+            <h1>platform2</h1>
+            <span class="sub">platform · running for 3 h 12 m</span>
+            <span class="grow"></span>
+            <span class="btn quiet">Restart</span>
+            <span class="btn quiet">Stop</span>
+          </div>
+          <div class="dbody">
+            <div>
+              <div class="clabel">ROUTE</div>
+              <div class="card">
+                <div class="kv"><b>Address</b><a href="#1d">https://platform2.test/</a><span class="grow"></span><span class="btn quiet">Open</span><span class="btn quiet">Copy</span></div>
+                <div class="kv"><b>Certificate</b><span class="strong">platform2.test</span><span class="faint">&nbsp;· valid until 2027-09-07</span></div>
+                <div class="kv"><b>Container port</b>80<span class="faint">&nbsp;· resolved from the image, no host port published</span></div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">CONTAINER</div>
+              <div class="card">
+                <div class="kv"><b>Address</b><span class="mono strong">192.168.64.205</span></div>
+                <div class="kv"><b>Image</b><span class="mono strong">nginx:1.27-alpine</span></div>
+                <div class="kv"><b>Reachable as</b><span class="mono strong">platform2</span><span class="faint">&nbsp;· from the other services in this project</span></div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">OUTPUT <span class="note">last lines, follows while this screen is open</span></div>
+              <div class="card">
+                <div class="logpane">
+                  <p>2026-09-08 04:11:02 <b>172.19.0.4 GET / 200 1.2 ms</b></p>
+                  <p>2026-09-08 04:11:04 <b>172.19.0.4 GET /assets/app.css 200 0.4 ms</b></p>
+                  <p>2026-09-08 04:12:18 <b>172.19.0.1 GET /health 200 0.2 ms</b></p>
+                  <p class="err">2026-09-08 04:12:41 <b>172.19.0.1 GET /favicon.ico 404 0.3 ms</b></p>
+                  <p>2026-09-08 04:14:09 <b>172.19.0.4 GET / 200 1.1 ms</b></p>
+                </div>
+                <div class="logfoot"><span>Following</span><span class="grow"></span><span class="btn quiet">Copy all</span><span class="btn quiet">Open in Console</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dv-cap">A service is the level where a 502 or a 404 gets diagnosed, so the route, the resolved port and the tail of the output are on one screen. Nothing here is editable — the compose file owns it.</p>
+  </div>
+
+  <div class="dv-opt" id="1e">
+    <div class="dv-olabel"><a class="dv-oid" href="#1e">1e</a>Domains</div>
+    <div class="win lt">
+      <div class="titlebar">
+        <div class="light-btn" style="background:#FF5F57"></div>
+        <div class="light-btn" style="background:#FEBC2E"></div>
+        <div class="light-btn" style="background:#28C840"></div>
+        <div class="title">bay</div>
+        <div class="seg"><span>Auto</span><span>Dark</span><span class="on">Light</span></div>
+      </div>
+      <div class="split">
+        <div class="side">
+          <div class="sgroup">MACHINE</div>
+          <div class="sitem"><span class="dot on"></span>Dashboard</div>
+          <div class="sitem sel"><span class="dot on"></span>Domains<span class="count">2</span></div>
+          <div class="sitem"><span class="dot on"></span>Certificates<span class="count">9</span></div>
+          <div class="sgroup">PROJECTS</div>
+          <div class="sitem"><span class="dot on"></span>guidecheck<span class="count">2/2</span></div>
+          <div class="sitem"><span class="dot on"></span>platform<span class="count">3/3</span></div>
+          <div class="sitem"><span class="dot warn"></span>platform-dev<span class="count">2/3</span></div>
+        </div>
+        <div class="detail">
+          <div class="dhead">
+            <h1>Domains</h1>
+            <span class="sub">delegated to bay on this machine</span>
+            <span class="grow"></span>
+            <span class="btn">Add domain…</span>
+          </div>
+          <div class="dbody">
+            <div>
+              <div class="card">
+                <div class="row">
+                  <span class="dot on"></span><span class="name">test</span>
+                  <span class="addr muted">projects without one of their own use it</span>
+                  <span class="chip">default</span>
+                  <span class="btn dim">Remove</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">devel</span>
+                  <span class="addr muted">delegated</span>
+                  <span class="btn quiet">Make default</span>
+                  <span class="btn quiet">Remove</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">HOW IT WORKS</div>
+              <div class="card">
+                <div class="kv"><b>Resolver</b><span class="strong mono">/etc/resolver/test, /etc/resolver/devel → 127.0.0.1:5354</span></div>
+                <div class="kv"><b>Adding one</b>asks for your password once</div>
+                <div class="kv"><b>Pinned domains</b><span class="strong">a domain named in a project's compose file is removed there</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dv-cap">Unchanged from <span class="mono">design/Domains.dc.html</span>. A domain is delegated once for the whole machine, so it lives here and not inside each project.</p>
+  </div>
+
+  <div class="dv-opt" id="1f">
+    <div class="dv-olabel"><a class="dv-oid" href="#1f">1f</a>Add domain — sheet</div>
+    <div class="win lt">
+      <div class="titlebar">
+        <div class="light-btn" style="background:#FF5F57"></div>
+        <div class="light-btn" style="background:#FEBC2E"></div>
+        <div class="light-btn" style="background:#28C840"></div>
+        <div class="title">bay</div>
+        <div class="seg"><span>Auto</span><span>Dark</span><span class="on">Light</span></div>
+      </div>
+      <div class="split">
+        <div class="side">
+          <div class="sgroup">MACHINE</div>
+          <div class="sitem"><span class="dot on"></span>Dashboard</div>
+          <div class="sitem sel"><span class="dot on"></span>Domains<span class="count">2</span></div>
+          <div class="sitem"><span class="dot on"></span>Certificates<span class="count">9</span></div>
+          <div class="sgroup">PROJECTS</div>
+          <div class="sitem"><span class="dot on"></span>guidecheck<span class="count">2/2</span></div>
+          <div class="sitem"><span class="dot on"></span>platform<span class="count">3/3</span></div>
+          <div class="sitem"><span class="dot warn"></span>platform-dev<span class="count">2/3</span></div>
+        </div>
+        <div class="detail">
+          <div class="dhead">
+            <h1>Domains</h1>
+            <span class="sub">delegated to bay on this machine</span>
+            <span class="grow"></span>
+            <span class="btn">Add domain…</span>
+          </div>
+          <div class="dbody">
+            <div>
+              <div class="card">
+                <div class="row">
+                  <span class="dot on"></span><span class="name">test</span>
+                  <span class="addr muted">projects without one of their own use it</span>
+                  <span class="chip">default</span>
+                  <span class="btn dim">Remove</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name">devel</span>
+                  <span class="addr muted">delegated</span>
+                  <span class="btn quiet">Make default</span>
+                  <span class="btn quiet">Remove</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="scrim"></div>
+      <div class="sheet">
+        <h2>Add a domain</h2>
+        <p>bay will write <span class="mono">/etc/resolver/&lt;name&gt;</span> so every name under it resolves to the local agent. macOS asks for your password once.</p>
+        <div class="frow"><label>Domain</label><span class="field">staging</span><span class="chip">.staging</span></div>
+        <div class="frow"><label>Then</label><span style="font-size:12px">Make it the default for new projects</span><span class="grow"></span><span class="sw on"><i></i></span></div>
+        <div class="acts"><span class="btn quiet">Cancel</span><span class="btn hero">Add domain</span></div>
+      </div>
+    </div>
+    <p class="dv-cap">The sheet says what it will change on the machine before it asks for rights, because that is the part that asks for a password. Single-label wildcards are rejected by clients, so the field shows the resulting name as you type.</p>
+  </div>
+
+  <div class="dv-opt" id="1g">
+    <div class="dv-olabel"><a class="dv-oid" href="#1g">1g</a>Certificates</div>
+    <div class="win lt">
+      <div class="titlebar">
+        <div class="light-btn" style="background:#FF5F57"></div>
+        <div class="light-btn" style="background:#FEBC2E"></div>
+        <div class="light-btn" style="background:#28C840"></div>
+        <div class="title">bay</div>
+        <div class="seg"><span>Auto</span><span>Dark</span><span class="on">Light</span></div>
+      </div>
+      <div class="split">
+        <div class="side">
+          <div class="sgroup">MACHINE</div>
+          <div class="sitem"><span class="dot on"></span>Dashboard</div>
+          <div class="sitem"><span class="dot on"></span>Domains<span class="count">2</span></div>
+          <div class="sitem sel"><span class="dot on"></span>Certificates<span class="count">9</span></div>
+          <div class="sgroup">PROJECTS</div>
+          <div class="sitem"><span class="dot on"></span>guidecheck<span class="count">2/2</span></div>
+          <div class="sitem"><span class="dot on"></span>platform<span class="count">3/3</span></div>
+          <div class="sitem"><span class="dot warn"></span>platform-dev<span class="count">2/3</span></div>
+        </div>
+        <div class="detail">
+          <div class="dhead">
+            <h1>Certificates</h1>
+            <span class="sub">issued by this machine's local authority</span>
+            <span class="grow"></span>
+            <span class="btn quiet">Reissue all</span>
+            <span class="btn quiet">Replace authority…</span>
+          </div>
+          <div class="dbody">
+            <div>
+              <div class="clabel">AUTHORITY</div>
+              <div class="card">
+                <div class="row">
+                  <span class="dot on"></span><span class="name w140">bay</span>
+                  <span class="addr muted">trusted in your keychain</span>
+                  <span class="meta">valid until 2036-09-07</span>
+                </div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">ISSUED</div>
+              <div class="card">
+                <div class="row">
+                  <span class="dot on"></span><span class="name w140">web.test</span>
+                  <span class="addr muted">guidecheck</span>
+                  <span class="meta">valid until 2027-09-07</span>
+                  <span class="btn quiet">Reissue</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name w140">platform1.test</span>
+                  <span class="addr muted">platform</span>
+                  <span class="meta">valid until 2027-09-07</span>
+                  <span class="btn quiet">Reissue</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name w140">platform2.test</span>
+                  <span class="addr muted">platform</span>
+                  <span class="meta">valid until 2027-09-07</span>
+                  <span class="btn quiet">Reissue</span>
+                </div>
+                <div class="row">
+                  <span class="dot warn"></span><span class="name w140">api.platform3.test</span>
+                  <span class="addr muted">platform</span>
+                  <span class="meta">expires in 19 days</span>
+                  <span class="btn">Reissue</span>
+                </div>
+                <div class="row">
+                  <span class="dot on"></span><span class="name w140">console.platform-dev.test</span>
+                  <span class="addr muted">platform-dev</span>
+                  <span class="meta">valid until 2027-09-07</span>
+                  <span class="btn quiet">Reissue</span>
+                </div>
+                <div class="row">
+                  <span class="dot warn"></span><span class="name w140">api.soksak.test</span>
+                  <span class="addr muted">no route uses it</span>
+                  <span class="meta">valid until 2027-09-07</span>
+                  <span class="btn quiet">Remove</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dv-cap">The authority first, then what it issued. A certificate no route uses is flagged rather than left to pile up; an expiring one turns amber here before it turns into a browser warning.</p>
+  </div>
+
+  <div class="dv-opt" id="1h">
+    <div class="dv-olabel"><a class="dv-oid" href="#1h">1h</a>Settings — new screen</div>
+    <div class="win lt">
+      <div class="titlebar">
+        <div class="light-btn" style="background:#FF5F57"></div>
+        <div class="light-btn" style="background:#FEBC2E"></div>
+        <div class="light-btn" style="background:#28C840"></div>
+        <div class="title">bay</div>
+        <div class="seg"><span>Auto</span><span>Dark</span><span class="on">Light</span></div>
+      </div>
+      <div class="split">
+        <div class="side">
+          <div class="sgroup">MACHINE</div>
+          <div class="sitem"><span class="dot on"></span>Dashboard</div>
+          <div class="sitem"><span class="dot on"></span>Domains<span class="count">2</span></div>
+          <div class="sitem"><span class="dot on"></span>Certificates<span class="count">9</span></div>
+          <div class="sitem sel"><span class="dot on"></span>Settings</div>
+          <div class="sgroup">PROJECTS</div>
+          <div class="sitem"><span class="dot on"></span>guidecheck<span class="count">2/2</span></div>
+          <div class="sitem"><span class="dot on"></span>platform<span class="count">3/3</span></div>
+          <div class="sitem"><span class="dot warn"></span>platform-dev<span class="count">2/3</span></div>
+        </div>
+        <div class="detail">
+          <div class="dhead"><h1>Settings</h1><span class="grow"></span></div>
+          <div class="dbody">
+            <div>
+              <div class="clabel">APPLICATION</div>
+              <div class="card">
+                <div class="kv"><b>Appearance</b><span class="grow"></span><div class="seg"><span>Auto</span><span>Dark</span><span class="on">Light</span></div></div>
+                <div class="kv"><b>Menu bar</b>Keep bay in the menu bar<span class="grow"></span><span class="sw on"><i></i></span></div>
+                <div class="kv"><b>Open at login</b>Start the DNS agent when you log in<span class="grow"></span><span class="sw on"><i></i></span></div>
+                <div class="kv"><b>Window</b>Show the window at launch<span class="grow"></span><span class="sw"><i></i></span></div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">MACHINE</div>
+              <div class="card">
+                <div class="kv"><b>Default domain</b><span class="strong">test</span><span class="faint">&nbsp;· projects without one of their own use it</span><span class="grow"></span><span class="btn quiet">Change…</span></div>
+                <div class="kv"><b>DNS agent</b><span class="mono strong">127.0.0.1:5354</span><span class="faint">&nbsp;· registered</span></div>
+                <div class="kv"><b>State</b><span class="mono strong">~/.bay/machine.json</span><span class="grow"></span><span class="btn quiet">Reveal</span></div>
+              </div>
+            </div>
+            <div>
+              <div class="clabel">MAINTENANCE</div>
+              <div class="card">
+                <div class="kv tall"><b>Check setup</b><div><span class="strong">Run doctor</span><span class="hint">Reports the machine setup and changes nothing.</span></div><span class="grow"></span><span class="btn quiet">Run</span></div>
+                <div class="kv tall"><b>Reinstall</b><div><span class="strong">Rewrite the resolver entries and re-trust the authority</span><span class="hint">Asks for your password once.</span></div><span class="grow"></span><span class="btn quiet">Reinstall</span></div>
+                <div class="kv tall"><b>Remove</b><div><span class="strong">Remove everything bay created</span><span class="hint">Resolver entries, the authority, the proxy and all certificates.</span></div><span class="grow"></span><span class="btn quiet">Remove…</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dv-cap">Two kinds of setting are kept apart: the four that belong to the application, and the ones that changed the machine and can be undone. Everything destructive is in its own section with the consequence written next to it.</p>
+  </div>
+
+  <div class="dv-opt" id="1i">
+    <div class="dv-olabel"><a class="dv-oid" href="#1i">1i</a>First run</div>
+    <div class="win">
+      <div class="titlebar">
+        <div class="light-btn" style="background:#FF5F57"></div>
+        <div class="light-btn" style="background:#FEBC2E"></div>
+        <div class="light-btn" style="background:#28C840"></div>
+        <div class="title">bay</div>
+        <div class="seg"><span class="on">Auto</span><span>Dark</span><span>Light</span></div>
+      </div>
+      <div class="split">
+        <div class="side">
+          <div class="sgroup">MACHINE</div>
+          <div class="sitem sel"><span class="dot warn"></span>Dashboard</div>
+          <div class="sitem"><span class="dot warn"></span>Domains<span class="count">1</span></div>
+          <div class="sitem"><span class="dot warn"></span>Certificates<span class="count">0</span></div>
+          <div class="sgroup">PROJECTS</div>
+          <div class="sitem"><span class="dot off"></span>platform<span class="count">0/3</span></div>
+        </div>
+        <div class="detail">
+          <div class="dhead"><h1>Dashboard</h1><span class="grow"></span><span class="btn quiet">Add project…</span></div>
+          <div class="dbody">
+            <div class="verdict">
+              <span class="beacon warn"></span>
+              <div>
+                <div class="headline">Not serving yet</div>
+                <div class="subline">1 project registered · nothing running</div>
+              </div>
+            </div>
+            <div class="banner">
+              <div class="txt">
+                <b>This machine cannot serve the domains yet</b>
+                Delegate <em>*.test</em> to bay, and trust its certificate authority. It asks for your password once.
+              </div>
+              <span class="grow"></span>
+              <span class="btn hero">Finish setup</span>
+            </div>
+            <div>
+              <div class="clabel">PROJECTS</div>
+              <div class="card">
+                <div class="row">
+                  <span class="dot off"></span><span class="name">platform</span>
+                  <span class="chip">test</span>
+                  <span class="pdots"><span class="dot off"></span><span class="dot off"></span><span class="dot off"></span></span>
+                  <span class="grow"></span>
+                  <span class="meta">stopped</span>
+                  <span class="btn dim">Start</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dv-cap">The same dashboard with the one thing that matters. The verdict goes amber, the banner says what will change on the machine, and one primary button does it. Start stays dimmed because it cannot succeed yet.</p>
+  </div>
+
+  <div class="dv-opt" id="1j">
+    <div class="dv-olabel"><a class="dv-oid" href="#1j">1j</a>Proxy down — new screen</div>
+    <div class="win lt">
+      <div class="titlebar">
+        <div class="light-btn" style="background:#FF5F57"></div>
+        <div class="light-btn" style="background:#FEBC2E"></div>
+        <div class="light-btn" style="background:#28C840"></div>
+        <div class="title">bay</div>
+        <div class="seg"><span>Auto</span><span>Dark</span><span class="on">Light</span></div>
+      </div>
+      <div class="split">
+        <div class="side">
+          <div class="sgroup">MACHINE</div>
+          <div class="sitem sel"><span class="dot bad"></span>Dashboard</div>
+          <div class="sitem"><span class="dot on"></span>Domains<span class="count">2</span></div>
+          <div class="sitem"><span class="dot on"></span>Certificates<span class="count">9</span></div>
+          <div class="sgroup">PROJECTS</div>
+          <div class="sitem"><span class="dot bad"></span>guidecheck<span class="count">2/2</span></div>
+          <div class="sitem"><span class="dot bad"></span>platform<span class="count">3/3</span></div>
+          <div class="sitem"><span class="dot warn"></span>platform-dev<span class="count">2/3</span></div>
+        </div>
+        <div class="detail">
+          <div class="dhead"><h1>Dashboard</h1><span class="grow"></span><span class="btn quiet">Add project…</span></div>
+          <div class="dbody">
+            <div class="verdict">
+              <span class="beacon bad"></span>
+              <div>
+                <div class="headline">Nothing is reachable</div>
+                <div class="subline">8 services running · the proxy is not answering on 192.168.64.115</div>
+              </div>
+            </div>
+            <div class="banner bad">
+              <div class="txt">
+                <b>The proxy is not running</b>
+                The containers are up, so no work is lost. The proxy is created by any command that produces routes; restarting it re-publishes all <em>9 routes</em>.
+              </div>
+              <span class="grow"></span>
+              <span class="btn quiet">Run doctor</span>
+              <span class="btn hero">Restart the proxy</span>
+            </div>
+            <div>
+              <div class="clabel">ADDRESSES <span class="note">every route the proxy would serve</span></div>
+              <div class="card">
+                <div class="row">
+                  <span class="dot bad"></span><span class="name">web</span>
+                  <span class="addr muted">https://web.test/</span>
+                  <span class="meta">no answer</span>
+                </div>
+                <div class="row">
+                  <span class="dot bad"></span><span class="name">platform1</span>
+                  <span class="addr muted">https://platform1.test/</span>
+                  <span class="meta">no answer</span>
+                </div>
+                <div class="row">
+                  <span class="dot bad"></span><span class="name">platform2</span>
+                  <span class="addr muted">https://platform2.test/</span>
+                  <span class="meta">no answer</span>
+                </div>
+                <div class="row">
+                  <span class="dot bad"></span><span class="name">platform3</span>
+                  <span class="addr muted">https://api.platform3.test/</span>
+                  <span class="meta">no answer</span>
+                </div>
+                <div class="row">
+                  <span class="dot warn"></span><span class="name">web</span>
+                  <span class="addr muted">https://console.platform-dev.test/</span>
+                  <span class="meta">502 · not listening</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="dv-cap">The failure is at the proxy, not in the projects, so the screen says so before offering the fix. Addresses stop being links while nothing answers, and the one route failing for its own reason keeps its own status.</p>
+  </div>
+
+</div>
+<p class="dv-next">Try next: "variations on the sidebar and the project rows" · "make <a class="dv-oid" href="#1d">1d</a> the log-first screen" · "add the menu bar popover"</p>
+</section>
+
+</div>
+
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showNotes&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Board&quot;},&quot;wideWindows&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Board&quot;}}">
+class Component extends DCLogic {
+  renderVals() {
+    const notes = this.props.showNotes ?? true;
+    const wide = this.props.wideWindows ?? false;
+    return { boardClass: [notes ? "" : "no-notes", wide ? "wide" : ""].filter(Boolean).join(" ") };
+  }
+}
+</script>
+</body>
+</html>

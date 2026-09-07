@@ -3,17 +3,93 @@
 #include "_cgo_export.h"
 
 // The window is a source list: a fixed-width sidebar for navigation and a pane
-// showing one subject. Colours are read from the system palette, so light and
-// dark use the same code.
-static const CGFloat kSidebarWidth = 216;
-static const CGFloat kNameWidth = 104;
-static const CGFloat kReachWidth = 260;
+// showing one subject. Sizes come from design/Mockups.dc.html, which states
+// them in points.
+static const CGFloat kSidebarWidth = 216;   // .side
+static const CGFloat kNameWidth = 96;       // .name
+static const CGFloat kNameWideWidth = 140;  // .name.w140
+static const CGFloat kKeyWidth = 116;       // .kv b
+static const CGFloat kDotSize = 9;          // .dot
+static const CGFloat kCodePad = 14;         // .logpane padding
+static const CGFloat kSubDotSize = 3;       // .dot on a service under its project
+// Every sidebar row is one line of 13 point text plus its padding. Stating it
+// keeps a service row the height of the project above it, whose dot is larger.
+static const CGFloat kSideRowHeight = 27;   // .sitem
+static const CGFloat kBeaconSize = 11;      // .beacon
+static const CGFloat kBeaconHalo = 4;       // .beacon halo
+static const CGFloat kSubIndent = 18;       // one service under its project
+
+
+// gLabels holds the words Go supplies for the controls this file builds, so the
+// whole window reads in one language.
+static NSDictionary *gLabels = nil;
+
+static NSString *label(NSString *name, NSString *fallback) {
+  NSString *v = gLabels[name];
+  return v.length ? v : fallback;
+}
+
+static NSArray<NSString *> *appearanceLabels(void) {
+  return @[label(@"auto", @"Auto"), label(@"dark", @"Dark"), label(@"light", @"Light")];
+}
 
 static NSColor *dotColor(NSString *state) {
   if ([state isEqualToString:@"on"])   return [NSColor systemGreenColor];
   if ([state isEqualToString:@"warn"]) return [NSColor systemOrangeColor];
   if ([state isEqualToString:@"bad"])  return [NSColor systemRedColor];
+  // "off" and anything unset mean nothing is running, which is not a fault.
   return [NSColor tertiaryLabelColor];
+}
+
+// A colour that resolves against the appearance the view draws in. Layer
+// colours do not follow an appearance change on their own, so every layer-backed
+// view here redraws from viewDidChangeEffectiveAppearance.
+static NSColor *dynamicColor(NSColor *light, NSColor *dark) {
+  return [NSColor colorWithName:nil dynamicProvider:^NSColor *(NSAppearance *a) {
+    NSAppearanceName name = [a bestMatchFromAppearancesWithNames:
+        @[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]];
+    return [name isEqualToString:NSAppearanceNameDarkAqua] ? dark : light;
+  }];
+}
+
+// A card's outline and the hairline between its rows are two different weights.
+// NSColor offers one separator, so both are stated here.
+static NSColor *cardBorderColor(void) {
+  static NSColor *c;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    c = dynamicColor([NSColor colorWithWhite:0 alpha:0.215],
+                     [NSColor colorWithWhite:1 alpha:0.145]);
+  });
+  return c;
+}
+
+static NSColor *hairlineColor(void) {
+  static NSColor *c;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    c = dynamicColor([NSColor colorWithWhite:0 alpha:0.090],
+                     [NSColor colorWithWhite:1 alpha:0.080]);
+  });
+  return c;
+}
+
+// The ring drawn inside a status dot.
+static NSColor *dotRingColor(void) {
+  static NSColor *c;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{
+    c = dynamicColor([NSColor colorWithWhite:0 alpha:0.10],
+                     [NSColor colorWithWhite:1 alpha:0.12]);
+  });
+  return c;
+}
+
+// The halo around the verdict beacon, in the beacon's own colour.
+static CGFloat haloAlpha(NSView *view) {
+  NSAppearanceName name = [view.effectiveAppearance bestMatchFromAppearancesWithNames:
+      @[NSAppearanceNameAqua, NSAppearanceNameDarkAqua]];
+  return [name isEqualToString:NSAppearanceNameDarkAqua] ? 0.16 : 0.20;
 }
 
 // NSView places subviews from the bottom left, so a stack inside a scroll view
@@ -25,21 +101,92 @@ static NSColor *dotColor(NSString *state) {
 - (BOOL)isFlipped { return YES; }
 @end
 
+
+// Chip is the bordered pill that labels a row, such as a project's domain.
+@interface Chip : NSView
+@property(strong) NSTextField *label;
+@end
+
+@implementation Chip
+- (instancetype)initWithText:(NSString *)text {
+  if ((self = [super initWithFrame:NSZeroRect])) {
+    self.wantsLayer = YES;
+    self.layer.cornerRadius = 5;
+    self.layer.borderWidth = 1;
+
+    self.label = [NSTextField labelWithString:text];
+    self.label.font = [NSFont systemFontOfSize:11];
+    self.label.textColor = [NSColor secondaryLabelColor];
+    self.label.translatesAutoresizingMaskIntoConstraints = NO;
+    [self addSubview:self.label];
+    [NSLayoutConstraint activateConstraints:@[
+      [self.label.leadingAnchor constraintEqualToAnchor:self.leadingAnchor constant:6],
+      [self.label.trailingAnchor constraintEqualToAnchor:self.trailingAnchor constant:-6],
+      [self.label.topAnchor constraintEqualToAnchor:self.topAnchor constant:1],
+      [self.label.bottomAnchor constraintEqualToAnchor:self.bottomAnchor constant:-1],
+    ]];
+  }
+  return self;
+}
+- (void)updateLayer {
+  self.layer.backgroundColor = [NSColor clearColor].CGColor;
+  self.layer.borderColor = cardBorderColor().CGColor;
+}
+- (void)viewDidChangeEffectiveAppearance { [self setNeedsDisplay:YES]; }
+@end
+
+// DotView draws a status dot. The verdict beacon is the same dot with a halo in
+// its own colour, and a dot in a selected sidebar row carries a white ring.
 @interface DotView : NSView
 @property(strong) NSColor *color;
+@property(assign) CGFloat diameter;
+@property(assign) CGFloat halo;
+@property(assign) BOOL selected;
++ (instancetype)dot:(NSString *)state;
++ (instancetype)dot:(NSString *)state size:(CGFloat)d;
++ (instancetype)beacon:(NSString *)state;
 @end
 
 @implementation DotView
++ (instancetype)dot:(NSString *)state { return [self dot:state size:kDotSize]; }
++ (instancetype)dot:(NSString *)state size:(CGFloat)d {
+  DotView *v = [[DotView alloc] initWithFrame:NSZeroRect];
+  v.color = dotColor(state);
+  v.diameter = d;
+  [v.widthAnchor constraintEqualToConstant:d].active = YES;
+  [v.heightAnchor constraintEqualToConstant:d].active = YES;
+  return v;
+}
++ (instancetype)beacon:(NSString *)state {
+  CGFloat side = kBeaconSize + 2 * kBeaconHalo;
+  DotView *v = [[DotView alloc] initWithFrame:NSZeroRect];
+  v.color = dotColor(state);
+  v.diameter = kBeaconSize;
+  v.halo = kBeaconHalo;
+  [v.widthAnchor constraintEqualToConstant:side].active = YES;
+  [v.heightAnchor constraintEqualToConstant:side].active = YES;
+  return v;
+}
 - (void)drawRect:(NSRect)r {
-  CGFloat d = 9;
+  CGFloat d = self.diameter > 0 ? self.diameter : kDotSize;
   NSRect box = NSMakeRect(NSMidX(self.bounds) - d/2, NSMidY(self.bounds) - d/2, d, d);
+  if (self.halo > 0) {
+    [[self.color colorWithAlphaComponent:haloAlpha(self)] setFill];
+    [[NSBezierPath bezierPathWithOvalInRect:NSInsetRect(box, -self.halo, -self.halo)] fill];
+  }
   [self.color setFill];
   [[NSBezierPath bezierPathWithOvalInRect:box] fill];
-  [[[NSColor labelColor] colorWithAlphaComponent:0.12] setStroke];
-  NSBezierPath *ring = [NSBezierPath bezierPathWithOvalInRect:NSInsetRect(box, 0.5, 0.5)];
-  ring.lineWidth = 1;
-  [ring stroke];
+  // The ring is a hairline around a full size dot. A smaller dot has no room
+  // for it, so it is drawn as a solid mark.
+  if (d >= kDotSize) {
+    NSColor *ring = self.selected ? [NSColor colorWithWhite:1 alpha:0.4] : dotRingColor();
+    [ring setStroke];
+    NSBezierPath *inner = [NSBezierPath bezierPathWithOvalInRect:NSInsetRect(box, 0.5, 0.5)];
+    inner.lineWidth = 1;
+    [inner stroke];
+  }
 }
+- (void)viewDidChangeEffectiveAppearance { [self setNeedsDisplay:YES]; }
 @end
 
 // Card is a rounded container holding rows separated by hairlines.
@@ -57,7 +204,53 @@ static NSColor *dotColor(NSString *state) {
 - (BOOL)isFlipped { return YES; }
 - (void)updateLayer {
   self.layer.backgroundColor = [NSColor controlBackgroundColor].CGColor;
-  self.layer.borderColor = [[NSColor separatorColor] colorWithAlphaComponent:0.6].CGColor;
+  self.layer.borderColor = cardBorderColor().CGColor;
+}
+- (void)viewDidChangeEffectiveAppearance { [self setNeedsDisplay:YES]; }
+@end
+
+// Hairline separates two rows inside a card. It is fainter than the card's own
+// outline.
+@interface Hairline : NSView
+@end
+@implementation Hairline
+- (void)updateLayer { self.layer.backgroundColor = hairlineColor().CGColor; }
+- (void)viewDidChangeEffectiveAppearance { [self setNeedsDisplay:YES]; }
+@end
+
+static NSColor *hex(uint32_t rgb) {
+  return [NSColor colorWithSRGBRed:((rgb >> 16) & 0xFF) / 255.0
+                             green:((rgb >> 8) & 0xFF) / 255.0
+                              blue:(rgb & 0xFF) / 255.0
+                             alpha:1];
+}
+
+// TintedCard is the banner's background: a card in a warning or fault colour
+// rather than the control background.
+@interface TintedCard : Card
+@property(strong) NSColor *fill;
+@property(strong) NSColor *edge;
+@end
+@implementation TintedCard
+- (void)updateLayer {
+  self.layer.backgroundColor = self.fill.CGColor;
+  self.layer.borderColor = self.edge.CGColor;
+}
+@end
+
+// CodePane is the background a log tail is drawn on, darker than the card that
+// holds it.
+@interface CodePane : NSView
+@end
+@implementation CodePane
+- (instancetype)initWithFrame:(NSRect)f {
+  if ((self = [super initWithFrame:f])) self.wantsLayer = YES;
+  return self;
+}
+- (BOOL)isFlipped { return YES; }
+- (void)updateLayer {
+  self.layer.backgroundColor =
+      dynamicColor(hex(0xF7F8F9), hex(0x191A1B)).CGColor;
 }
 - (void)viewDidChangeEffectiveAppearance { [self setNeedsDisplay:YES]; }
 @end
@@ -80,6 +273,9 @@ static NSColor *dotColor(NSString *state) {
 @property(strong) NSTextField *headerTitle;
 @property(strong) NSTextField *headerSubtitle;
 @property(strong) NSSegmentedControl *appearance;
+// The Settings screen shows the same control. It is rebuilt with the pane, so
+// the reference is dropped on every render.
+@property(weak) NSSegmentedControl *bodyAppearance;
 @property(strong) NSMutableArray<NSString *> *actionIds;
 - (void)fire:(NSInteger)index;
 @end
@@ -87,10 +283,14 @@ static NSColor *dotColor(NSString *state) {
 @implementation ClickableRow
 - (BOOL)isFlipped { return YES; }
 - (void)mouseDown:(NSEvent *)e { [self.owner fire:self.action]; }
+- (void)resetCursorRects {
+  [self addCursorRect:self.bounds cursor:[NSCursor pointingHandCursor]];
+}
 - (void)updateLayer {
   self.layer.backgroundColor = self.selected
       ? [NSColor controlAccentColor].CGColor : [NSColor clearColor].CGColor;
 }
+- (BOOL)allowsVibrancy { return NO; }
 - (void)viewDidChangeEffectiveAppearance { [self setNeedsDisplay:YES]; }
 @end
 
@@ -120,6 +320,22 @@ static NSColor *dotColor(NSString *state) {
   }
   NSApp.appearance = appearance;
   self.appearance.selectedSegment = index;
+  self.bodyAppearance.selectedSegment = index;
+}
+
+// appearanceControl returns the Auto/Dark/Light control for the Settings
+// screen. It writes the same stored choice as the one in the title bar.
+- (NSSegmentedControl *)appearanceControl {
+  NSSegmentedControl *c =
+      [NSSegmentedControl segmentedControlWithLabels:appearanceLabels()
+                                        trackingMode:NSSegmentSwitchTrackingSelectOne
+                                              target:self
+                                              action:@selector(appearanceChanged:)];
+  c.controlSize = NSControlSizeSmall;
+  c.font = [NSFont systemFontOfSize:11];
+  c.selectedSegment = self.appearance.selectedSegment;
+  self.bodyAppearance = c;
+  return c;
 }
 
 - (void)appearanceChanged:(NSSegmentedControl *)sender {
@@ -149,7 +365,7 @@ static NSColor *dotColor(NSString *state) {
 
   // A titlebar accessory places the control at the title bar's trailing
   // edge.
-  self.appearance = [NSSegmentedControl segmentedControlWithLabels:@[@"Auto", @"Dark", @"Light"]
+  self.appearance = [NSSegmentedControl segmentedControlWithLabels:appearanceLabels()
                                                      trackingMode:NSSegmentSwitchTrackingSelectOne
                                                            target:self
                                                            action:@selector(appearanceChanged:)];
@@ -205,8 +421,8 @@ static NSColor *dotColor(NSString *state) {
   self.headerBar = [NSStackView new];
   self.headerBar.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   self.headerBar.alignment = NSLayoutAttributeCenterY;
-  self.headerBar.spacing = 10;
-  self.headerBar.edgeInsets = NSEdgeInsetsMake(16, 24, 14, 20);
+  self.headerBar.spacing = 12;
+  self.headerBar.edgeInsets = NSEdgeInsetsMake(18, 24, 14, 24);
   self.headerBar.translatesAutoresizingMaskIntoConstraints = NO;
 
   NSBox *headerLine = [NSBox new];
@@ -285,34 +501,44 @@ static NSColor *dotColor(NSString *state) {
 
 - (void)clicked:(NSButton *)sender { [self fire:sender.tag]; }
 
+// A switch delivers its action the same way a button does. The view model
+// carries the new state in the identifier, so the handler does not have to read
+// the control back.
+- (void)switched:(NSSwitch *)sender { [self fire:sender.tag]; }
+
+// The mockup draws four button weights. A push button is the native control for
+// all four, so the weight is carried by the fill and the label colour: the
+// screen's main action takes the accent colour, a secondary action keeps the
+// standard bezel with a quieter label, and a disabled one is drawn by AppKit.
 - (NSButton *)buttonFor:(NSDictionary *)spec {
   NSButton *b = [NSButton buttonWithTitle:spec[@"title"] ?: @"" target:self action:@selector(clicked:)];
   b.bezelStyle = NSBezelStyleRounded;
-  b.controlSize = NSControlSizeSmall;
+  b.controlSize = NSControlSizeRegular;
   b.font = [NSFont systemFontOfSize:12];
   b.enabled = ![spec[@"disabled"] boolValue];
-  // Only the primary action uses the prominent style.
-  if ([spec[@"primary"] boolValue] && b.enabled) {
-    b.bezelColor = [NSColor controlAccentColor];
-    b.contentTintColor = [NSColor whiteColor];
+  NSString *style = spec[@"style"] ?: @"";
+  if (b.enabled) {
+    if ([style isEqualToString:@"hero"]) {
+      b.bezelColor = [NSColor controlAccentColor];
+      b.contentTintColor = [NSColor whiteColor];
+      b.font = [NSFont systemFontOfSize:12 weight:NSFontWeightMedium];
+    } else if ([style isEqualToString:@"quiet"]) {
+      b.contentTintColor = [NSColor secondaryLabelColor];
+    }
   }
   b.tag = [self claim:spec[@"id"]];
   return b;
 }
 
 - (NSView *)hairline {
-  NSView *v = [NSView new];
+  Hairline *v = [Hairline new];
   v.wantsLayer = YES;
-  v.layer.backgroundColor = [[NSColor separatorColor] colorWithAlphaComponent:0.5].CGColor;
   [v.heightAnchor constraintEqualToConstant:1].active = YES;
   return v;
 }
 
-- (NSTextField *)chip:(NSString *)text {
-  NSTextField *t = [NSTextField labelWithString:text];
-  t.font = [NSFont systemFontOfSize:11];
-  t.textColor = [NSColor secondaryLabelColor];
-  return t;
+- (NSView *)chip:(NSString *)text {
+  return [[Chip alloc] initWithText:text];
 }
 
 #pragma mark - sidebar
@@ -326,13 +552,21 @@ static NSColor *dotColor(NSString *state) {
   NSTextField *title = [NSTextField labelWithString:group[@"title"] ?: @""];
   title.font = [NSFont systemFontOfSize:11 weight:NSFontWeightSemibold];
   title.textColor = [NSColor tertiaryLabelColor];
-  NSStackView *titleWrap = [NSStackView new];
-  titleWrap.edgeInsets = NSEdgeInsetsMake(12, 16, 4, 16);
-  [titleWrap addArrangedSubview:title];
+  NSView *titleWrap = [NSView new];
+  title.translatesAutoresizingMaskIntoConstraints = NO;
+  [titleWrap addSubview:title];
+  [NSLayoutConstraint activateConstraints:@[
+    [title.leadingAnchor constraintEqualToAnchor:titleWrap.leadingAnchor constant:16],
+    [title.topAnchor constraintEqualToAnchor:titleWrap.topAnchor constant:12],
+    [titleWrap.bottomAnchor constraintEqualToAnchor:title.bottomAnchor constant:4],
+    [titleWrap.trailingAnchor constraintGreaterThanOrEqualToAnchor:title.trailingAnchor constant:16],
+  ]];
   [box addArrangedSubview:titleWrap];
 
   for (NSDictionary *item in group[@"items"]) {
     BOOL selected = [item[@"selected"] boolValue];
+    // A sub row is one service inside its project, indented under it.
+    BOOL sub = [item[@"sub"] boolValue];
     ClickableRow *row = [ClickableRow new];
     row.owner = self;
     row.selected = selected;
@@ -344,20 +578,23 @@ static NSColor *dotColor(NSString *state) {
     line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
     line.alignment = NSLayoutAttributeCenterY;
     line.spacing = 9;
-    line.edgeInsets = NSEdgeInsetsMake(6, 8, 6, 8);
+    line.edgeInsets = NSEdgeInsetsMake(6, sub ? 8 + kSubIndent : 8, 6, 8);
     line.translatesAutoresizingMaskIntoConstraints = NO;
 
-    NSString *dot = item[@"dot"];
-    if (dot.length) {
-      DotView *d = [[DotView alloc] initWithFrame:NSMakeRect(0, 0, 10, 10)];
-      d.color = selected ? [NSColor whiteColor] : dotColor(dot);
-      [d.widthAnchor constraintEqualToConstant:10].active = YES;
-      [d.heightAnchor constraintEqualToConstant:10].active = YES;
-      [line addArrangedSubview:d];
-    }
+
+    // Every row carries a dot, so the names stay in one column. A row with
+    // nothing running carries the off colour rather than no dot at all. A
+    // service sits under its project, so its dot is the smaller of the two.
+    DotView *d = [DotView dot:item[@"dot"] ?: @"" size:sub ? kSubDotSize : kDotSize];
+    d.selected = selected;
+    [line addArrangedSubview:d];
     NSTextField *label = [NSTextField labelWithString:item[@"label"] ?: @""];
+    // A service row keeps the type size of the project above it, so every row
+    // in the sidebar is the same height. Indent, colour and a half-size dot
+    // carry the level instead.
     label.font = [NSFont systemFontOfSize:13];
     label.lineBreakMode = NSLineBreakByTruncatingTail;
+    if (sub) label.textColor = [NSColor secondaryLabelColor];
     if (selected) label.textColor = [NSColor whiteColor];
     [line addArrangedSubview:label];
 
@@ -375,6 +612,7 @@ static NSColor *dotColor(NSString *state) {
     }
 
     [row addSubview:line];
+    [row.heightAnchor constraintEqualToConstant:kSideRowHeight].active = YES;
     [NSLayoutConstraint activateConstraints:@[
       [line.topAnchor constraintEqualToAnchor:row.topAnchor],
       [line.bottomAnchor constraintEqualToAnchor:row.bottomAnchor],
@@ -394,31 +632,131 @@ static NSColor *dotColor(NSString *state) {
 
 #pragma mark - rows
 
+// A key and value line. The value may carry a tertiary suffix, a second line of
+// explanation, a switch or the appearance control.
 - (NSView *)kvRow:(NSDictionary *)row {
+  BOOL tall = [row[@"hint"] length] > 0;
   NSStackView *line = [NSStackView new];
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  line.alignment = NSLayoutAttributeCenterY;
-  line.spacing = 10;
-  line.edgeInsets = NSEdgeInsetsMake(9, 14, 9, 12);
+  line.alignment = tall ? NSLayoutAttributeTop : NSLayoutAttributeCenterY;
+  line.spacing = 0;
+  line.edgeInsets = tall ? NSEdgeInsetsMake(11, 14, 11, 14) : NSEdgeInsetsMake(9, 14, 9, 14);
 
   NSTextField *key = [NSTextField labelWithString:row[@"text"] ?: @""];
   key.font = [NSFont systemFontOfSize:12];
   key.textColor = [NSColor secondaryLabelColor];
-  [key.widthAnchor constraintEqualToConstant:116].active = YES;
+  [key.widthAnchor constraintEqualToConstant:kKeyWidth].active = YES;
   [line addArrangedSubview:key];
 
-  NSTextField *val = [NSTextField labelWithString:row[@"detail"] ?: @""];
-  val.font = [NSFont systemFontOfSize:12];
-  val.lineBreakMode = NSLineBreakByTruncatingHead;
-  [val setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+  // The value column: the value itself, a tertiary suffix on the same line, and
+  // an explanation under it.
+  NSStackView *value = [NSStackView new];
+  value.orientation = NSUserInterfaceLayoutOrientationVertical;
+  value.alignment = NSLayoutAttributeLeading;
+  value.spacing = 3;
+
+  NSStackView *first = [NSStackView new];
+  first.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+  first.alignment = NSLayoutAttributeFirstBaseline;
+  first.spacing = 0;
+
+  NSString *link = row[@"link"];
+  NSString *detail = row[@"detail"] ?: @"";
+  BOOL mono = [row[@"mono"] boolValue];
+  if (link.length) {
+    NSButton *l = [NSButton buttonWithTitle:row[@"linkText"] ?: link
+                                     target:self action:@selector(clicked:)];
+    l.bezelStyle = NSBezelStyleInline;
+    l.bordered = NO;
+    l.contentTintColor = [NSColor linkColor];
+    l.font = [NSFont systemFontOfSize:12];
+    [l.cell setHighlightsBy:NSContentsCellMask];
+    l.tag = [self claim:link];
+    [first addArrangedSubview:l];
+  } else if (detail.length) {
+    NSTextField *v = [NSTextField labelWithString:detail];
+    v.font = mono ? [NSFont monospacedSystemFontOfSize:11.5 weight:NSFontWeightRegular]
+                  : [NSFont systemFontOfSize:12];
+    // A value that does not fit is an identifier: an image reference or a path.
+    // Both ends carry meaning, so the middle is dropped.
+    v.lineBreakMode = NSLineBreakByTruncatingMiddle;
+    [v setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
                                 forOrientation:NSLayoutConstraintOrientationHorizontal];
-  [line addArrangedSubview:val];
+    [first addArrangedSubview:v];
+  }
+  NSString *faint = row[@"faint"];
+  if (faint.length) {
+    NSTextField *f = [NSTextField labelWithString:[@" · " stringByAppendingString:faint]];
+    f.font = [NSFont systemFontOfSize:12];
+    f.textColor = [NSColor tertiaryLabelColor];
+    f.lineBreakMode = NSLineBreakByTruncatingTail;
+    [f setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow - 1
+                                forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [first addArrangedSubview:f];
+  }
+  [value addArrangedSubview:first];
+
+  NSString *hint = row[@"hint"];
+  if (hint.length) {
+    NSTextField *h = [NSTextField labelWithString:hint];
+    h.font = [NSFont systemFontOfSize:12];
+    h.textColor = [NSColor tertiaryLabelColor];
+    h.lineBreakMode = NSLineBreakByTruncatingTail;
+    [h setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+                                forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [value addArrangedSubview:h];
+  }
+  [line addArrangedSubview:value];
 
   NSView *spacer = [NSView new];
   [spacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
   [line addArrangedSubview:spacer];
+
+  // The appearance control appears twice: in the title bar and here. Both write
+  // the same stored choice, so this one is the same control.
+  if ([row[@"appearance"] boolValue]) {
+    [line addArrangedSubview:[self appearanceControl]];
+  }
+  NSString *toggle = row[@"toggle"];
+  if (toggle.length) {
+    NSSwitch *sw = [NSSwitch new];
+    sw.state = [row[@"on"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+    sw.enabled = ![row[@"disabled"] boolValue];
+    sw.target = self;
+    sw.action = @selector(switched:);
+    sw.tag = [self claim:toggle];
+    sw.controlSize = NSControlSizeSmall;
+    [line addArrangedSubview:sw];
+  }
   for (NSDictionary *b in row[@"buttons"]) [line addArrangedSubview:[self buttonFor:b]];
+
+  // A stack aligned to the top does not grow to hold a column taller than the
+  // rest of the row, so the padding under the value is stated here. Without it
+  // an explanation on a second line is drawn past the card's edge.
+  [line.bottomAnchor constraintGreaterThanOrEqualToAnchor:value.bottomAnchor
+                                                 constant:tall ? 11 : 9].active = YES;
   return line;
+}
+
+// A row that names a selection opens it when clicked. The buttons inside it
+// handle their own clicks, so they are not affected.
+- (NSView *)clickableRow:(NSDictionary *)row {
+  NSView *line = [self rowFor:row];
+  NSString *rowID = row[@"id"];
+  if (!rowID.length) return line;
+
+  ClickableRow *hit = [ClickableRow new];
+  hit.owner = self;
+  hit.action = [self claim:rowID];
+  line.translatesAutoresizingMaskIntoConstraints = NO;
+  [hit addSubview:line];
+  [NSLayoutConstraint activateConstraints:@[
+    [line.topAnchor constraintEqualToAnchor:hit.topAnchor],
+    [line.bottomAnchor constraintEqualToAnchor:hit.bottomAnchor],
+    [line.leadingAnchor constraintEqualToAnchor:hit.leadingAnchor],
+    [line.trailingAnchor constraintEqualToAnchor:hit.trailingAnchor],
+  ]];
+  return hit;
 }
 
 - (NSView *)rowFor:(NSDictionary *)row {
@@ -427,19 +765,16 @@ static NSColor *dotColor(NSString *state) {
   NSStackView *line = [NSStackView new];
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
-  line.spacing = 10;
-  line.edgeInsets = NSEdgeInsetsMake(9, 14, 9, 12);
+  line.spacing = 12;
+  line.edgeInsets = NSEdgeInsetsMake(10, 14, 10, 12);
 
-  DotView *dot = [[DotView alloc] initWithFrame:NSMakeRect(0, 0, 10, 10)];
-  dot.color = dotColor(row[@"dot"] ?: @"");
-  [dot.widthAnchor constraintEqualToConstant:10].active = YES;
-  [dot.heightAnchor constraintEqualToConstant:10].active = YES;
-  [line addArrangedSubview:dot];
+  [line addArrangedSubview:[DotView dot:row[@"dot"] ?: @""]];
 
   NSTextField *name = [NSTextField labelWithString:row[@"text"] ?: @""];
   name.font = [NSFont systemFontOfSize:13];
   name.lineBreakMode = NSLineBreakByTruncatingTail;
-  [name.widthAnchor constraintEqualToConstant:kNameWidth].active = YES;
+  CGFloat width = [row[@"wide"] boolValue] ? kNameWideWidth : kNameWidth;
+  [name.widthAnchor constraintEqualToConstant:width].active = YES;
   [line addArrangedSubview:name];
 
   NSString *chip = row[@"chip"];
@@ -451,53 +786,36 @@ static NSColor *dotColor(NSString *state) {
     NSStackView *run = [NSStackView new];
     run.orientation = NSUserInterfaceLayoutOrientationHorizontal;
     run.spacing = 4;
-    for (NSString *d in dots) {
-      DotView *v = [[DotView alloc] initWithFrame:NSMakeRect(0, 0, 10, 10)];
-      v.color = dotColor(d);
-      [v.widthAnchor constraintEqualToConstant:10].active = YES;
-      [v.heightAnchor constraintEqualToConstant:10].active = YES;
-      [run addArrangedSubview:v];
-    }
+    for (NSString *d in dots) [run addArrangedSubview:[DotView dot:d]];
     [line addArrangedSubview:run];
   }
 
-  // The address column holds a link when the row has a URL, and plain text
-  // otherwise. Both use the same width.
-  NSView *reach = [NSView new];
+  // The address column takes the free width. It holds a link when the row has a
+  // URL and muted text otherwise.
   NSString *link = row[@"link"];
   NSString *linkText = row[@"linkText"] ?: link;
-  if (linkText.length) {
-    NSView *inner;
-    if (link.length) {
-      NSButton *l = [NSButton buttonWithTitle:linkText target:self action:@selector(clicked:)];
-      l.bezelStyle = NSBezelStyleInline;
-      l.bordered = NO;
-      l.contentTintColor = [NSColor linkColor];
-      l.font = [NSFont systemFontOfSize:12];
-      [l.cell setHighlightsBy:NSContentsCellMask];
-      l.tag = [self claim:link];
-      inner = l;
-    } else {
-      NSTextField *t = [NSTextField labelWithString:linkText];
-      t.font = [NSFont systemFontOfSize:12];
-      t.textColor = [NSColor secondaryLabelColor];
-      t.lineBreakMode = NSLineBreakByTruncatingHead;
-      inner = t;
-    }
-    inner.translatesAutoresizingMaskIntoConstraints = NO;
-    [reach addSubview:inner];
-    [NSLayoutConstraint activateConstraints:@[
-      [inner.leadingAnchor constraintEqualToAnchor:reach.leadingAnchor],
-      [inner.centerYAnchor constraintEqualToAnchor:reach.centerYAnchor],
-      [inner.trailingAnchor constraintLessThanOrEqualToAnchor:reach.trailingAnchor],
-    ]];
+  NSView *reach = nil;
+  if (link.length) {
+    NSButton *l = [NSButton buttonWithTitle:linkText target:self action:@selector(clicked:)];
+    l.bezelStyle = NSBezelStyleInline;
+    l.bordered = NO;
+    l.contentTintColor = [NSColor linkColor];
+    l.font = [NSFont systemFontOfSize:12];
+    l.alignment = NSTextAlignmentLeft;
+    [l.cell setHighlightsBy:NSContentsCellMask];
+    l.tag = [self claim:link];
+    reach = l;
+  } else {
+    NSTextField *t = [NSTextField labelWithString:linkText ?: @""];
+    t.font = [NSFont systemFontOfSize:12];
+    t.textColor = [NSColor secondaryLabelColor];
+    t.lineBreakMode = NSLineBreakByTruncatingHead;
+    reach = t;
   }
-  [reach.widthAnchor constraintEqualToConstant:kReachWidth].active = YES;
+  [reach setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
+  [reach setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+                                  forOrientation:NSLayoutConstraintOrientationHorizontal];
   [line addArrangedSubview:reach];
-
-  NSView *spacer = [NSView new];
-  [spacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
-  [line addArrangedSubview:spacer];
 
   NSTextField *detail = [NSTextField labelWithString:row[@"detail"] ?: @""];
   detail.textColor = [NSColor secondaryLabelColor];
@@ -509,6 +827,59 @@ static NSColor *dotColor(NSString *state) {
   [line addArrangedSubview:detail];
 
   for (NSDictionary *b in row[@"buttons"]) [line addArrangedSubview:[self buttonFor:b]];
+  return line;
+}
+
+// logPane draws the tail of a container's output on the code background.
+- (NSView *)logPane:(NSArray *)lines {
+  CodePane *pane = [[CodePane alloc] initWithFrame:NSZeroRect];
+  NSStackView *stack = [NSStackView new];
+  stack.orientation = NSUserInterfaceLayoutOrientationVertical;
+  stack.alignment = NSLayoutAttributeLeading;
+  stack.spacing = 3;
+  stack.edgeInsets = NSEdgeInsetsMake(11, kCodePad, 12, kCodePad);
+  stack.translatesAutoresizingMaskIntoConstraints = NO;
+  if (!lines.count) {
+    lines = @[label(@"noOutput", @"(no output yet)")];
+  }
+  for (NSString *l in lines) {
+    NSTextField *t = [NSTextField labelWithString:l];
+    t.font = [NSFont monospacedSystemFontOfSize:11 weight:NSFontWeightRegular];
+    t.lineBreakMode = NSLineBreakByTruncatingTail;
+    [t setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+                                forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [stack addArrangedSubview:t];
+  }
+  [pane addSubview:stack];
+  [NSLayoutConstraint activateConstraints:@[
+    [stack.topAnchor constraintEqualToAnchor:pane.topAnchor],
+    [stack.leadingAnchor constraintEqualToAnchor:pane.leadingAnchor],
+    [stack.trailingAnchor constraintEqualToAnchor:pane.trailingAnchor],
+    [stack.bottomAnchor constraintEqualToAnchor:pane.bottomAnchor],
+  ]];
+  // A line is as wide as the pane's content, not the pane, so the padding on
+  // both sides is left alone.
+  for (NSView *v in stack.arrangedSubviews) {
+    [v.widthAnchor constraintEqualToAnchor:stack.widthAnchor
+                                constant:-2 * kCodePad].active = YES;
+  }
+  return pane;
+}
+
+- (NSView *)logFoot:(NSDictionary *)section {
+  NSStackView *line = [NSStackView new];
+  line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+  line.alignment = NSLayoutAttributeCenterY;
+  line.spacing = 10;
+  line.edgeInsets = NSEdgeInsetsMake(8, 14, 8, 12);
+  NSTextField *t = [NSTextField labelWithString:section[@"logNote"] ?: @""];
+  t.font = [NSFont systemFontOfSize:12];
+  t.textColor = [NSColor secondaryLabelColor];
+  [line addArrangedSubview:t];
+  NSView *spacer = [NSView new];
+  [spacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
+  [line addArrangedSubview:spacer];
+  for (NSDictionary *b in section[@"logButtons"]) [line addArrangedSubview:[self buttonFor:b]];
   return line;
 }
 
@@ -533,7 +904,7 @@ static NSColor *dotColor(NSString *state) {
       [head addArrangedSubview:t];
     }
     NSString *note = section[@"note"];
-    if (note.length && [section[@"rows"] count] > 0) {
+    if (note.length && ([section[@"rows"] count] > 0 || section[@"log"])) {
       NSTextField *n = [NSTextField labelWithString:note];
       n.font = [NSFont systemFontOfSize:11];
       n.textColor = [NSColor tertiaryLabelColor];
@@ -558,7 +929,7 @@ static NSColor *dotColor(NSString *state) {
 
   NSArray *rows = section[@"rows"];
   NSString *note = section[@"note"];
-  if (!rows.count && note.length) {
+  if (!rows.count && !section[@"log"] && note.length) {
     NSTextField *n = [NSTextField wrappingLabelWithString:note];
     n.textColor = [NSColor secondaryLabelColor];
     n.font = [NSFont systemFontOfSize:12];
@@ -570,8 +941,18 @@ static NSColor *dotColor(NSString *state) {
     [inner addArrangedSubview:wrap];
   }
   for (NSUInteger i = 0; i < rows.count; i++) {
-    [inner addArrangedSubview:[self rowFor:rows[i]]];
+    [inner addArrangedSubview:[self clickableRow:rows[i]]];
     if (i + 1 < rows.count) [inner addArrangedSubview:[self hairline]];
+  }
+
+  // A log section carries the tail of a container's output and a strip naming
+  // what the pane is showing.
+  NSArray *log = section[@"log"];
+  if (log) {
+    if (rows.count) [inner addArrangedSubview:[self hairline]];
+    [inner addArrangedSubview:[self logPane:log]];
+    [inner addArrangedSubview:[self hairline]];
+    [inner addArrangedSubview:[self logFoot:section]];
   }
 
   [card addSubview:inner];
@@ -597,13 +978,13 @@ static NSColor *dotColor(NSString *state) {
   NSStackView *line = [NSStackView new];
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
-  line.spacing = 10;
+  // The beacon's halo is drawn inside its view, so the view is wider than the
+  // dot. The leading inset and the spacing take that width back, which leaves
+  // the dot where a plain dot would sit.
+  line.spacing = 10 - kBeaconHalo;
+  line.edgeInsets = NSEdgeInsetsMake(0, -kBeaconHalo, 0, 0);
 
-  DotView *dot = [[DotView alloc] initWithFrame:NSMakeRect(0, 0, 12, 12)];
-  dot.color = dotColor(v[@"dot"] ?: @"on");
-  [dot.widthAnchor constraintEqualToConstant:12].active = YES;
-  [dot.heightAnchor constraintEqualToConstant:12].active = YES;
-  [line addArrangedSubview:dot];
+  [line addArrangedSubview:[DotView beacon:v[@"dot"] ?: @"on"]];
 
   NSStackView *text = [NSStackView new];
   text.orientation = NSUserInterfaceLayoutOrientationVertical;
@@ -623,32 +1004,46 @@ static NSColor *dotColor(NSString *state) {
   return line;
 }
 
+// A banner states one condition of the machine and carries the action that
+// answers it. "bad" is a fault; anything else is a warning.
 - (NSView *)bannerFor:(NSDictionary *)b {
-  Card *card = [[Card alloc] initWithFrame:NSZeroRect];
+  BOOL bad = [b[@"kind"] isEqualToString:@"bad"];
+  TintedCard *card = [[TintedCard alloc] initWithFrame:NSZeroRect];
+  card.fill = bad ? dynamicColor(hex(0xFFEFED), hex(0x2A1D1C))
+                  : dynamicColor(hex(0xFFF6E0), hex(0x24211A));
+  card.edge = bad ? dynamicColor(hex(0xF0C7C2), hex(0x5A2B27))
+                  : dynamicColor(hex(0xEBD9A8), hex(0x4A3D1E));
+  NSColor *titleColor = bad ? dynamicColor(hex(0x7A2A22), hex(0xF3D3D0))
+                            : dynamicColor(hex(0x6B4E11), hex(0xE9DFC2));
+  NSColor *textColor = bad ? dynamicColor(hex(0x8C3A31), hex(0xD2ABA7))
+                           : dynamicColor(hex(0x7C6329), hex(0xC9BE9E));
+
   NSStackView *line = [NSStackView new];
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
   line.spacing = 14;
-  line.edgeInsets = NSEdgeInsetsMake(13, 16, 13, 14);
+  line.edgeInsets = NSEdgeInsetsMake(14, 16, 14, 16);
   line.translatesAutoresizingMaskIntoConstraints = NO;
 
   NSStackView *text = [NSStackView new];
   text.orientation = NSUserInterfaceLayoutOrientationVertical;
   text.alignment = NSLayoutAttributeLeading;
-  text.spacing = 3;
+  text.spacing = 2;
   NSTextField *title = [NSTextField labelWithString:b[@"title"] ?: @""];
   title.font = [NSFont systemFontOfSize:13 weight:NSFontWeightSemibold];
+  title.textColor = titleColor;
   [text addArrangedSubview:title];
   NSTextField *body = [NSTextField wrappingLabelWithString:b[@"text"] ?: @""];
   body.font = [NSFont systemFontOfSize:12];
-  body.textColor = [NSColor secondaryLabelColor];
+  body.textColor = textColor;
   [text addArrangedSubview:body];
   [line addArrangedSubview:text];
 
   NSView *spacer = [NSView new];
   [spacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
   [line addArrangedSubview:spacer];
-  if (b[@"button"]) [line addArrangedSubview:[self buttonFor:b[@"button"]]];
+  for (NSDictionary *button in b[@"buttons"]) [line addArrangedSubview:[self buttonFor:button]];
+  [line.bottomAnchor constraintGreaterThanOrEqualToAnchor:text.bottomAnchor constant:14].active = YES;
 
   [card addSubview:line];
   [NSLayoutConstraint activateConstraints:@[
@@ -668,6 +1063,7 @@ static NSColor *dotColor(NSString *state) {
   if (!model) return;
 
   [self.actionIds removeAllObjects];
+  self.bodyAppearance = nil;
   for (NSStackView *stack in @[self.sidebar, self.content, self.headerBar]) {
     for (NSView *v in [stack.arrangedSubviews copy]) {
       [stack removeArrangedSubview:v];
@@ -799,8 +1195,8 @@ void ui_prompt(const char *actionID, const char *title, const char *message,
     NSAlert *alert = [NSAlert new];
     alert.messageText = t;
     alert.informativeText = m;
-    [alert addButtonWithTitle:@"OK"];
-    [alert addButtonWithTitle:@"Cancel"];
+    [alert addButtonWithTitle:label(@"ok", @"OK")];
+    [alert addButtonWithTitle:label(@"cancel", @"Cancel")];
 
     NSTextField *field = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 300, 24)];
     field.placeholderString = ph;
@@ -829,11 +1225,63 @@ void ui_confirm(const char *actionID, const char *title, const char *message,
     alert.informativeText = m;
     alert.alertStyle = destructive ? NSAlertStyleCritical : NSAlertStyleWarning;
     NSButton *okButton = [alert addButtonWithTitle:ok];
-    [alert addButtonWithTitle:@"Cancel"];
+    [alert addButtonWithTitle:label(@"cancel", @"Cancel")];
     if (destructive) okButton.hasDestructiveAction = YES;
     if ([alert runModal] == NSAlertFirstButtonReturn) {
       goUIAction((char *)[aid UTF8String]);
     }
+  });
+}
+
+void ui_pick(const char *actionID, const char *title, const char *prompt) {
+  NSString *aid = [NSString stringWithUTF8String:actionID ?: ""];
+  NSString *t = [NSString stringWithUTF8String:title ?: ""];
+  NSString *p = [NSString stringWithUTF8String:prompt ?: ""];
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSOpenPanel *panel = [NSOpenPanel openPanel];
+    panel.message = t;
+    panel.prompt = p;
+    panel.canChooseDirectories = YES;
+    panel.canChooseFiles = YES;
+    panel.allowsMultipleSelection = NO;
+    [NSApp activateIgnoringOtherApps:YES];
+    if ([panel runModal] == NSModalResponseOK && panel.URL) {
+      const char *path = panel.URL.path.UTF8String;
+      goUIPrompt((char *)[aid UTF8String], (char *)path);
+    }
+  });
+}
+
+void ui_labels(const char *json) {
+  NSData *data = [[NSString stringWithUTF8String:json ?: "{}"]
+      dataUsingEncoding:NSUTF8StringEncoding];
+  NSDictionary *d = [NSJSONSerialization JSONObjectWithData:data options:0 error:nil];
+  dispatch_async(dispatch_get_main_queue(), ^{
+    if ([d isKindOfClass:[NSDictionary class]]) gLabels = d;
+  });
+}
+
+void ui_language(char *out, int n) {
+  NSString *tag = [[NSLocale preferredLanguages] firstObject] ?: @"en";
+  strlcpy(out, tag.UTF8String, (size_t)n);
+}
+
+void ui_flag(const char *key, int *out) {
+  NSString *k = [NSString stringWithUTF8String:key ?: ""];
+  *out = [[NSUserDefaults standardUserDefaults] boolForKey:k] ? 1 : 0;
+}
+
+void ui_set_flag(const char *key, int value) {
+  NSString *k = [NSString stringWithUTF8String:key ?: ""];
+  [[NSUserDefaults standardUserDefaults] setBool:(value != 0) forKey:k];
+}
+
+void ui_copy(const char *text) {
+  NSString *s = [NSString stringWithUTF8String:text ?: ""];
+  dispatch_async(dispatch_get_main_queue(), ^{
+    NSPasteboard *pb = [NSPasteboard generalPasteboard];
+    [pb clearContents];
+    [pb setString:s forType:NSPasteboardTypeString];
   });
 }
 
@@ -859,5 +1307,194 @@ void ui_update(const char *json) {
   dispatch_async(dispatch_get_main_queue(), ^{
     PanelController *c = [PanelController shared];
     if ([c visible]) [c render:s];
+  });
+}
+
+#pragma mark - sheet
+
+// SheetController is the one sheet the window shows: a name to type and one
+// choice to make. It is attached to the panel window, so the window stays on
+// screen behind it and the machine state it describes stays visible.
+@interface SheetController : NSObject <NSTextFieldDelegate>
+@property(strong) NSWindow *sheet;
+@property(strong) NSTextField *field;
+@property(strong) Chip *preview;
+@property(strong) NSSwitch *option;
+@property(copy) NSString *actionID;
+@property(copy) NSString *suffix;
+@end
+
+@implementation SheetController
+
++ (instancetype)shared {
+  static SheetController *c;
+  static dispatch_once_t once;
+  dispatch_once(&once, ^{ c = [SheetController new]; });
+  return c;
+}
+
+- (void)controlTextDidChange:(NSNotification *)note {
+  [self updatePreview];
+}
+
+// The preview shows the name the sheet would produce, because a single-label
+// wildcard is rejected by clients and the resulting name is what matters.
+- (void)updatePreview {
+  NSString *typed = [self.field.stringValue
+      stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  self.preview.label.stringValue = typed.length
+      ? [NSString stringWithFormat:@"%@%@", self.suffix, typed]
+      : @"";
+  self.preview.hidden = typed.length == 0;
+}
+
+- (void)cancel:(id)sender {
+  [self.sheet.sheetParent endSheet:self.sheet returnCode:NSModalResponseCancel];
+  [self.sheet orderOut:nil];
+  self.sheet = nil;
+}
+
+- (void)accept:(id)sender {
+  NSString *value = [self.field.stringValue
+      stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
+  NSString *aid = self.actionID;
+  BOOL on = self.option.state == NSControlStateValueOn;
+  [self.sheet.sheetParent endSheet:self.sheet returnCode:NSModalResponseOK];
+  [self.sheet orderOut:nil];
+  self.sheet = nil;
+  if (value.length) {
+    goUISheet((char *)[aid UTF8String], (char *)[value UTF8String], on ? 1 : 0);
+  }
+}
+
+- (void)present:(NSDictionary *)spec on:(NSWindow *)parent {
+  if (self.sheet) return;
+  self.actionID = spec[@"id"];
+  self.suffix = spec[@"suffix"] ?: @"";
+
+  NSWindow *w = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 440, 10)
+                                            styleMask:NSWindowStyleMaskTitled
+                                              backing:NSBackingStoreBuffered
+                                                defer:NO];
+  NSStackView *box = [NSStackView new];
+  box.orientation = NSUserInterfaceLayoutOrientationVertical;
+  box.alignment = NSLayoutAttributeLeading;
+  box.spacing = 14;
+  box.edgeInsets = NSEdgeInsetsMake(20, 22, 16, 22);
+  box.translatesAutoresizingMaskIntoConstraints = NO;
+
+  NSTextField *title = [NSTextField labelWithString:spec[@"title"] ?: @""];
+  title.font = [NSFont systemFontOfSize:14 weight:NSFontWeightSemibold];
+  [box addArrangedSubview:title];
+
+  NSTextField *message = [NSTextField wrappingLabelWithString:spec[@"message"] ?: @""];
+  message.font = [NSFont systemFontOfSize:12];
+  message.textColor = [NSColor secondaryLabelColor];
+  [box addArrangedSubview:message];
+
+  NSStackView *frow = [NSStackView new];
+  frow.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+  frow.alignment = NSLayoutAttributeCenterY;
+  frow.spacing = 10;
+  NSTextField *flabel = [NSTextField labelWithString:spec[@"fieldLabel"] ?: @""];
+  flabel.font = [NSFont systemFontOfSize:12];
+  flabel.textColor = [NSColor secondaryLabelColor];
+  [flabel.widthAnchor constraintEqualToConstant:66].active = YES;
+  [frow addArrangedSubview:flabel];
+
+  self.field = [NSTextField new];
+  self.field.font = [NSFont systemFontOfSize:12];
+  self.field.placeholderString = spec[@"placeholder"] ?: @"";
+  self.field.delegate = self;
+  [frow addArrangedSubview:self.field];
+
+  self.preview = [[Chip alloc] initWithText:@""];
+  self.preview.hidden = YES;
+  [frow addArrangedSubview:self.preview];
+  [box addArrangedSubview:frow];
+
+  NSString *optionLabel = spec[@"optionLabel"];
+  if (optionLabel.length) {
+    NSStackView *orow = [NSStackView new];
+    orow.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+    orow.alignment = NSLayoutAttributeCenterY;
+    orow.spacing = 10;
+    NSTextField *okey = [NSTextField labelWithString:label(@"then", @"Then")];
+    okey.font = [NSFont systemFontOfSize:12];
+    okey.textColor = [NSColor secondaryLabelColor];
+    [okey.widthAnchor constraintEqualToConstant:66].active = YES;
+    [orow addArrangedSubview:okey];
+    NSTextField *otext = [NSTextField labelWithString:optionLabel];
+    otext.font = [NSFont systemFontOfSize:12];
+    [orow addArrangedSubview:otext];
+    NSView *spacer = [NSView new];
+    [spacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
+    [orow addArrangedSubview:spacer];
+    self.option = [NSSwitch new];
+    self.option.controlSize = NSControlSizeSmall;
+    self.option.state = [spec[@"optionOn"] boolValue] ? NSControlStateValueOn : NSControlStateValueOff;
+    [orow addArrangedSubview:self.option];
+    [box addArrangedSubview:orow];
+    [orow.widthAnchor constraintEqualToAnchor:box.widthAnchor constant:-44].active = YES;
+  }
+
+  NSStackView *acts = [NSStackView new];
+  acts.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+  acts.alignment = NSLayoutAttributeCenterY;
+  acts.spacing = 8;
+  NSView *aspacer = [NSView new];
+  [aspacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
+  [acts addArrangedSubview:aspacer];
+  NSButton *cancel = [NSButton buttonWithTitle:label(@"cancel", @"Cancel")
+                                        target:self action:@selector(cancel:)];
+  cancel.keyEquivalent = @"\033";
+  [acts addArrangedSubview:cancel];
+  NSButton *ok = [NSButton buttonWithTitle:spec[@"acceptTitle"] ?: @"OK"
+                                    target:self action:@selector(accept:)];
+  ok.keyEquivalent = @"\r";
+  ok.bezelColor = [NSColor controlAccentColor];
+  ok.contentTintColor = [NSColor whiteColor];
+  [acts addArrangedSubview:ok];
+  [box addArrangedSubview:acts];
+
+  NSView *content = [NSView new];
+  [content addSubview:box];
+  w.contentView = content;
+  [NSLayoutConstraint activateConstraints:@[
+    [box.topAnchor constraintEqualToAnchor:content.topAnchor],
+    [box.leadingAnchor constraintEqualToAnchor:content.leadingAnchor],
+    [box.trailingAnchor constraintEqualToAnchor:content.trailingAnchor],
+    [box.bottomAnchor constraintEqualToAnchor:content.bottomAnchor],
+    [content.widthAnchor constraintEqualToConstant:440],
+    [message.widthAnchor constraintEqualToAnchor:box.widthAnchor constant:-44],
+    [frow.widthAnchor constraintEqualToAnchor:box.widthAnchor constant:-44],
+    [acts.widthAnchor constraintEqualToAnchor:box.widthAnchor constant:-44],
+  ]];
+
+  self.sheet = w;
+  [self updatePreview];
+  [parent beginSheet:w completionHandler:^(NSModalResponse r) {}];
+  [w makeFirstResponder:self.field];
+}
+@end
+
+void ui_sheet(const char *actionID, const char *title, const char *message,
+              const char *fieldLabel, const char *placeholder, const char *suffix,
+              const char *optionLabel, int optionOn, const char *acceptTitle) {
+  NSDictionary *spec = @{
+    @"id": [NSString stringWithUTF8String:actionID ?: ""],
+    @"title": [NSString stringWithUTF8String:title ?: ""],
+    @"message": [NSString stringWithUTF8String:message ?: ""],
+    @"fieldLabel": [NSString stringWithUTF8String:fieldLabel ?: ""],
+    @"placeholder": [NSString stringWithUTF8String:placeholder ?: ""],
+    @"suffix": [NSString stringWithUTF8String:suffix ?: ""],
+    @"optionLabel": [NSString stringWithUTF8String:optionLabel ?: ""],
+    @"optionOn": @(optionOn != 0),
+    @"acceptTitle": [NSString stringWithUTF8String:acceptTitle ?: "OK"],
+  };
+  dispatch_async(dispatch_get_main_queue(), ^{
+    PanelController *c = [PanelController shared];
+    if (![c visible]) return;
+    [[SheetController shared] present:spec on:[c window]];
   });
 }
