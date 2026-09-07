@@ -150,6 +150,8 @@ var korean = map[string]string{
 	// Settings.
 	"APPLICATION":                  "애플리케이션",
 	"Appearance":                   "화면 모드",
+	"Language":                     "언어",
+	"System":                       "시스템",
 	"Window":                       "창",
 	"Show the window at launch":    "실행할 때 창 열기",
 	"Default domain":               "기본 도메인",

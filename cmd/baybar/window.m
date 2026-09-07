@@ -213,9 +213,15 @@ static CGFloat haloAlpha(NSView *view) {
 // Hairline separates two rows inside a card. It is fainter than the card's own
 // outline.
 @interface Hairline : NSView
+// Strong draws the line at the weight a card is outlined with, for the edge
+// between the sidebar and the pane.
+@property(assign) BOOL strong;
 @end
 @implementation Hairline
-- (void)updateLayer { self.layer.backgroundColor = hairlineColor().CGColor; }
+- (void)updateLayer {
+  self.layer.backgroundColor =
+      self.strong ? cardBorderColor().CGColor : hairlineColor().CGColor;
+}
 - (void)viewDidChangeEffectiveAppearance { [self setNeedsDisplay:YES]; }
 @end
 
@@ -452,8 +458,16 @@ static NSColor *hex(uint32_t rgb) {
   [detail addSubview:headerLine];
   [detail addSubview:scroll];
 
+  // The sidebar and the pane meet on a line, the way the cards are outlined.
+  Hairline *sideEdge = [Hairline new];
+  sideEdge.strong = YES;
+  sideEdge.wantsLayer = YES;
+  sideEdge.translatesAutoresizingMaskIntoConstraints = NO;
+  [sideEdge.widthAnchor constraintEqualToConstant:1].active = YES;
+
   NSView *root = [NSView new];
   [root addSubview:sideBg];
+  [root addSubview:sideEdge];
   [root addSubview:detail];
   sideBg.translatesAutoresizingMaskIntoConstraints = NO;
   self.window.contentView = root;
@@ -463,7 +477,11 @@ static NSColor *hex(uint32_t rgb) {
     [sideBg.bottomAnchor constraintEqualToAnchor:root.bottomAnchor],
     [sideBg.leadingAnchor constraintEqualToAnchor:root.leadingAnchor],
 
-    [detail.leadingAnchor constraintEqualToAnchor:sideBg.trailingAnchor],
+    [sideEdge.leadingAnchor constraintEqualToAnchor:sideBg.trailingAnchor],
+    [sideEdge.topAnchor constraintEqualToAnchor:root.topAnchor],
+    [sideEdge.bottomAnchor constraintEqualToAnchor:root.bottomAnchor],
+
+    [detail.leadingAnchor constraintEqualToAnchor:sideEdge.trailingAnchor],
     [detail.topAnchor constraintEqualToAnchor:root.topAnchor],
     [detail.bottomAnchor constraintEqualToAnchor:root.bottomAnchor],
     [detail.trailingAnchor constraintEqualToAnchor:root.trailingAnchor],
@@ -506,6 +524,14 @@ static NSColor *hex(uint32_t rgb) {
 // carries the new state in the identifier, so the handler does not have to read
 // the control back.
 - (void)switched:(NSSwitch *)sender { [self fire:sender.tag]; }
+
+// A segmented control delivers its identifier with the chosen index appended.
+- (void)segmentChanged:(NSSegmentedControl *)sender {
+  if (sender.tag < 0 || sender.tag >= (NSInteger)self.actionIds.count) return;
+  NSString *action = [NSString stringWithFormat:@"%@:%ld", self.actionIds[sender.tag],
+                                                (long)sender.selectedSegment];
+  goUIAction((char *)[action UTF8String]);
+}
 
 // The mockup draws four button weights. A push button is the native control for
 // all four, so the weight is carried by the fill and the label colour: the
@@ -720,6 +746,19 @@ static NSColor *hex(uint32_t rgb) {
   // the same stored choice, so this one is the same control.
   if ([row[@"appearance"] boolValue]) {
     [controls addObject:[self appearanceControl]];
+  }
+  NSDictionary *seg = row[@"segment"];
+  if (seg) {
+    NSSegmentedControl *c =
+        [NSSegmentedControl segmentedControlWithLabels:seg[@"labels"]
+                                          trackingMode:NSSegmentSwitchTrackingSelectOne
+                                                target:self
+                                                action:@selector(segmentChanged:)];
+    c.controlSize = NSControlSizeSmall;
+    c.font = [NSFont systemFontOfSize:11];
+    c.selectedSegment = [seg[@"selected"] integerValue];
+    c.tag = [self claim:seg[@"id"]];
+    [controls addObject:c];
   }
   NSString *toggle = row[@"toggle"];
   if (toggle.length) {
@@ -1285,6 +1324,18 @@ void ui_flag(const char *key, int *out) {
 void ui_set_flag(const char *key, int value) {
   NSString *k = [NSString stringWithUTF8String:key ?: ""];
   [[NSUserDefaults standardUserDefaults] setBool:(value != 0) forKey:k];
+}
+
+void ui_text(const char *key, char *out, int n) {
+  NSString *k = [NSString stringWithUTF8String:key ?: ""];
+  NSString *v = [[NSUserDefaults standardUserDefaults] stringForKey:k] ?: @"";
+  strlcpy(out, v.UTF8String, (size_t)n);
+}
+
+void ui_set_text(const char *key, const char *value) {
+  NSString *k = [NSString stringWithUTF8String:key ?: ""];
+  NSString *v = [NSString stringWithUTF8String:value ?: ""];
+  [[NSUserDefaults standardUserDefaults] setObject:v forKey:k];
 }
 
 void ui_copy(const char *text) {

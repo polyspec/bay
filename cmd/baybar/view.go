@@ -15,10 +15,16 @@ import (
 // is looked up by it, so the two carry the same information.
 var text = i18n.Printer{}
 
-// setLanguage picks the language from the system preference. It runs once, at
-// start-up, before the first window is built.
-func setLanguage(tag string) {
-	text = i18n.Printer{Lang: i18n.Match(tag)}
+// setLanguage applies the stored choice against the locale the system prefers.
+// It runs at start-up and again when the choice changes.
+func setLanguage(choice, system string) {
+	text = i18n.Printer{Lang: i18n.Resolve(choice, system)}
+}
+
+// languageLabels names the choices. A language is named in itself, so only the
+// first is translated.
+func languageLabels() []string {
+	return []string{text.T("System"), "English", "한국어"}
 }
 
 // windowLabels are the words the window builds its own controls from.
@@ -699,6 +705,9 @@ func settingsView(p *panel, snap stack.Snapshot, busy bool) {
 		Header: text.T("APPLICATION"),
 		Rows: []row{
 			{Text: text.T("Appearance"), Kind: "kv", Appearance: true},
+			{Text: text.T("Language"), Kind: "kv", Segment: &segment{
+				ID: "language", Labels: languageLabels(),
+				Selected: i18n.IndexOf(languageChoice())}},
 			{Text: text.T("Window"), Kind: "kv", Detail: text.T("Show the window at launch"),
 				Toggle: "toggle-show-at-launch", On: showAtLaunch()},
 		},

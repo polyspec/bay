@@ -27,10 +27,15 @@ as the project. There is no disclosure control, because the list follows the
 selection. Every row carries a status dot, so a stopped service keeps its place
 in the column.
 
-The window is shown in Korean when the system prefers Korean. English is the
-wording written at the call site and Korean is looked up by it, so a line with no
-translation is shown in English. The command line stays in English, because its
-output is the specification the generated documents come from.
+Settings offers the language: System, English or Korean. System follows the
+locale the system prefers. English is the wording written at the call site and
+Korean is looked up by it, so a line with no translation is shown in English.
+Changing the choice redraws the window without a restart. The command line stays
+in English, because its output is the specification the generated documents come
+from.
+
+The sidebar and the pane meet on a line, drawn at the weight a card is outlined
+with.
 
 Three layout faults are corrected. A row aligned to the top did not grow to hold
 a two-line value, which cut the second line off at the card's edge; the padding

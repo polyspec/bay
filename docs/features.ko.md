@@ -35,7 +35,8 @@
 | 선택한 프로젝트 아래에 서비스 나열 | 구현됨 | 프로젝트를 선택한 상태를 `screencapture -l <창>`으로 캡처하니 서비스가 들여쓰여 나열되고 사이드바 모든 행의 점 중심 간격이 29포인트로 측정됨 | 예 |
 | 도메인 추가를 시트로 질문 | 구현됨 | `Add domain…`이 창에 붙은 시트를 열어 입력란, 결과 이름 미리보기, 기본 지정 스위치를 표시했고 `Cancel`이 변경 없이 닫음 | 예 |
 | 창에서 프로젝트 등록 | 구현됨 | `Add project…`가 파일 패널을 열고 선택한 Compose 파일을 `stack.LoadIn`과 `Machine.Register`로 등록 | 로컬 빌드; 설치 안 함 |
-| 영어와 한국어로 표시되는 창 | 구현됨 | `go test ./internal/i18n`이 창 소스를 읽어 한국어가 없는 문구, 값이 달라진 번역, 금지된 표현을 실패로 처리하고, 시스템 언어를 한국어로 둔 상태에서 창을 한국어로 캡처 | 예 |
+| 영어와 한국어로 표시되는 창 | 구현됨 | `go test ./internal/i18n`이 창 소스를 읽어 한국어가 없는 문구, 값이 달라진 번역, 금지된 표현을 실패로 처리 | 예 |
+| 언어 설정: 시스템, English, 한국어 | 구현됨 | 창에서 English를 고르니 기본값 데이터베이스에 `language = en`이 기록되고 창이 영어로 캡처됨. 설정을 지우고 재시작하니 이 시스템이 선호하는 한국어로 표시됨 | 예 |
 | 외형 전환: Auto, Dark, Light | 구현됨 | 읽기 경로: 시스템이 Dark인 상태에서 `defaults write dev.bay.bar appearance light` 후 재시작하니 창이 라이트로 렌더되고 Light가 선택됨. 쓰기 경로: 실행 중인 창에서 Light를 선택하니 창이 라이트로 바뀌고 `defaults read dev.bay.bar appearance`가 `light`를 반환 | 예 |
 | 공개 모듈에서 설치 | 구현됨 | `GOBIN=/tmp/x go install github.com/polyspec/bay/cmd/bay@latest`와 `bayd`가 동작하는 바이너리를 생성했고 `bay brief`가 실행됨 | 예 |
 | 클론에서 설치 | 구현됨 | 공개 저장소를 `git clone`한 뒤 `make`가 산출물 세 개를 생성하고 `bin/bay brief`가 실행됨 | 예 |

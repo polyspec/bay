@@ -57,4 +57,8 @@ void ui_copy(const char *text);
 void ui_flag(const char *key, int *out);
 void ui_set_flag(const char *key, int value);
 
+// ui_text reads and writes one string in the defaults database.
+void ui_text(const char *key, char *out, int n);
+void ui_set_text(const char *key, const char *value);
+
 #endif

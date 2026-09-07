@@ -14,12 +14,14 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/getlantern/systray"
 
+	"github.com/polyspec/bay/internal/i18n"
 	"github.com/polyspec/bay/internal/stack"
 )
 
@@ -70,8 +72,7 @@ func main() {
 			m.Register(cfg.Ref())
 		}
 	}
-	setLanguage(language())
-	setLabels(windowLabels())
+	applyLanguage()
 	a := &app{rt: &stack.Runtime{
 		Machine:   m,
 		Addr:      *addr,
@@ -156,6 +157,28 @@ func (a *app) currentPanel() panel {
 // showAtLaunch reports whether the window opens with the application. The
 // command line flag opens it once; the setting opens it every time.
 func showAtLaunch() bool { return boolSetting("showAtLaunch") }
+
+// languageChoice returns the stored language setting: "system", "en" or "ko".
+func languageChoice() string { return stringSetting("language") }
+
+// applyLanguage renders the window in the chosen language. The words the window
+// builds its own controls from are sent again, because they change with it.
+func applyLanguage() {
+	setLanguage(languageChoice(), language())
+	setLabels(windowLabels())
+}
+
+// setLanguageChoice stores the choice at the given position and redraws the
+// window in that language.
+func (a *app) setLanguageChoice(index string) {
+	n, err := strconv.Atoi(index)
+	if err != nil || n < 0 || n >= len(i18n.Choices) {
+		return
+	}
+	setStringSetting("language", i18n.Choices[n])
+	applyLanguage()
+	a.refreshWindowOnly()
+}
 
 // report writes the outcome of an action to the window. Notifications require
 // a signed application and are not used.
@@ -259,6 +282,10 @@ func (a *app) handle(id string) {
 	// The window re-reads the machine on a timer; this reads it now.
 	if parts[0] == "refresh" {
 		a.refresh()
+		return
+	}
+	if parts[0] == "language" && len(parts) == 2 {
+		a.setLanguageChoice(parts[1])
 		return
 	}
 	if parts[0] == "toggle-show-at-launch" {

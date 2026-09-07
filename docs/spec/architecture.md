@@ -124,14 +124,18 @@ them in points. Two things differ from that file on purpose:
   row holding one is measured from its padding rather than from the design's row
   height.
 - A service row is indented under its project instead of being marked with a
-  disclosure triangle, and its status dot is drawn at half size.
+  disclosure triangle, and its status dot is drawn at a third of the size.
+- A key and value line runs its text together, so its spacing is zero and the
+  controls at its trailing edge are set apart one by one.
 
 ## Language
 
-The window is written in English and shown in Korean when the system prefers
-Korean, read from `NSLocale.preferredLanguages`. English is the wording written
-at the call site and Korean is looked up by it, so a line with no translation is
-shown in English rather than left blank. `go test ./internal/i18n` reads the
+The window is written in English and shown in Korean when the language setting
+asks for it. Settings offers System, English and Korean; System follows
+`NSLocale.preferredLanguages`, and the choice is stored in the defaults database
+under `language`. Changing it redraws the window without a restart. English is
+the wording written at the call site and Korean is looked up by it, so a line
+with no translation is shown in English rather than left blank. `go test ./internal/i18n` reads the
 window's sources and fails when a line has no Korean, when a translation takes
 different values than the English it replaces, or when it uses a phrasing the
 project does not use.

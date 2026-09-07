@@ -24,6 +24,34 @@ func Match(tag string) Lang {
 	return En
 }
 
+// Choices are the values the language setting can hold, in the order the
+// setting offers them. "system" follows the locale the system prefers.
+var Choices = []string{"system", "en", "ko"}
+
+// Resolve returns the language for a stored choice. system is the locale the
+// system prefers, which is used for an unknown or empty choice as well.
+func Resolve(choice, system string) Lang {
+	switch choice {
+	case "en":
+		return En
+	case "ko":
+		return Ko
+	default:
+		return Match(system)
+	}
+}
+
+// IndexOf returns the position of a stored choice in Choices, and 0 for one
+// that is not recognised.
+func IndexOf(choice string) int {
+	for i, c := range Choices {
+		if c == choice {
+			return i
+		}
+	}
+	return 0
+}
+
 // Printer renders text in one language.
 type Printer struct{ Lang Lang }
 

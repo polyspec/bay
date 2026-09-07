@@ -107,13 +107,24 @@ type row struct {
 	Hint string `json:"hint,omitempty"`
 	// Mono draws a kv row's value in the monospaced font.
 	Mono bool `json:"mono,omitempty"`
-	// Appearance places the Auto/Dark/Light control in a kv row.
+	// Appearance places the Auto/Dark/Light control in a kv row. AppKit owns
+	// that choice, so it is the one control the window builds itself.
 	Appearance bool `json:"appearance,omitempty"`
+	// Segment places a choice of one from several in a kv row.
+	Segment *segment `json:"segment,omitempty"`
 	// Toggle is the action a switch in a kv row delivers; On is its state.
 	Toggle   string   `json:"toggle,omitempty"`
 	On       bool     `json:"on,omitempty"`
 	Disabled bool     `json:"disabled,omitempty"`
 	Buttons  []button `json:"buttons,omitempty"`
+}
+
+// segment is a choice of one value from several. Choosing delivers the
+// identifier with the chosen index appended.
+type segment struct {
+	ID       string   `json:"id"`
+	Labels   []string `json:"labels"`
+	Selected int      `json:"selected"`
 }
 
 type button struct {
@@ -298,6 +309,26 @@ func setBoolSetting(key string, value bool) {
 		v = 1
 	}
 	C.ui_set_flag(k, v)
+}
+
+// stringSetting reads one of the window's own settings from the defaults
+// database.
+func stringSetting(key string) string {
+	k := C.CString(key)
+	defer C.free(unsafe.Pointer(k))
+	buf := (*C.char)(C.malloc(64))
+	defer C.free(unsafe.Pointer(buf))
+	C.ui_text(k, buf, 64)
+	return C.GoString(buf)
+}
+
+// setStringSetting writes one of the window's own settings to the defaults
+// database.
+func setStringSetting(key, value string) {
+	k, v := C.CString(key), C.CString(value)
+	defer C.free(unsafe.Pointer(k))
+	defer C.free(unsafe.Pointer(v))
+	C.ui_set_text(k, v)
 }
 
 // copyText puts one string on the general pasteboard.
