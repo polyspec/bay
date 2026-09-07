@@ -106,7 +106,7 @@ Screens:
 | Screen | Subject |
 | --- | --- |
 | Dashboard | The whole machine: one verdict line, every project, every address the proxy serves |
-| Project | One project: its services, its domain and its Compose file |
+| Project | One project: its services, its domain and its Compose file, which opens in a text window |
 | Service | One service: its route, its container and the tail of its output |
 | Domains | The domains delegated on this machine, and what delegating one writes |
 | Certificates | The authority and what it issued |

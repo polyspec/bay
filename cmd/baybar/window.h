@@ -12,9 +12,10 @@ void ui_show(const char *json);
 void ui_update(const char *json);
 void ui_is_visible(int *out);
 
-// ui_logs opens a plain scrolling text window. Logs do not belong in the panel
-// layout: they are long, monospaced and read on their own.
-void ui_logs(const char *title, const char *text);
+// ui_logs opens a plain scrolling text window. Long monospaced text does not
+// belong in the panel layout and is read on its own. atEnd scrolls to the last
+// line, which is where a log is read from; a file is read from the top.
+void ui_logs(const char *title, const char *text, int atEnd);
 
 // ui_prompt asks for one line of text. On OK it calls back with the action id
 // and the value; on cancel it calls back with nothing at all.

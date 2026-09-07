@@ -100,6 +100,8 @@ var korean = map[string]string{
 	"last %d lines":              "최근 %d줄",
 	"no container yet":           "아직 컨테이너 없음",
 	"(no output yet)":            "(아직 출력 없음)",
+	"View":                       "보기",
+	"shown up to %d KB":          "%dKB까지만 표시",
 	"Refresh":                    "새로 고침",
 	"Copy all":                   "전체 복사",
 	"Open in a window":           "새 창에서 열기",

@@ -10,6 +10,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"os/exec"
@@ -255,6 +256,12 @@ func (a *app) handle(id string) {
 	// still read whole rather than split.
 	if path, ok := strings.CutPrefix(id, "reveal:"); ok {
 		exec.Command("open", "-R", path).Start()
+		return
+	}
+	// The Compose file is read as it is on disk, not as it was parsed, because
+	// it is the file the project is edited in.
+	if path, ok := strings.CutPrefix(id, "view:"); ok {
+		a.showFile(path)
 		return
 	}
 	if value, ok := strings.CutPrefix(id, "copy:"); ok {
@@ -586,6 +593,30 @@ func (a *app) uninstallMachine(rt *stack.Runtime) error {
 	return stack.UninstallResolver(rt.HelperBin, rt.Elevate, domains...)
 }
 
+// maxViewBytes caps what the text window is asked to hold. A Compose file is
+// far smaller; a larger file is shown up to the cap and says so.
+const maxViewBytes = 256 << 10
+
+// showFile opens a file in the text window.
+func (a *app) showFile(path string) {
+	f, err := os.Open(path)
+	if err != nil {
+		a.report("error", "%s", text.T("%s failed: %v", "view", err))
+		return
+	}
+	defer f.Close()
+	body, err := io.ReadAll(io.LimitReader(f, maxViewBytes+1))
+	if err != nil {
+		a.report("error", "%s", text.T("%s failed: %v", "view", err))
+		return
+	}
+	if len(body) > maxViewBytes {
+		body = append(body[:maxViewBytes],
+			[]byte("\n\n"+text.T("shown up to %d KB", maxViewBytes>>10))...)
+	}
+	showLogs(shortPath(path), string(body), false)
+}
+
 // showDoctor runs the same report the command line prints and shows it in the
 // text window.
 func (a *app) showDoctor() {
@@ -599,7 +630,7 @@ func (a *app) showDoctor() {
 	if err != nil {
 		body += "\n[" + err.Error() + "]"
 	}
-	showLogs(text.T("bay doctor"), body)
+	showLogs(text.T("bay doctor"), body, false)
 }
 
 // serviceLogTail returns the last lines of a service's output. An unreadable
@@ -646,7 +677,7 @@ func (a *app) showServiceLogs(group, service string) {
 	if strings.TrimSpace(body) == "" {
 		body = "(no output yet)"
 	}
-	showLogs(group+" / "+service, body)
+	showLogs(group+" / "+service, body, true)
 }
 
 func (a *app) refreshWindowOnly() {

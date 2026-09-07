@@ -338,13 +338,18 @@ func copyText(text string) {
 	C.ui_copy(s)
 }
 
-// showLogs opens the text window with a service's output.
-func showLogs(title, body string) {
+// showLogs opens the text window. atEnd scrolls to the last line, which is
+// where a log is read from; a file is read from the top.
+func showLogs(title, body string, atEnd bool) {
 	t := C.CString(title)
 	b := C.CString(body)
 	defer C.free(unsafe.Pointer(t))
 	defer C.free(unsafe.Pointer(b))
-	C.ui_logs(t, b)
+	var end C.int
+	if atEnd {
+		end = 1
+	}
+	C.ui_logs(t, b, end)
 }
 
 func withJSON(p panel, fn func(*C.char)) {

@@ -35,7 +35,9 @@ in English, because its output is the specification the generated documents come
 from.
 
 The sidebar and the pane meet on a line, drawn at the weight a card is outlined
-with.
+with. The project screen opens its Compose file in the text window, read from
+the first line, so the file the project is edited in can be read without leaving
+the window.
 
 Three layout faults are corrected. A row aligned to the top did not grow to hold
 a two-line value, which cut the second line off at the card's edge; the padding

@@ -478,8 +478,11 @@ func projectView(p *panel, g stack.GroupStatus, busy bool) {
 				Buttons: []button{quiet("domain-rename:"+g.Name+":"+g.Domain,
 					text.T("Use another…"), busy)}},
 			{Text: text.T("Compose file"), Kind: "kv", Detail: filepath.Base(g.StackPath),
-				Faint:   shortPath(filepath.Dir(g.StackPath)),
-				Buttons: []button{quiet("reveal:"+g.StackPath, text.T("Reveal"), false)}},
+				Faint: shortPath(filepath.Dir(g.StackPath)),
+				Buttons: []button{
+					quiet("view:"+g.StackPath, text.T("View"), false),
+					quiet("reveal:"+g.StackPath, text.T("Reveal"), false),
+				}},
 			{Text: text.T("Routes"), Kind: "kv",
 				Detail: text.P("%d of %d service", "%d of %d services",
 					len(g.Services), routedCount(g), len(g.Services))},

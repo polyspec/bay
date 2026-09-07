@@ -1199,7 +1199,7 @@ static NSColor *hex(uint32_t rgb) {
   return w;
 }
 
-- (void)showTitle:(NSString *)title text:(NSString *)body {
+- (void)showTitle:(NSString *)title text:(NSString *)body atEnd:(BOOL)atEnd {
   if (!self.window) {
     self.window = [[NSWindow alloc]
         initWithContentRect:NSMakeRect(0, 0, 760, 460)
@@ -1225,7 +1225,8 @@ static NSColor *hex(uint32_t rgb) {
   }
   self.window.title = title;
   self.text.string = body;
-  [self.text scrollRangeToVisible:NSMakeRange(self.text.string.length, 0)];
+  [self.text scrollRangeToVisible:atEnd ? NSMakeRange(self.text.string.length, 0)
+                                        : NSMakeRange(0, 0)];
   [self.window makeKeyAndOrderFront:nil];
   [NSApp activateIgnoringOtherApps:YES];
 }
@@ -1347,10 +1348,13 @@ void ui_copy(const char *text) {
   });
 }
 
-void ui_logs(const char *title, const char *text) {
+void ui_logs(const char *title, const char *text, int atEnd) {
   NSString *t = [NSString stringWithUTF8String:title ?: ""];
   NSString *b = [NSString stringWithUTF8String:text ?: ""];
-  dispatch_async(dispatch_get_main_queue(), ^{ [[LogWindow shared] showTitle:t text:b]; });
+  BOOL end = atEnd != 0;
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [[LogWindow shared] showTitle:t text:b atEnd:end];
+  });
 }
 
 void ui_is_visible(int *out) {
