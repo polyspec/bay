@@ -62,9 +62,21 @@ func (f *fakeServices) command(ctx context.Context, args ...string) ([]byte, err
 		name := args[len(args)-1]
 		in := f.instances[name]
 		in.State = "running"
-		in.Started += "-restart"
+		in.IPv4 = "192.0.2.1/24"
+		in.Started += "-start"
 		f.instances[name] = in
 		f.events = append(f.events, "start:"+name)
+		if len(args) == 3 && args[1] == "--attach" {
+			if f.blockInit {
+				<-ctx.Done()
+				return nil, ctx.Err()
+			}
+			in.State = "stopped"
+			f.instances[name] = in
+			if f.failInit {
+				return nil, errors.New("exit 7")
+			}
+		}
 		return nil, nil
 	case "stop":
 		name := args[len(args)-1]
@@ -73,7 +85,7 @@ func (f *fakeServices) command(ctx context.Context, args ...string) ([]byte, err
 		f.instances[name] = in
 		f.events = append(f.events, "stop:"+name)
 		return nil, nil
-	case "run":
+	case "create":
 		in := Instance{Labels: map[string]string{}, State: "stopped", ImageDigest: "sha256:" + strings.Repeat("a", 64)}
 		for i := 1; i < len(args); i++ {
 			switch args[i] {
@@ -84,30 +96,19 @@ func (f *fakeServices) command(ctx context.Context, args ...string) ([]byte, err
 				i++
 				key, value, _ := strings.Cut(args[i], "=")
 				in.Labels[key] = value
-			case "--detach":
-				in.State = "running"
-				in.IPv4 = "192.0.2.1/24"
 			}
 		}
 		for ref, digest := range f.images {
 			for _, arg := range args {
-				if arg == ref || arg == digestReference(ref, digest) {
+				if arg == ref {
 					in.ImageDigest = digest
 				}
 			}
 		}
 		f.sequence++
 		in.Created = fmt.Sprint(f.sequence)
-		in.Started = in.Created
 		f.instances[in.Name] = in
-		f.events = append(f.events, "run:"+in.Name)
-		if in.State == "stopped" && f.blockInit {
-			<-ctx.Done()
-			return nil, ctx.Err()
-		}
-		if in.State == "stopped" && f.failInit {
-			return nil, errors.New("exit 7")
-		}
+		f.events = append(f.events, "create:"+in.Name)
 		return nil, nil
 	case "exec":
 		f.events = append(f.events, "exec:"+args[1])
@@ -137,7 +138,7 @@ func TestServiceEngineImageChangeAndConcurrentUp(t *testing.T) {
 	}
 	runs := 0
 	for _, event := range f.events {
-		if strings.HasPrefix(event, "run:") {
+		if strings.HasPrefix(event, "create:") {
 			runs++
 		}
 	}
@@ -149,16 +150,12 @@ func TestServiceEngineImageChangeAndConcurrentUp(t *testing.T) {
 	if err := e.start(cfg, cfg.Sorted(), false); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(f.events, []string{"exec:app-db", "rm:app-initialize", "run:app-initialize", "rm:app-web", "run:app-web"}) {
+	if !reflect.DeepEqual(f.events, []string{"exec:app-db", "rm:app-initialize", "create:app-initialize", "start:app-initialize", "rm:app-web", "create:app-web", "start:app-web"}) {
 		t.Fatalf("image change did not reconcile only selected image: %v", f.events)
 	}
 	for _, args := range f.calls {
-		if args[0] == "run" {
-			for _, arg := range args {
-				if arg == "platform" || arg == "postgres" {
-					t.Fatal("run used mutable image reference after resolving digest")
-				}
-			}
+		if args[0] == "create" && strings.Contains(strings.Join(args, " "), "@sha256:") {
+			t.Fatal("creation rewrote a local image reference into an unavailable alias")
 		}
 	}
 }
@@ -214,7 +211,7 @@ func TestServiceEngineChangedDatabaseInvalidatesInitializer(t *testing.T) {
 			}
 			count := 0
 			for _, event := range f.events {
-				if event == "run:app-initialize" {
+				if event == "create:app-initialize" {
 					count++
 				}
 			}
@@ -257,7 +254,7 @@ func TestServiceEngineDependencyOrderAndUnchangedReuse(t *testing.T) {
 	if err := e.start(cfg, cfg.Sorted(), false); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"run:app-db", "exec:app-db", "exec:app-db", "exec:app-db", "run:app-initialize", "run:app-web"}
+	want := []string{"create:app-db", "start:app-db", "exec:app-db", "exec:app-db", "exec:app-db", "create:app-initialize", "start:app-initialize", "create:app-web", "start:app-web"}
 	if !reflect.DeepEqual(f.events, want) {
 		t.Fatalf("events=%v", f.events)
 	}
@@ -280,7 +277,7 @@ func TestServiceEngineDependencyOrderAndUnchangedReuse(t *testing.T) {
 	if err := e.start(cfg, cfg.Sorted(), false); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(f.events, []string{"exec:app-db", "rm:app-web", "run:app-web"}) {
+	if !reflect.DeepEqual(f.events, []string{"exec:app-db", "rm:app-web", "create:app-web", "start:app-web"}) {
 		t.Fatalf("changed web touched unrelated service: %v", f.events)
 	}
 }
@@ -362,7 +359,7 @@ func TestServiceEngineRejectsUnprovenOrExternallyRestartedCompletion(t *testing.
 				t.Fatal("unproven completion accepted")
 			}
 			for _, event := range f.events {
-				if strings.HasPrefix(event, "run:") || strings.HasPrefix(event, "rm:") {
+				if strings.HasPrefix(event, "create:") || strings.HasPrefix(event, "rm:") {
 					t.Fatalf("unproven initializer changed implicitly: %v", f.events)
 				}
 			}

@@ -131,7 +131,7 @@ func serviceArguments(group string, s *Service, fingerprint string) []string {
 	}
 	// An internal service is started with an empty domain label, so the proxy
 	// and the DNS server do not route to it.
-	args := []string{"run", "--name", s.ContainerName,
+	args := []string{"create", "--name", s.ContainerName,
 		"--network", s.Network,
 		"--label", LabelRole + "=" + roleService,
 		"--label", LabelGroup + "=" + group,
@@ -140,9 +140,6 @@ func serviceArguments(group string, s *Service, fingerprint string) []string {
 		"--label", LabelPort + "=" + strconv.Itoa(s.Port),
 		"--label", LabelScheme + "=" + scheme,
 		"--label", LabelConfig + "=" + fingerprint,
-	}
-	if !s.OneShot {
-		args = append(args, "--detach")
 	}
 	if s.User != "" {
 		args = append(args, "--user", s.User)

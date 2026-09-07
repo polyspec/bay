@@ -8,6 +8,7 @@
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
+| 프로세스 시작 전에 로컬 이미지 tag 검증 | 구현됨 | `TestLocalImageTagActualRuntime`이 digest 별칭 누락을 재현하고 로컬 tag 초기화·재사용·비공개 실패 출력·네이티브 로그 보존을 검증하며 단위 테스트가 시작 전 이미지·소유자·설정 변경을 거부 | 로컬 빌드; 설치 안 함 |
 | Compose가 관리하는 영속 named volume | 구현됨 | `make check`와 `go test -race ./internal/stack`이 소유권·선언 검증을 검사하고 `BAY_SERVICE_E2E=1 go test -race ./internal/stack -run TestManagedVolumeActualRuntime`가 서비스 제거·재생성 뒤 데이터·볼륨 식별 정보 보존을 확인 | 로컬 빌드; 설치 안 함 |
 | Compose 런타임 제한 및 순서·재사용을 지키는 서비스 시작 | 구현됨 | `make check`가 치환·mount·의존성 오류·소유권·재사용·완료 증거를 검사하고 `BAY_SERVICE_E2E=1 go test ./internal/stack -run TestServiceLifecycleActualRuntime`가 실제 제한·초기화·기존 컨테이너 보존을 검사 | 로컬 빌드; 설치 안 함 |
 | Compose 파일을 프로젝트 형식으로 사용 | 구현됨 | `go test ./internal/stack`과 `go test ./internal/contract`이 키 파싱, 두 가지 라벨 표기, 포트 결정, 파일 검색, 문서의 예제를 검사 | 예 |

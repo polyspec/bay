@@ -5,6 +5,12 @@ the day the change was made.
 
 ## 2026-09-08
 
+### Local image creation verifies the selected digest before starting
+
+Locally available tags need not have equivalent name@digest aliases. Services now use the declared reference for `create`, verify the stopped container's actual image, ownership and configuration, then start that verified container. Initializers use `start --attach` and still require real exit zero. A tag change during creation is rejected before a process starts. Creation errors identify their stage and a bounded category without printing runtime arguments or process output.
+
+Verification: the real local-tag fixture failed before the correction and passes with unchanged reuse, nonzero exit rejection, redacted creation failures and a public stdout marker retained in native logs. Unit tests reject altered created-container image/owner/config and bound diagnostic storage. Existing service, readiness and volume regressions remain required; binaries are not installed by verification. Applications must keep values forbidden in logs out of their process output.
+
 ### Compose declares and preserves managed named volumes
 
 Managed `volumes` declarations create missing local volumes with optional `driver_opts.size`. Existing volumes must match project/declaration ownership and exact configured size; another owner's data, implicit resizing and unsupported drivers/options are refused. `down` preserves volumes. External volumes still require existence and are never created or relabelled.

@@ -28,8 +28,16 @@ func newServiceEngine(dir string) *serviceEngine {
 
 func serviceCommand(ctx context.Context, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, containerBin(), args...)
+	if args[0] == "create" {
+		var diagnostic creationDiagnostic
+		cmd.Stdout, cmd.Stderr = io.Discard, &diagnostic
+		if err := cmd.Run(); err != nil {
+			return nil, fmt.Errorf("container create failed (%s): %w", diagnostic.category(), err)
+		}
+		return nil, nil
+	}
 	// Process output belongs to explicit logs, never startup errors or completion state.
-	if args[0] == "run" || args[0] == "start" || args[0] == "exec" {
+	if args[0] == "start" || args[0] == "exec" {
 		cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
 		err := cmd.Run()
 		if err != nil {
@@ -45,6 +53,36 @@ func serviceCommand(ctx context.Context, args ...string) ([]byte, error) {
 		}
 	}
 	return out, err
+}
+
+// Runtime diagnostics can echo arguments. Retain a bounded prefix only to
+// classify creation failures; never return the raw text or process output.
+type creationDiagnostic struct{ text strings.Builder }
+
+func (d *creationDiagnostic) Write(data []byte) (int, error) {
+	n := len(data)
+	if remaining := 4096 - d.text.Len(); remaining > 0 {
+		if len(data) > remaining {
+			data = data[:remaining]
+		}
+		d.text.Write(data)
+	}
+	return n, nil
+}
+
+func (d *creationDiagnostic) category() string {
+	message := strings.ToLower(d.text.String())
+	for _, candidate := range []struct{ text, category string }{
+		{"not found", "resource not found"},
+		{"permission denied", "permission denied"},
+		{"no space left", "insufficient storage"},
+		{"invalid", "invalid configuration"},
+	} {
+		if strings.Contains(message, candidate.text) {
+			return candidate.category
+		}
+	}
+	return "runtime rejected creation"
 }
 
 func (e *serviceEngine) list(ctx context.Context) ([]Instance, error) {
@@ -175,9 +213,24 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 			return err
 		}
 	}
-	resolved := *s
-	resolved.Image = digestReference(s.Image, digest)
-	if _, err = e.command(ctx, serviceArguments(group, &resolved, fingerprint)...); err != nil {
+	// Create does not execute the process. Inspect its actual image before
+	// starting, since a local tag need not have a name@digest cache alias.
+	if _, err = e.command(ctx, serviceArguments(group, s, fingerprint)...); err != nil {
+		return fmt.Errorf("service %s create: %w", s.Name, err)
+	}
+	created, ok, err := e.lookup(ctx, s.ContainerName)
+	if err != nil {
+		return fmt.Errorf("service %s inspect created container: %w", s.Name, err)
+	}
+	if !ok || owns(group, s, created) != nil || created.State != "stopped" || created.Created == "" || created.Labels[LabelConfig] != fingerprint || created.ImageDigest != digest {
+		return fmt.Errorf("service %s created container identity differs; process was not started", s.Name)
+	}
+	start := []string{"start"}
+	if s.OneShot {
+		start = append(start, "--attach")
+	}
+	start = append(start, s.ContainerName)
+	if _, err = e.command(ctx, start...); err != nil {
 		if s.OneShot && ctx.Err() != nil {
 			cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
 			current, ok, check := e.lookup(cleanup, s.ContainerName)
@@ -189,27 +242,19 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 				return fmt.Errorf("initializer %s timed out and stopping it failed: %w", s.Name, check)
 			}
 		}
-		return fmt.Errorf("service %s: %w", s.Name, err)
+		return fmt.Errorf("service %s start: %w", s.Name, err)
 	}
 	if s.OneShot {
 		after, ok, err := e.lookup(ctx, s.ContainerName)
 		if err != nil {
 			return err
 		}
-		if !ok || after.State != "stopped" || after.Created == "" || after.Started == "" || after.Labels[LabelConfig] != fingerprint || after.ImageDigest != digest {
+		if !ok || owns(group, s, after) != nil || after.State != "stopped" || after.Created != created.Created || after.Started == "" || after.Labels[LabelConfig] != fingerprint || after.ImageDigest != digest {
 			return fmt.Errorf("initializer %s has no stable stopped identity", s.Name)
 		}
 		return e.record(after, fingerprint)
 	}
 	return e.waitRunning(ctx, s.ContainerName)
-}
-
-func digestReference(reference, digest string) string {
-	name, _, _ := strings.Cut(reference, "@")
-	if colon := strings.LastIndexByte(name, ':'); colon > strings.LastIndexByte(name, '/') {
-		name = name[:colon]
-	}
-	return name + "@" + digest
 }
 
 func (e *serviceEngine) waitRunning(ctx context.Context, name string) error {
