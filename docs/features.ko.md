@@ -25,6 +25,10 @@
 | 사이드바와 대시보드가 있는 창 | 구현됨 | `open -n bin/baybar.app`과 `screencapture -l <창>`으로 사이드바, 프로젝트 행, 주소 목록이 있는 대시보드를 캡처 | 예 |
 | 외형 전환: Auto, Dark, Light | 구현됨 | 읽기 경로: 시스템이 Dark인 상태에서 `defaults write dev.bay.bar appearance light` 후 재시작하니 창이 라이트로 렌더되고 Light가 선택됨. 쓰기 경로: 실행 중인 창에서 Light를 선택하니 창이 라이트로 바뀌고 `defaults read dev.bay.bar appearance`가 `light`를 반환 | 예 |
 | 운영 문서가 명령과 일치 | 구현됨 | `docs/operations/using.ko.md`의 주장을 문서대로 만든 프로젝트에 대해 `bay up`, `stop`, `start`, `logs`, `status --json`으로 각각 실행 | 예 |
+| 공개 모듈에서 설치 | 구현됨 | `GOBIN=/tmp/x go install github.com/polyspec/bay/cmd/bay@latest`와 `bayd`가 동작하는 바이너리를 생성했고 `bay brief`가 실행됨 | 예 |
+| 클론에서 설치 | 구현됨 | 공개 저장소를 `git clone`한 뒤 `make`가 산출물 세 개를 생성하고 `bin/bay brief`가 실행됨 | 예 |
+| `make install`과 `make uninstall` | 구현됨 | `make install PREFIX=/tmp/prefix APPDIR=/tmp/apps`가 바이너리 두 개와 앱을 설치했고, 설치된 앱이 새 위치에서 실행됐으며, `make uninstall`이 두 디렉터리를 비움 | 예 |
+| 미리 빌드한 다운로드를 배포 경로에서 제외 | 구현됨 | `com.apple.quarantine`을 붙인 릴리스 아카이브가 실행 시 exit 137로 종료되어, 위 경로들은 머신에서 빌드하도록 함 | 예 |
 | 명령에 담긴 사용 계약 | 구현됨 | `bay brief`, `schema`, `help <명령>`이 출력을 생성 | 예 |
 | 코드에서 생성되는 명세 절 | 구현됨 | `make docs-generate`가 표를 작성하고 `make docs-check`가 비교 | 예 |
 | 독자용 문서의 한국어 문서 | 구현됨 | `make docs-check`가 모든 문서가 존재하고 제목 개수가 일치함을 보고 | 예 |

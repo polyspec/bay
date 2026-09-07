@@ -9,6 +9,8 @@ for other projects; that is printed by `bay brief`.
 make            # build bin/bay, bin/bayd, bin/baybar.app
 make check      # gofmt, go vet, go test, docs-check
 make e2e        # tests that start real containers
+make install    # copy the built files to PREFIX/bin and APPDIR
+make uninstall  # remove them
 ```
 
 `make check` must pass before a change is finished.

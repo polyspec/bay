@@ -5,6 +5,25 @@ the day the change was made.
 
 ## 2026-09-07
 
+### Installation
+
+`make install` copies the built binaries to `PREFIX/bin` and the application to
+`APPDIR`, and `make uninstall` removes them. The previous `install` target ran
+the machine setup, which `bay install` already does.
+
+The command line can also be installed with `go install` from the public
+module, without a clone.
+
+Prebuilt downloads are not offered. A quarantined unsigned binary is terminated
+before it runs, and signing it requires an Apple Developer ID.
+
+Verification: `go install` of both commands into an empty GOBIN produced working
+binaries; a clone of the public repository built with `make`; `make install`
+into a temporary prefix installed the binaries and the application, the
+installed application launched from its new location, and `make uninstall`
+emptied both directories; a release archive marked with `com.apple.quarantine`
+exited with 137.
+
 ### Appearance control verified in both directions
 
 Selecting Light in the running window changed the window to light while the

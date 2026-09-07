@@ -10,11 +10,15 @@ A project is a Compose file. A service with no extra settings is served at
 ## Start
 
 ```sh
-make
-bin/bay install     # once per machine; asks for the password
+go install github.com/polyspec/bay/cmd/bay@latest
+go install github.com/polyspec/bay/cmd/bayd@latest
+bay install         # once per machine; asks for the password
 cd ~/work/your-project
 bay up
 ```
+
+For the menu bar application as well, clone this repository and run `make`
+then `sudo make install`. See [Install](docs/operations/install.md).
 
 ## Usage instructions live in the commands
 
@@ -48,4 +52,5 @@ Korean documents carry the suffix `.ko.md`.
 
 ## Requirements
 
-macOS with Apple `container` 1.3 or later, and Go 1.27 or later to build.
+macOS with Apple `container` 1.3 or later, and Go 1.27 or later. The
+application also needs the Xcode command line tools.

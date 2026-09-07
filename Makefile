@@ -2,7 +2,12 @@ BIN := bin
 APP := $(BIN)/baybar.app
 GO  ?= go
 
-.PHONY: all check clean test e2e docs-check docs-generate install
+# Where "make install" copies the built files. Override PREFIX to install
+# somewhere else, for example PREFIX=$$HOME/.local.
+PREFIX  ?= /usr/local
+APPDIR  ?= /Applications
+
+.PHONY: all check clean test e2e docs-check docs-generate install uninstall
 all: $(BIN)/bay $(BIN)/bayd $(APP)
 
 $(BIN)/bay: $(shell find cmd/bay internal -name '*.go')
@@ -51,9 +56,25 @@ docs-generate: $(BIN)/bay
 e2e:
 	BAY_E2E=1 $(GO) test ./... -count=1 -timeout 25m
 
-# One-time machine setup. Everything after this runs unprivileged.
+# Installs the built files for use outside this directory. bay and
+# bayd are installed side by side, which is what the machine setup
+# needs: it registers the DNS agent with the path of the bayd beside
+# bay.
 install: all
-	$(BIN)/bay install
+	mkdir -p "$(PREFIX)/bin"
+	cp $(BIN)/bay $(BIN)/bayd "$(PREFIX)/bin/"
+	rm -rf "$(APPDIR)/baybar.app"
+	cp -R $(APP) "$(APPDIR)/"
+	@echo
+	@echo "installed $(PREFIX)/bin/bay, $(PREFIX)/bin/bayd"
+	@echo "installed $(APPDIR)/baybar.app"
+	@echo
+	@echo "next: bay install   # one-time machine setup, asks for the password"
+
+uninstall:
+	rm -f "$(PREFIX)/bin/bay" "$(PREFIX)/bin/bayd"
+	rm -rf "$(APPDIR)/baybar.app"
+	@echo "removed the installed files; run \"bay uninstall\" first to undo the machine setup"
 
 clean:
 	rm -rf $(BIN)

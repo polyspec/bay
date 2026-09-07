@@ -35,9 +35,11 @@ var (
 	headingPattern = regexp.MustCompile(`(?m)^#{1,6} `)
 	commandPattern = regexp.MustCompile(`bay ([a-z][a-z-]*)`)
 	keyPattern     = regexp.MustCompile(`x-bay\.([a-z_]+)`)
-	// A label match must start the token: "x-bay.extra_domains" is a
-	// project key and "dev.bay.dns" is a bundle identifier.
-	labelPattern = regexp.MustCompile(`(^|[^\w.-])bay\.([a-z]+)`)
+	// A label match must start the token and must not be followed by more of a
+	// path: "x-bay.extra_domains" is a project key,
+	// "dev.bay.dns" is a bundle identifier, and
+	// "bay.git" ends a repository URL.
+	labelPattern = regexp.MustCompile(`(^|[^\w.\-/])bay\.([a-z]+)`)
 )
 
 // flagWords appear after "bay" in prose but are not commands.
@@ -141,6 +143,9 @@ func checkNames() []string {
 			}
 		}
 		for _, m := range labelPattern.FindAllStringSubmatch(text, -1) {
+			if m[2] == "git" {
+				continue // a repository URL, not a label
+			}
 			if !labels[m[2]] {
 				problems = append(problems, fmt.Sprintf(
 					"%s names the label bay.%s, which the code does not declare", path, m[2]))
