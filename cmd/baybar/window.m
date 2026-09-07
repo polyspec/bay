@@ -11,6 +11,7 @@ static const CGFloat kNameWideWidth = 140;  // .name.w140
 static const CGFloat kKeyWidth = 116;       // .kv b
 static const CGFloat kDotSize = 9;          // .dot
 static const CGFloat kCodePad = 14;         // .logpane padding
+static const CGFloat kControlGap = 8;       // between two controls in one row
 static const CGFloat kSubDotSize = 3;       // .dot on a service under its project
 // Every sidebar row is one line of 13 point text plus its padding. Stating it
 // keeps a service row the height of the project above it, whose dot is larger.
@@ -712,10 +713,13 @@ static NSColor *hex(uint32_t rgb) {
   [spacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
   [line addArrangedSubview:spacer];
 
+  // The key and the value run together, so the row's spacing is zero. The
+  // controls at the trailing edge are set apart one by one.
+  NSMutableArray<NSView *> *controls = [NSMutableArray array];
   // The appearance control appears twice: in the title bar and here. Both write
   // the same stored choice, so this one is the same control.
   if ([row[@"appearance"] boolValue]) {
-    [line addArrangedSubview:[self appearanceControl]];
+    [controls addObject:[self appearanceControl]];
   }
   NSString *toggle = row[@"toggle"];
   if (toggle.length) {
@@ -726,9 +730,16 @@ static NSColor *hex(uint32_t rgb) {
     sw.action = @selector(switched:);
     sw.tag = [self claim:toggle];
     sw.controlSize = NSControlSizeSmall;
-    [line addArrangedSubview:sw];
+    [controls addObject:sw];
   }
-  for (NSDictionary *b in row[@"buttons"]) [line addArrangedSubview:[self buttonFor:b]];
+  for (NSDictionary *b in row[@"buttons"]) [controls addObject:[self buttonFor:b]];
+
+  NSView *before = spacer;
+  for (NSView *c in controls) {
+    [line addArrangedSubview:c];
+    [line setCustomSpacing:kControlGap afterView:before];
+    before = c;
+  }
 
   // A stack aligned to the top does not grow to hold a column taller than the
   // rest of the row, so the padding under the value is stated here. Without it

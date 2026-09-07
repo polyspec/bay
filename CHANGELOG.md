@@ -32,10 +32,12 @@ wording written at the call site and Korean is looked up by it, so a line with n
 translation is shown in English. The command line stays in English, because its
 output is the specification the generated documents come from.
 
-Two layout faults are corrected. A row aligned to the top did not grow to hold a
-two-line value, which cut the second line off at the card's edge; the padding
+Three layout faults are corrected. A row aligned to the top did not grow to hold
+a two-line value, which cut the second line off at the card's edge; the padding
 under the value is now stated. A line in the output pane was as wide as the pane
-rather than its content, which covered the padding on both sides.
+rather than its content, which covered the padding on both sides. A key and value
+line runs its text together, so its spacing is zero, which left two buttons at
+its trailing edge touching; the controls there are now set apart one by one.
 
 Verification: `make check` passes, including `go test ./internal/i18n`, which
 reads the window's sources and fails on a line with no Korean, a translation
