@@ -1,0 +1,310 @@
+package stack
+
+import (
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+)
+
+// Runtime performs the operations that change what is running. The command line
+// and the application both call it, so both apply the same behavior.
+type Runtime struct {
+	Machine *Machine
+	// Addr is where bayd listens.
+	Addr string
+	// DNSBin is the bayd executable the launchd job should run.
+	DNSBin string
+	// HelperBin is the bay executable re-run as root for the setup
+	// steps. Empty means the running executable, which is right for bay
+	// itself and wrong for anything else.
+	HelperBin string
+	// RetiredCA is a former authority to stop trusting on the next setup pass,
+	// set while rotating the CA.
+	RetiredCA string
+	// Elevate runs the helper with administrator rights. Nil uses sudo, which
+	// only works from a terminal.
+	Elevate Elevator
+	// Progress, when set, is called with a line describing each step.
+	Progress func(string)
+}
+
+func (r *Runtime) say(format string, args ...any) {
+	if r.Progress != nil {
+		r.Progress(fmt.Sprintf(format, args...))
+	}
+}
+
+// Up registers the project, applies any missing machine setup, starts every
+// service and republishes the routes.
+func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
+	if err := r.checkDomainsFree(cfg); err != nil {
+		return SyncResult{}, err
+	}
+	if err := r.Machine.Register(cfg.Ref()); err != nil {
+		return SyncResult{}, err
+	}
+	if err := r.EnsureInstalled(); err != nil {
+		return SyncResult{}, err
+	}
+	for _, s := range cfg.Sorted() {
+		r.say("starting %s (%s)", s.Name, describe(s))
+		if err := StartService(cfg.Name, s); err != nil {
+			return SyncResult{}, err
+		}
+	}
+	for _, s := range cfg.Sorted() {
+		if _, err := WaitRunning(s.ContainerName, 60*time.Second); err != nil {
+			return SyncResult{}, err
+		}
+	}
+	return r.sync()
+}
+
+// checkDomainsFree reports an error when another running project already serves
+// a domain this project claims. Starting anyway would remove the running
+// project's route.
+func (r *Runtime) checkDomainsFree(cfg *Config) error {
+	instances, err := Instances()
+	if err != nil {
+		return err
+	}
+	claimed := map[string]ServiceInstance{}
+	for _, in := range instances {
+		if in.Running() && in.Domain != "" && in.Group != cfg.Name {
+			claimed[in.Domain] = in
+		}
+	}
+	for _, s := range cfg.Sorted() {
+		if s.Internal {
+			continue
+		}
+		if held, taken := claimed[s.Domain]; taken {
+			return fmt.Errorf("%s is served by project %q; change the domain of service %q or stop %q",
+				s.Domain, held.Group, s.Name, held.Group)
+		}
+	}
+	return nil
+}
+
+// Down removes the project's containers and withdraws its routes. Other
+// projects are not changed.
+func (r *Runtime) Down(cfg *Config) (SyncResult, error) {
+	for _, s := range cfg.Sorted() {
+		if err := Remove(s.ContainerName); err != nil {
+			return SyncResult{}, err
+		}
+		r.say("removed %s", s.Name)
+	}
+	if err := r.Machine.Unregister(cfg.Name); err != nil {
+		return SyncResult{}, err
+	}
+	return r.sync()
+}
+
+// StartServices starts the named services and creates any missing container. An
+// empty list selects every service in the project.
+func (r *Runtime) StartServices(cfg *Config, names []string) (SyncResult, error) {
+	targets, err := SelectServices(cfg, names)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	if err := r.checkDomainsFree(cfg); err != nil {
+		return SyncResult{}, err
+	}
+	for _, s := range targets {
+		if err := r.startOne(cfg, s); err != nil {
+			return SyncResult{}, err
+		}
+	}
+	return r.sync()
+}
+
+// StopServices stops the named services and leaves their containers in place.
+func (r *Runtime) StopServices(cfg *Config, names []string) (SyncResult, error) {
+	targets, err := SelectServices(cfg, names)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	for _, s := range targets {
+		if err := r.stopOne(s); err != nil {
+			return SyncResult{}, err
+		}
+	}
+	return r.sync()
+}
+
+func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, error) {
+	targets, err := SelectServices(cfg, names)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	for _, s := range targets {
+		if err := r.stopOne(s); err != nil {
+			return SyncResult{}, err
+		}
+		if err := r.startOne(cfg, s); err != nil {
+			return SyncResult{}, err
+		}
+	}
+	return r.sync()
+}
+
+func (r *Runtime) startOne(cfg *Config, s *Service) error {
+	in, found, err := Lookup(s.ContainerName)
+	if err != nil {
+		return err
+	}
+	switch {
+	case found && in.State == "running":
+		r.say("%s is already running", s.Name)
+		return nil
+	case found:
+		if err := StartContainer(s.ContainerName); err != nil {
+			return err
+		}
+	default:
+		if err := StartService(cfg.Name, s); err != nil {
+			return err
+		}
+	}
+	if _, err := WaitRunning(s.ContainerName, 60*time.Second); err != nil {
+		return err
+	}
+	r.say("started %s (%s)", s.Name, describe(s))
+	return nil
+}
+
+func (r *Runtime) stopOne(s *Service) error {
+	in, found, err := Lookup(s.ContainerName)
+	if err != nil {
+		return err
+	}
+	if !found || in.State != "running" {
+		r.say("%s is not running", s.Name)
+		return nil
+	}
+	if err := StopContainer(s.ContainerName); err != nil {
+		return err
+	}
+	r.say("stopped %s", s.Name)
+	return nil
+}
+
+func (r *Runtime) sync() (SyncResult, error) {
+	res, err := SyncProxy(r.Machine)
+	if err != nil {
+		return res, err
+	}
+	for _, c := range res.Conflicts {
+		r.say("warning: %s is claimed by both %s and %s; keeping %s",
+			c.Domain, c.Kept, c.Dropped, c.Kept)
+	}
+	switch res.Action {
+	case "stopped":
+		r.say("no routes left; proxy stopped")
+	default:
+		r.say("proxy %s with %d route(s)", res.Action, len(res.Routes))
+	}
+	return res, nil
+}
+
+// EnsureInstalled applies the machine setup missing for the registered domains.
+// It does nothing when the machine is set up, and requests administrator rights
+// only when a resolver entry changes.
+func (r *Runtime) EnsureInstalled() error {
+	ca, err := LoadOrCreateCA(r.Machine.Dir)
+	if err != nil {
+		return err
+	}
+	domains, err := r.Machine.Domains()
+	if err != nil {
+		return err
+	}
+	in := Install{
+		Domains:   domains,
+		Addr:      r.Addr,
+		CAPath:    ca.CertPath(),
+		UntrustCA: r.RetiredCA,
+		Helper:    r.HelperBin,
+		Elevate:   r.Elevate,
+	}
+	if err := in.Ensure(); err != nil {
+		return err
+	}
+	if pending := in.Pending(); len(pending) > 0 {
+		return fmt.Errorf("setup did not complete: %s", strings.Join(pending, "; "))
+	}
+	if DNSAgentLoaded() && DNSAgentServes(domains, r.Addr, ProxyName) {
+		return nil
+	}
+	if r.DNSBin == "" {
+		return fmt.Errorf("no bayd binary configured for the launchd job")
+	}
+	_, err = InstallDNSAgent(r.DNSBin, strings.Join(domains, ","), r.Addr, ProxyName, r.Machine.LogDir())
+	return err
+}
+
+// describe returns the service's domain, or "internal" when it has none.
+func describe(s *Service) string {
+	if s.Internal {
+		return "internal"
+	}
+	return s.Domain
+}
+
+// LoadGroup reads a registered project's Compose file by project name.
+func (r *Runtime) LoadGroup(name string) (*Config, error) {
+	groups, err := r.Machine.Groups()
+	if err != nil {
+		return nil, err
+	}
+	for _, g := range groups {
+		if g.Name == name {
+			return LoadIn(r.Machine, g.StackPath)
+		}
+	}
+	return nil, fmt.Errorf("no registered group named %q", name)
+}
+
+// SelectServices returns the named services of a project, or every service when
+// no name is given.
+func SelectServices(cfg *Config, names []string) ([]*Service, error) {
+	if len(names) == 0 {
+		return cfg.Sorted(), nil
+	}
+	out := make([]*Service, 0, len(names))
+	for _, n := range names {
+		s, ok := cfg.Services[strings.ToLower(n)]
+		if !ok {
+			known := make([]string, 0, len(cfg.Services))
+			for k := range cfg.Services {
+				known = append(known, k)
+			}
+			sort.Strings(known)
+			return nil, fmt.Errorf("group %q has no service %q (has %s)",
+				cfg.Name, n, strings.Join(known, ", "))
+		}
+		out = append(out, s)
+	}
+	return out, nil
+}
+
+// WaitRunning returns when the named container is running and has an address,
+// or when the timeout expires.
+func WaitRunning(name string, timeout time.Duration) (Instance, error) {
+	deadline := time.Now().Add(timeout)
+	for {
+		in, ok, err := Lookup(name)
+		if err != nil {
+			return Instance{}, err
+		}
+		if ok && in.State == "running" && in.IPv4 != "" {
+			return in, nil
+		}
+		if time.Now().After(deadline) {
+			return Instance{}, fmt.Errorf("%s did not start within %s", name, timeout)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}

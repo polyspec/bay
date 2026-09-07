@@ -1,0 +1,185 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: #419CFF; text-decoration: none; }
+    a:hover { color: #6FB4FF; text-decoration: underline; }
+    .win {
+      width: 900px; height: 700px; box-sizing: border-box;
+      background: #2D3135; color: #DDDDDD;
+      font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+      display: flex; flex-direction: column; overflow: hidden; border-radius: 10px;
+    }
+    .titlebar {
+      height: 52px; flex: none; background: #313336; border-bottom: 1px solid #3A3A3A;
+      display: flex; align-items: center; gap: 8px; padding: 0 20px;
+    }
+    .light { width: 12px; height: 12px; border-radius: 50%; }
+    .title { flex: 1; text-align: center; font-size: 13px; font-weight: 600; margin-left: -60px; }
+    .grow { flex: 1; }
+
+    /* One line answers the only question worth asking at a glance. */
+    .status {
+      flex: none; display: flex; align-items: center; gap: 12px;
+      padding: 14px 20px 12px;
+    }
+    .verdict { display: flex; align-items: center; gap: 9px; }
+    .beacon { width: 11px; height: 11px; border-radius: 50%; background: #32D74B;
+              box-shadow: 0 0 0 4px rgba(50,215,75,0.14); }
+    .verdict b { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+    .verdict span { font-size: 12px; color: #8E8E8E; }
+
+    .body { flex: 1; padding: 0 20px 18px; display: flex; flex-direction: column;
+            gap: 20px; overflow: hidden; }
+
+    .sec { display: flex; flex-direction: column; gap: 8px; }
+    .head { display: flex; align-items: baseline; gap: 9px; padding: 0 4px; }
+    .head h2 { margin: 0; font-size: 13px; font-weight: 600; }
+    .chip { font-size: 11px; color: #8E8E8E; border: 1px solid #3A3A3A;
+            border-radius: 5px; padding: 1px 6px; }
+    .path { font-size: 11px; color: #6E6E6E; overflow: hidden;
+            text-overflow: ellipsis; white-space: nowrap; max-width: 330px; }
+
+    .card { background: #1E1E1E; border: 1px solid #3A3A3A; border-radius: 10px;
+            overflow: hidden; }
+    .row { display: flex; align-items: center; gap: 12px; padding: 10px 12px 10px 14px;
+           min-height: 22px; }
+    .row + .row { border-top: 1px solid #303030; }
+    .row.hover { background: #262628; }
+
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex: none;
+           box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12); }
+    .on { background: #32D74B; } .warn { background: #FF9F0A; }
+    .off { background: rgba(255,255,255,0.24); }
+    .name { width: 96px; flex: none; font-size: 13px; }
+    .addr { width: 268px; flex: none; font-size: 12px; }
+    .addr.muted { color: #7A7A7A; }
+    .meta { font-size: 12px; color: #7A7A7A; font-variant-numeric: tabular-nums; }
+
+    /* Actions live on the row you are pointing at, not on all of them at once. */
+    .actions { display: flex; gap: 6px; }
+    .btn { font-size: 12px; padding: 3px 10px; border-radius: 6px; border: 1px solid #565656;
+           background: #3B3E40; color: #DDDDDD; flex: none; }
+    .btn.quiet { background: transparent; border-color: #4A4A4A; color: #B4B4B4; }
+    .btn.hero { background: #0A84FF; border-color: #0A84FF; color: #fff; font-weight: 500; }
+    .more { width: 26px; text-align: center; letter-spacing: 1px; }
+
+    .split { display: flex; }
+    .split .btn:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    .split .btn:last-child { border-top-left-radius: 0; border-bottom-left-radius: 0;
+                             border-left: 0; padding: 3px 7px; }
+
+    .sysrow { display: flex; align-items: center; gap: 12px;
+              padding: 10px 12px 10px 14px; }
+    .sysrow + .sysrow { border-top: 1px solid #303030; }
+    .syslabel { width: 96px; flex: none; font-size: 13px; }
+    .sysval { font-size: 12px; color: #8E8E8E; }
+  </style>
+</helmet>
+
+<div class="win">
+  <div class="titlebar">
+    <div class="light" style="background:#FF5F57"></div>
+    <div class="light" style="background:#FEBC2E"></div>
+    <div class="light" style="background:#28C840"></div>
+    <div class="title">bay</div>
+  </div>
+
+  <div class="status">
+    <div class="verdict">
+      <span class="beacon"></span>
+      <b>Serving 4 domains</b>
+      <span>·&nbsp; 2 projects, 5 services running</span>
+    </div>
+    <span class="grow"></span>
+    <span class="btn quiet">Add project…</span>
+  </div>
+
+  <div class="body">
+    <div class="sec">
+      <div class="head">
+        <h2>platform</h2>
+        <span class="chip">test</span>
+        <span class="path">~/work/platform</span>
+        <span class="grow"></span>
+        <span class="split"><span class="btn">Stop</span><span class="btn">⌄</span></span>
+      </div>
+      <div class="card">
+        <div class="row">
+          <span class="dot on"></span><span class="name">platform1</span>
+          <span class="addr"><a href="#">https://platform1.test/</a></span>
+          <span class="grow"></span><span class="meta">192.168.64.204</span>
+        </div>
+        <div class="row hover">
+          <span class="dot on"></span><span class="name">platform2</span>
+          <span class="addr"><a href="#">https://platform2.test/</a></span>
+          <span class="grow"></span>
+          <span class="actions">
+            <span class="btn quiet">Restart</span>
+            <span class="btn quiet">Logs</span>
+            <span class="btn quiet more">···</span>
+          </span>
+        </div>
+        <div class="row">
+          <span class="dot on"></span><span class="name">platform3</span>
+          <span class="addr"><a href="#">https://api.platform3.test/</a></span>
+          <span class="grow"></span><span class="meta">192.168.64.206</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="head">
+        <h2>guidecheck</h2>
+        <span class="chip">test</span>
+        <span class="path">/tmp/guidecheck</span>
+        <span class="grow"></span>
+        <span class="split"><span class="btn">Stop</span><span class="btn">⌄</span></span>
+      </div>
+      <div class="card">
+        <div class="row">
+          <span class="dot on"></span><span class="name">web</span>
+          <span class="addr"><a href="#">https://web.test/</a></span>
+          <span class="grow"></span><span class="meta">192.168.64.202</span>
+        </div>
+        <div class="row">
+          <span class="dot on"></span><span class="name">db</span>
+          <span class="addr muted">tcp://guidecheck-db.container.test:5432</span>
+          <span class="grow"></span><span class="meta">internal</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="sec">
+      <div class="head">
+        <h2>System</h2>
+        <span class="grow"></span>
+        <span class="btn quiet">Settings…</span>
+      </div>
+      <div class="card">
+        <div class="sysrow">
+          <span class="dot on"></span><span class="syslabel">Proxy</span>
+          <span class="sysval">running · 192.168.64.209</span>
+        </div>
+        <div class="sysrow">
+          <span class="dot on"></span><span class="syslabel">Domains</span>
+          <span class="sysval">*.test (default), *.devel</span>
+        </div>
+        <div class="sysrow">
+          <span class="dot on"></span><span class="syslabel">Certificates</span>
+          <span class="sysval">trusted · authority valid until 2036-09-07</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

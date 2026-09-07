@@ -1,0 +1,140 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <style>
+    body { margin: 0; }
+    a { color: #419CFF; text-decoration: none; }
+    a:hover { color: #6FB4FF; text-decoration: underline; }
+    .win {
+      width: 900px; height: 700px; box-sizing: border-box;
+      background: #2D3135; color: #DDDDDD;
+      font-family: -apple-system, "SF Pro Text", system-ui, sans-serif;
+      display: flex; flex-direction: column; overflow: hidden;
+      border-radius: 10px;
+    }
+    .titlebar {
+      height: 52px; flex: none; background: #313336;
+      border-bottom: 1px solid #3A3A3A;
+      display: flex; align-items: center; gap: 8px; padding: 0 20px;
+    }
+    .light { width: 12px; height: 12px; border-radius: 50%; }
+    .title { flex: 1; text-align: center; font-size: 13px; font-weight: 600;
+             color: #DDDDDD; margin-left: -60px; }
+    .body { flex: 1; padding: 4px 20px 16px; display: flex;
+            flex-direction: column; gap: 12px; overflow: hidden; }
+    .sub { font-size: 12px; color: #8E8E8E; }
+    .stack { display: flex; flex-direction: column; gap: 18px; }
+    .sec { display: flex; flex-direction: column; gap: 7px; }
+    .head { display: flex; align-items: center; gap: 8px; padding: 0 2px 0 4px; }
+    .head h2 { margin: 0; font-size: 13px; font-weight: 600; color: #DDDDDD; }
+    .head .path { font-size: 11px; color: #6E6E6E; overflow: hidden;
+                  text-overflow: ellipsis; white-space: nowrap; }
+    .grow { flex: 1; }
+    .card { background: #1E1E1E; border: 1px solid #3A3A3A; border-radius: 10px;
+            overflow: hidden; }
+    .row { display: flex; align-items: center; gap: 10px; padding: 9px 12px 9px 14px; }
+    .row + .row { border-top: 1px solid #303030; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex: none;
+           box-shadow: inset 0 0 0 1px rgba(255,255,255,0.12); }
+    .on { background: #32D74B; } .warn { background: #FF9F0A; }
+    .off { background: rgba(255,255,255,0.28); }
+    .name { width: 104px; flex: none; font-size: 13px; }
+    .reach { width: 260px; flex: none; font-size: 12px; }
+    .detail { font-size: 12px; color: #8E8E8E; text-align: right; }
+    .btn { font-size: 12px; padding: 3px 10px; border-radius: 6px;
+           border: 1px solid #565656; background: #3B3E40; color: #DDDDDD;
+           flex: none; }
+    .btn.off { background: #2E3033; color: #5C5C5C; border-color: #444; }
+    .btn.hero { background: #0A84FF; border-color: #0A84FF; color: #fff; }
+  </style>
+</helmet>
+
+<div class="win">
+  <div class="titlebar">
+    <div class="light" style="background:#FF5F57"></div>
+    <div class="light" style="background:#FEBC2E"></div>
+    <div class="light" style="background:#28C840"></div>
+    <div class="title">bay</div>
+  </div>
+
+  <div class="body">
+    <div class="sub">2 projects, 2 running · Serving 4 domains</div>
+
+    <div class="stack">
+      <div class="sec">
+        <div class="head"><h2>Machine</h2></div>
+        <div class="card">
+          <div class="row">
+            <span class="dot on"></span><span class="name">proxy</span>
+            <span class="reach"></span><span class="grow"></span>
+            <span class="detail">running · 192.168.64.209 · 4 domains</span>
+          </div>
+          <div class="row">
+            <span class="dot on"></span><span class="name">dns</span>
+            <span class="reach"></span><span class="grow"></span>
+            <span class="detail">serving · 127.0.0.1:5354 · *.devel, *.test</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="head"><h2>Domains</h2><span class="grow"></span>
+          <span class="btn">Add domain…</span></div>
+        <div class="card">
+          <div class="row">
+            <span class="dot on"></span><span class="name">devel</span>
+            <span class="reach"></span><span class="grow"></span>
+            <span class="detail">delegated</span>
+            <span class="btn">Make default</span><span class="btn">Remove</span>
+          </div>
+          <div class="row">
+            <span class="dot on"></span><span class="name">test</span>
+            <span class="reach"></span><span class="grow"></span>
+            <span class="detail">default · projects without one of their own use it</span>
+            <span class="btn off">Remove</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <div class="head"><h2>platform - running</h2>
+          <span class="path">~/work/platform/compose.yaml</span>
+          <span class="grow"></span>
+          <span class="btn">Domain: test</span><span class="btn">Restart all</span>
+          <span class="btn">Stop and remove all</span></div>
+        <div class="card">
+          <div class="row">
+            <span class="dot on"></span><span class="name">platform1</span>
+            <span class="reach"><a href="#">https://platform1.test/</a></span>
+            <span class="grow"></span><span class="detail">192.168.64.204</span>
+            <span class="btn">Domain…</span><span class="btn off">Start</span>
+            <span class="btn">Stop</span><span class="btn">Restart</span><span class="btn">Logs</span>
+          </div>
+          <div class="row">
+            <span class="dot on"></span><span class="name">platform2</span>
+            <span class="reach"><a href="#">https://platform2.test/</a></span>
+            <span class="grow"></span><span class="detail">192.168.64.205</span>
+            <span class="btn">Domain…</span><span class="btn off">Start</span>
+            <span class="btn">Stop</span><span class="btn">Restart</span><span class="btn">Logs</span>
+          </div>
+          <div class="row">
+            <span class="dot on"></span><span class="name">platform3</span>
+            <span class="reach"><a href="#">https://api.platform3.test/</a></span>
+            <span class="grow"></span><span class="detail">192.168.64.206</span>
+            <span class="btn">Domain…</span><span class="btn off">Start</span>
+            <span class="btn">Stop</span><span class="btn">Restart</span><span class="btn">Logs</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

@@ -1,0 +1,13 @@
+# Build output.
+bin/
+
+# The seeded design canvas is generated from the .dc.html sources by the
+# design skill's helper.
+design/bay-window.html
+
+# Binaries built without -o land in the working directory.
+/baybar
+/bay
+/bayd
+/docscheck
+/docsgen

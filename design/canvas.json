@@ -1,0 +1,166 @@
+{
+  "pages": [
+    {
+      "id": "page-1",
+      "name": "Design"
+    },
+    {
+      "id": "page-2",
+      "name": "Explored"
+    }
+  ],
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 900,
+      "h": 700,
+      "page": "page-1",
+      "title": "Dashboard \u2014 dark"
+    },
+    {
+      "file": "Project.dc.html",
+      "x": 1020,
+      "y": 0,
+      "w": 900,
+      "h": 700,
+      "page": "page-1",
+      "title": "Project \u2014 dark"
+    },
+    {
+      "file": "Domains.dc.html",
+      "x": 0,
+      "y": 900,
+      "w": 900,
+      "h": 700,
+      "page": "page-1",
+      "title": "Domains"
+    },
+    {
+      "file": "Certificates.dc.html",
+      "x": 1020,
+      "y": 900,
+      "w": 900,
+      "h": 700,
+      "page": "page-1",
+      "title": "Certificates"
+    },
+    {
+      "file": "Setup.dc.html",
+      "x": 0,
+      "y": 1800,
+      "w": 900,
+      "h": 700,
+      "page": "page-1",
+      "title": "First run"
+    },
+    {
+      "file": "Current.dc.html",
+      "x": 0,
+      "y": 0,
+      "w": 900,
+      "h": 700,
+      "page": "page-2",
+      "title": "Today"
+    },
+    {
+      "file": "DirectionA.dc.html",
+      "x": 1020,
+      "y": 0,
+      "w": 900,
+      "h": 700,
+      "page": "page-2",
+      "title": "A \u2014 Calm list"
+    },
+    {
+      "file": "DirectionC.dc.html",
+      "x": 2040,
+      "y": 0,
+      "w": 900,
+      "h": 700,
+      "page": "page-2",
+      "title": "C \u2014 Console table"
+    },
+    {
+      "file": "DashboardLight.dc.html",
+      "x": 2040,
+      "y": 0,
+      "w": 900,
+      "h": 700,
+      "page": "page-1",
+      "title": "Dashboard \u2014 light"
+    },
+    {
+      "file": "ProjectLight.dc.html",
+      "x": 2040,
+      "y": 900,
+      "w": 900,
+      "h": 700,
+      "page": "page-1",
+      "title": "Project \u2014 light"
+    }
+  ],
+  "annotations": [
+    {
+      "id": "dash-note",
+      "x": 0,
+      "y": -170,
+      "w": 900,
+      "page": "page-1",
+      "text": "Dashboard \u2014 the answer to \"a source list hides everything you did not select\".\nOne verdict line, every project with its service dots, and every address the proxy is serving. Addresses are listed because clicking through to a running site is the thing people open this for."
+    },
+    {
+      "id": "proj-note",
+      "x": 1020,
+      "y": -170,
+      "w": 900,
+      "page": "page-1",
+      "text": "Project \u2014 one subject at a time. Services carry only Logs at rest; Start/Stop/Restart belong to the header, where they act on the whole project.\nThe PROJECT card is where the compose file's settings surface, so the window explains the file rather than hiding it."
+    },
+    {
+      "id": "dom-note",
+      "x": 0,
+      "y": 1670,
+      "w": 900,
+      "page": "page-1",
+      "text": "Domains \u2014 a domain is delegated once for the whole machine, so it lives here and not inside each project. HOW IT WORKS spells out what the buttons actually do to /etc/resolver, because that is the part that asks for a password."
+    },
+    {
+      "id": "cert-note",
+      "x": 1020,
+      "y": 1670,
+      "w": 900,
+      "page": "page-1",
+      "text": "Certificates \u2014 the authority first, then what it issued. A certificate no route uses is flagged rather than left to pile up; an expiring one turns amber here before it turns into a browser warning."
+    },
+    {
+      "id": "setup-note",
+      "x": 0,
+      "y": 2570,
+      "w": 900,
+      "page": "page-1",
+      "text": "First run \u2014 the same dashboard with the one thing that matters. The verdict goes amber, the banner says what will change on the machine, and one primary button does it. Nothing else is dressed up as available."
+    },
+    {
+      "id": "explored-note",
+      "x": 0,
+      "y": -170,
+      "w": 1900,
+      "page": "page-2",
+      "text": "Kept for the record: today's window, and the two directions not taken. A put every action on hover to quiet the rows; C flattened everything into one table with a single toolbar."
+    },
+    {
+      "id": "theme-note",
+      "x": 2040,
+      "y": -170,
+      "w": 900,
+      "page": "page-1",
+      "text": "Light and dark are one palette with two token blocks - the same thing the real window does, since AppKit resolves system colors per appearance. Every artboard carries an Appearance tweak, so any screen here can be flipped; these two are pinned to light so both read at a glance."
+    }
+  ],
+  "launch": {
+    "view": "canvas",
+    "page": "page-1"
+  }
+}

@@ -1,0 +1,370 @@
+// bayd resolves <name>.<domain> to the live IP of an Apple `container`
+// container, so you can reach container port 80 directly without /etc/hosts and
+// without publishing host ports.
+//
+// One-time setup (needs admin once):
+//
+//	sudo bayd -install -domain test
+//
+// Then just run it:
+//
+//	bayd -domain test
+package main
+
+import (
+	"encoding/binary"
+	"encoding/json"
+	"errors"
+	"flag"
+	"fmt"
+	"log"
+	"net"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/polyspec/bay/internal/stack"
+)
+
+const (
+	typeA    = 1
+	typeAAAA = 28
+	classIN  = 1
+)
+
+var (
+	domain    = flag.String("domain", "test", "comma-separated local domains to serve, e.g. `test,lab.internal`")
+	addr      = flag.String("addr", stack.DefaultDNSAddr, "UDP/TCP address to listen on")
+	aliasFile = flag.String("aliases", "", "optional JSON file mapping hostname label -> container name")
+	ttl       = flag.Uint("ttl", 5, "TTL in seconds advertised for answers")
+	proxy     = flag.String("proxy", stack.ProxyName, "resolve every name under -domain to this container, which routes by Host header; empty to answer per service")
+	install   = flag.Bool("install", false, "write /etc/resolver/<domain> and exit; acquires root itself")
+	privApply = flag.Bool("privileged-apply", false, "internal: apply the privileged setup steps")
+)
+
+func main() {
+	flag.Parse()
+	log.SetFlags(log.Ltime)
+
+	var doms []string
+	for _, d := range strings.Split(strings.ToLower(*domain), ",") {
+		if d = strings.Trim(strings.TrimSpace(d), "."); d != "" {
+			doms = append(doms, d)
+		}
+	}
+	if len(doms) == 0 {
+		log.Fatal("-domain must name at least one domain")
+	}
+
+	if *privApply {
+		if err := (stack.Install{Domains: doms, Addr: *addr}).Apply(); err != nil {
+			log.Fatalf("install: %v", err)
+		}
+		return
+	}
+	if *install {
+		in := stack.Install{Domains: doms, Addr: *addr}
+		if err := in.Ensure(); err != nil {
+			log.Fatalf("install: %v", err)
+		}
+		if pending := in.Pending(); len(pending) > 0 {
+			log.Fatalf("install did not complete: %v", pending)
+		}
+		for _, d := range doms {
+			fmt.Printf("%s delegates *.%s to %s\n", stack.ResolverPath(d), d, *addr)
+		}
+		return
+	}
+
+	r := &resolver{domains: doms, proxy: strings.ToLower(*proxy), aliases: loadAliases(*aliasFile)}
+
+	pc, err := net.ListenPacket("udp", *addr)
+	if err != nil {
+		log.Fatalf("listen udp: %v", err)
+	}
+	ln, err := net.Listen("tcp", *addr)
+	if err != nil {
+		log.Fatalf("listen tcp: %v", err)
+	}
+
+	served := "*." + strings.Join(doms, ", *.")
+	if r.proxy != "" {
+		log.Printf("serving %s on %s -> proxy %q", served, *addr, r.proxy)
+	} else {
+		log.Printf("serving %s on %s (aliases: %d)", served, *addr, len(r.aliases))
+	}
+	go serveTCP(ln, r)
+	serveUDP(pc, r)
+}
+
+// --- resolution ---------------------------------------------------------
+
+type resolver struct {
+	domains []string
+	proxy   string
+	aliases map[string]string
+
+	mu     sync.Mutex
+	cache  *index
+	cached time.Time
+}
+
+// index maps container names and label domains to addresses.
+type index struct {
+	byName   map[string]string
+	byDomain map[string]string
+}
+
+// lookup returns the IPv4 address for a fully qualified name. The second result
+// reports a temporary failure, which is answered with SERVFAIL: a resolver
+// caches NXDOMAIN and the name would stay unresolvable after the proxy
+// returns.
+func (r *resolver) lookup(name string) (string, bool) {
+	name = strings.TrimSuffix(strings.ToLower(name), ".")
+	host, ok := r.strip(name)
+	if !ok || host == "" {
+		return "", false
+	}
+	idx, err := r.index()
+	if err != nil {
+		log.Printf("container ls: %v", err)
+		return "", true
+	}
+	// In proxy mode every name under the domain resolves to the proxy, which
+	// routes by Host header. A name with no route receives 404 from the proxy
+	// instead of a DNS failure.
+	if r.proxy != "" {
+		ip := idx.byName[r.proxy]
+		return ip, ip == ""
+	}
+	if ip, ok := idx.byDomain[name]; ok {
+		return ip, false
+	}
+	if target, ok := r.aliases[host]; ok {
+		host = target
+	}
+	if strings.Contains(host, ".") {
+		return "", false
+	}
+	return idx.byName[host], false
+}
+
+// strip removes the local domain suffix and reports whether the name is served
+// by this server.
+func (r *resolver) strip(name string) (string, bool) {
+	for _, d := range r.domains {
+		if host, ok := strings.CutSuffix(name, "."+d); ok {
+			return host, true
+		}
+	}
+	return "", false
+}
+
+// index lists running containers and caches the result for one TTL.
+func (r *resolver) index() (*index, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.cache != nil && time.Since(r.cached) < time.Duration(*ttl)*time.Second {
+		return r.cache, nil
+	}
+	list, err := stack.List()
+	if err != nil {
+		return nil, err
+	}
+	idx := &index{
+		byName:   make(map[string]string, len(list)),
+		byDomain: make(map[string]string, len(list)),
+	}
+	for _, in := range list {
+		if in.State != "running" || in.IPv4 == "" {
+			continue
+		}
+		idx.byName[strings.ToLower(in.Name)] = in.IPv4
+		if d := strings.ToLower(in.Labels[stack.LabelDomain]); d != "" {
+			idx.byDomain[d] = in.IPv4
+		}
+	}
+	r.cache, r.cached = idx, time.Now()
+	return idx, nil
+}
+
+func loadAliases(path string) map[string]string {
+	if path == "" {
+		return nil
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		log.Fatalf("aliases: %v", err)
+	}
+	var m map[string]string
+	if err := json.Unmarshal(b, &m); err != nil {
+		log.Fatalf("aliases: %v", err)
+	}
+	lower := make(map[string]string, len(m))
+	for k, v := range m {
+		lower[strings.ToLower(k)] = strings.ToLower(v)
+	}
+	return lower
+}
+
+// --- servers ------------------------------------------------------------
+
+func serveUDP(pc net.PacketConn, r *resolver) {
+	buf := make([]byte, 512)
+	for {
+		n, from, err := pc.ReadFrom(buf)
+		if err != nil {
+			log.Printf("udp read: %v", err)
+			continue
+		}
+		req := make([]byte, n)
+		copy(req, buf[:n])
+		go func() {
+			if resp := r.respond(req); resp != nil {
+				pc.WriteTo(resp, from)
+			}
+		}()
+	}
+}
+
+func serveTCP(ln net.Listener, r *resolver) {
+	for {
+		conn, err := ln.Accept()
+		if err != nil {
+			log.Printf("tcp accept: %v", err)
+			continue
+		}
+		go func() {
+			defer conn.Close()
+			conn.SetDeadline(time.Now().Add(5 * time.Second))
+			var hdr [2]byte
+			if _, err := readFull(conn, hdr[:]); err != nil {
+				return
+			}
+			req := make([]byte, binary.BigEndian.Uint16(hdr[:]))
+			if _, err := readFull(conn, req); err != nil {
+				return
+			}
+			resp := r.respond(req)
+			if resp == nil {
+				return
+			}
+			var out [2]byte
+			binary.BigEndian.PutUint16(out[:], uint16(len(resp)))
+			conn.Write(append(out[:], resp...))
+		}()
+	}
+}
+
+func readFull(c net.Conn, b []byte) (int, error) {
+	total := 0
+	for total < len(b) {
+		n, err := c.Read(b[total:])
+		if err != nil {
+			return total, err
+		}
+		total += n
+	}
+	return total, nil
+}
+
+// --- DNS wire format ----------------------------------------------------
+
+// respond builds a reply for a single-question query. It returns A records for
+// known names and an empty NOERROR for other served names, so the resolver does
+// not query upstream.
+func (r *resolver) respond(req []byte) []byte {
+	if len(req) < 12 {
+		return nil
+	}
+	if req[2]&0x80 != 0 { // already a response
+		return nil
+	}
+	if binary.BigEndian.Uint16(req[4:6]) != 1 { // exactly one question
+		return errorReply(req, 1) // FORMERR
+	}
+	name, off, err := parseName(req, 12)
+	if err != nil || off+4 > len(req) {
+		return errorReply(req, 1)
+	}
+	qtype := binary.BigEndian.Uint16(req[off : off+2])
+	question := req[12 : off+4]
+
+	resp := make([]byte, 0, 512)
+	resp = append(resp, req[0], req[1]) // ID
+	// QR=1, opcode copied, AA=1, RD copied; RA=0, RCODE=0.
+	resp = append(resp, 0x80|(req[2]&0x78)|0x04|(req[2]&0x01), 0x00)
+	resp = append(resp, 0, 1) // QDCOUNT
+
+	ip, temporary := r.lookup(name)
+	_, inDomain := r.strip(strings.TrimSuffix(name, "."))
+	answer := ip != "" && qtype == typeA
+
+	if answer {
+		resp = append(resp, 0, 1) // ANCOUNT
+	} else {
+		resp = append(resp, 0, 0)
+		// A served name that cannot be resolved returns NXDOMAIN. A served name
+		// queried for AAAA returns an empty NOERROR, so the client falls back
+		// to A.
+		switch {
+		case temporary:
+			// SERVFAIL is not cached, so the name resolves again once the
+			// proxy returns.
+			resp[3] |= 2
+		case !inDomain || ip == "":
+			resp[3] |= 3 // NXDOMAIN
+		}
+	}
+	resp = append(resp, 0, 0, 0, 0) // NSCOUNT, ARCOUNT
+	resp = append(resp, question...)
+
+	if answer {
+		resp = append(resp, 0xC0, 0x0C) // pointer to the question name
+		resp = binary.BigEndian.AppendUint16(resp, typeA)
+		resp = binary.BigEndian.AppendUint16(resp, classIN)
+		resp = binary.BigEndian.AppendUint32(resp, uint32(*ttl))
+		resp = binary.BigEndian.AppendUint16(resp, 4)
+		resp = append(resp, net.ParseIP(ip).To4()...)
+		log.Printf("%s -> %s", name, ip)
+	}
+	return resp
+}
+
+func errorReply(req []byte, rcode byte) []byte {
+	resp := make([]byte, 12)
+	copy(resp, req[:12])
+	resp[2] |= 0x80
+	resp[3] = (resp[3] & 0xF0) | rcode
+	binary.BigEndian.PutUint16(resp[4:6], 0)
+	binary.BigEndian.PutUint16(resp[6:8], 0)
+	binary.BigEndian.PutUint16(resp[8:10], 0)
+	binary.BigEndian.PutUint16(resp[10:12], 0)
+	return resp
+}
+
+// parseName decodes an uncompressed QNAME and returns it with the offset after
+// it. Queries do not compress the question section.
+func parseName(msg []byte, off int) (string, int, error) {
+	var sb strings.Builder
+	for {
+		if off >= len(msg) {
+			return "", 0, errors.New("truncated name")
+		}
+		n := int(msg[off])
+		off++
+		if n == 0 {
+			return sb.String(), off, nil
+		}
+		if n&0xC0 != 0 {
+			return "", 0, errors.New("compressed name in question")
+		}
+		if off+n > len(msg) {
+			return "", 0, errors.New("truncated label")
+		}
+		sb.Write(msg[off : off+n])
+		sb.WriteByte('.')
+		off += n
+	}
+}

@@ -1,0 +1,31 @@
+# 기능
+
+기능마다 한 행이다. 상태는 구현 상태, 근거는 현재 코드에 대해 실행한 검증,
+포함은 `bin/` 아래 바이너리에 들어 있는지를 뜻한다.
+
+이전 검증은 변경된 코드의 근거가 되지 않는다. 기능이 바뀌면 그 변경에서 실행한
+검증으로 근거를 교체한다.
+
+| 기능 | 상태 | 근거 | 포함 |
+| --- | --- | --- | --- |
+| Compose 파일을 프로젝트 형식으로 사용 | 구현됨 | `go test ./internal/stack`과 `go test ./internal/contract`이 키 파싱, 두 가지 라벨 표기, 포트 결정, 파일 검색, 문서의 예제를 검사 | 예 |
+| 머신 단위 도메인과 프로젝트 지정 | 구현됨 | `go test ./internal/stack`이 추가, 제거, 기본값 변경, 지정된 도메인 제거 거부를 검사 | 예 |
+| 컨테이너 라벨에서 라우트 생성 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestTwoGroupsShareOneProxy`이 프로젝트 두 개를 띄워 각자 도메인으로 응답함을 확인 | 예 |
+| 프로젝트가 공유하는 단일 프록시 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestTwoGroupsShareOneProxy`이 한 프로젝트를 내려도 다른 프로젝트가 계속 제공됨을 확인 | 예 |
+| 컨테이너 주소 변경 추적 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestServiceRestartKeepsRoute`이 서비스를 재생성한 뒤 프록시가 새 주소에 도달함을 확인 | 예 |
+| 프록시가 새 설정을 제공한 뒤 명령이 반환 | 구현됨 | `BAY_E2E=1 go test ./internal/stack`이 15초 클라이언트 시간 초과로 실패하던 자리에서 4초 이내에 완료 | 예 |
+| 도메인 없는 internal 서비스 | 구현됨 | `go test ./internal/stack`이 라벨을 검사하고, 종단 테스트가 라우트와 인증서가 없음을 확인 | 예 |
+| 실행 중인 프로젝트의 도메인을 다른 프로젝트가 가져가지 못함 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestUpRefusesADomainAnotherProjectServes`이 거부 메시지가 보유 프로젝트를 명시하고 컨테이너를 만들지 않음을 확인 | 예 |
+| 서비스 단위 start, stop, restart, logs | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestStoppingOneServiceWithdrawsOnlyItsRoute`와 `-run TestLogsReachTheCaller` | 예 |
+| 인증서 발급과 재발급 | 구현됨 | `go test ./internal/stack`이 목록, 만료 보고, 삭제, 기관 교체를 검사 | 예 |
+| 관리자 권한 없이 인증 기관 신뢰 | 구현됨 | 기관에 대한 `security add-trusted-cert`가 성공하고 `security verify-cert`가 신뢰를 확인 | 예 |
+| 권한을 획득해 resolver 항목 작성 | 구현됨 | 앱이 시스템 인증 창을 통해 `/etc/resolver/test`를 생성 | 예 |
+| 머신 상태 스냅샷 | 구현됨 | `go test ./internal/stack`이 실행 중인 프로젝트와 스냅샷을 비교 | 예 |
+| 메뉴바 앱 | 구현됨 | `open -n bin/baybar.app` 실행 후 행 버튼에 합성 클릭을 보내 로그 창이 열림. 버튼에서 콜백까지의 경로를 확인 | 예 |
+| 사이드바와 대시보드가 있는 창 | 구현됨 | `open -n bin/baybar.app`과 `screencapture -l <창>`으로 사이드바, 프로젝트 행, 주소 목록이 있는 대시보드를 캡처 | 예 |
+| 외형 전환: Auto, Dark, Light | 구현됨 | 읽기 경로: 시스템이 Dark인 상태에서 `defaults write dev.bay.bar appearance light` 후 재시작하니 창이 라이트로 렌더되고 Light가 선택됨. 쓰기 경로: 실행 중인 창에서 Light를 선택하니 창이 라이트로 바뀌고 `defaults read dev.bay.bar appearance`가 `light`를 반환 | 예 |
+| 운영 문서가 명령과 일치 | 구현됨 | `docs/operations/using.ko.md`의 주장을 문서대로 만든 프로젝트에 대해 `bay up`, `stop`, `start`, `logs`, `status --json`으로 각각 실행 | 예 |
+| 명령에 담긴 사용 계약 | 구현됨 | `bay brief`, `schema`, `help <명령>`이 출력을 생성 | 예 |
+| 코드에서 생성되는 명세 절 | 구현됨 | `make docs-generate`가 표를 작성하고 `make docs-check`가 비교 | 예 |
+| 독자용 문서의 한국어 문서 | 구현됨 | `make docs-check`가 모든 문서가 존재하고 제목 개수가 일치함을 보고 | 예 |
+| 직접적인 표현으로 작성된 코드 주석 | 구현됨 | `cmd/`와 `internal/`에서 금지된 표현을 검색해 테스트 외 일치 없음 | 예 |
