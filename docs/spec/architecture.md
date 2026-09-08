@@ -54,11 +54,20 @@ Each container receives an address on the `192.168.64.0/24` vmnet subnet and is
 routable from the host. Addresses are assigned by DHCP and change on every
 start; a fixed MAC address does not hold an address.
 
-The proxy therefore names backends instead of addressing them:
-`proxy_pass` uses a variable and `resolver` points at the network gateway.
-nginx resolves `<container>.container.test` and caches answers for ten seconds.
-Restarting a container changes its proxy configuration generation even when
-the backend name is unchanged. The proxy continues to use DNS names.
+The runtime's DNS answers with a container's previous address for about fifteen
+seconds after it is recreated. A route therefore sends the request to the
+address the configuration was built from, taken from the runtime at that moment,
+and does not depend on DNS for a service that was just started.
+
+A container recreated by other means leaves the configuration holding an address
+nothing answers on. Each route therefore carries the container's name as well: a
+connection is given two seconds, and a route whose address fails is retried
+against `<container>.container.test`, which the runtime resolves. The route
+recovers on its own once the runtime's answer catches up.
+
+Every response says which of the two answered, in `X-Bay-Route`:
+`address` or `name`. A route that keeps answering through the name is one whose
+address is out of date.
 
 ## Configuration reload
 
