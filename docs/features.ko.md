@@ -21,7 +21,9 @@
 | 머신 단위 도메인과 프로젝트 지정 | 구현됨 | `go test ./internal/stack`이 추가, 제거, 기본값 변경, 지정된 도메인 제거 거부를 검사 | 예 |
 | 컨테이너 라벨에서 라우트 생성 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestTwoGroupsShareOneProxy`이 프로젝트 두 개를 띄워 각자 도메인으로 응답함을 확인 | 예 |
 | 프로젝트가 공유하는 단일 프록시 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestTwoGroupsShareOneProxy`이 한 프로젝트를 내려도 다른 프로젝트가 계속 제공됨을 확인 | 예 |
-| 컨테이너 주소 변경 추적 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestServiceRestartKeepsRoute`이 서비스를 재생성한 뒤 프록시가 새 주소에 도달함을 확인 | 예 |
+| 컨테이너 주소 변경 추적 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestRecreatedServiceIsReachedAtOnceActualRuntime`가 서비스를 재생성하고 그에 맞춘 설정을 쓴 뒤, 요청 하나가 주소를 통해 21ms에 응답됨을 확인. 컨테이너 이름을 쓰던 이전 설계에서는 같은 요청이 1분 0.027초 뒤 504였음 | 예 |
+| bay 없이 재생성된 컨테이너에서 복구 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestRecreatedBehindBayRecoversActualRuntime`가 bay을 거치지 않고 컨테이너를 재생성한 뒤 경로가 이름으로 2초 만에 복구되고, 어떤 요청도 2.024초를 넘지 않음을 확인 | 예 |
+| 오래된 주소 연결은 매달리지 않고 실패 | 구현됨 | `go test ./internal/stack -run TestConnectTimeoutIsBounded`가 모든 `proxy_pass`에 상한이 있는지 검사. 상한이 없을 때 재생성된 컨테이너에서 1분 0.027초를 기다린 뒤 504가 났음 | 예 |
 | 프록시가 새 설정을 제공한 뒤 명령이 반환 | 구현됨 | `BAY_E2E=1 go test ./internal/stack`이 15초 클라이언트 시간 초과로 실패하던 자리에서 4초 이내에 완료 | 예 |
 | 도메인 없는 internal 서비스 | 구현됨 | `go test ./internal/stack`이 라벨을 검사하고, 종단 테스트가 라우트와 인증서가 없음을 확인 | 예 |
 | 실행 중인 프로젝트의 도메인을 다른 프로젝트가 가져가지 못함 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestUpRefusesADomainAnotherProjectServes`이 거부 메시지가 보유 프로젝트를 명시하고 컨테이너를 만들지 않음을 확인 | 예 |

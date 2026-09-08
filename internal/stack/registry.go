@@ -2,6 +2,7 @@ package stack
 
 import (
 	"errors"
+	"net"
 	"sort"
 	"strconv"
 	"strings"
@@ -29,6 +30,15 @@ type ServiceInstance struct {
 }
 
 func (s ServiceInstance) Running() bool { return s.State == "running" }
+
+// Addr returns the address and port the container holds now. It is empty until
+// the runtime has given the container an address.
+func (s ServiceInstance) Addr() string {
+	if s.IPv4 == "" {
+		return ""
+	}
+	return net.JoinHostPort(s.IPv4, strconv.Itoa(s.Port))
+}
 
 // Backend returns the name and port the proxy connects to. nginx resolves this
 // name through the runtime DNS and caches answers for the configured interval.
@@ -101,6 +111,7 @@ func Routes() ([]Route, []DomainConflict, error) {
 		claimed[in.Domain] = in
 		routes = append(routes, Route{
 			Domain:  in.Domain,
+			Address: in.Addr(),
 			Backend: in.Backend(),
 			Scheme:  in.Scheme,
 			ipv4:    in.IPv4,

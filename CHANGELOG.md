@@ -5,6 +5,33 @@ the day the change was made.
 
 ## 2026-09-08
 
+### A route is sent to the address it was built from
+
+A report said the proxy connected to an address the recreated container no
+longer held, and the request timed out. Measuring the runtime's DNS shows why:
+after a container is recreated it answers with the previous address for about
+fifteen seconds. The proxy named its backends and resolved them per request, so
+a service that had just been started was sent to the address it held before.
+
+A route now carries the address taken from the runtime when the configuration
+was written, and the request goes there. The container's name is kept as
+the second target: a connection is given two seconds instead of the minute nginx
+waits by default, and a route whose address stops answering is retried against
+the name, which recovers a container recreated by other means. Every
+response says which answered, in `X-Bay-Route`.
+
+Verification: `make check` covers the configuration, including that every
+`proxy_pass` is bounded and that a route with an address carries the name to
+fall back to. Against the runtime,
+`BAY_E2E=1 go test ./internal/stack -run TestRecreatedServiceIsReachedAtOnceActualRuntime`
+recreates a container, writes the configuration for it and measures one request:
+answered through the address in 21 ms. The same test against the previous
+design, which named the container, returned 504 after 1 m 0.027 s.
+`-run TestRecreatedBehindBayRecoversActualRuntime` recreates a container
+behind bay and measures recovery through the name at 2 s, with no
+request taking longer than 2.024 s. Both run their own nginx, so the projects on
+the machine keep serving.
+
 ### Verify the current backend instance after restart
 
 Proxy configuration generations include the routed container's current IPv4 address and start timestamp. Restart commands wait for a worker serving that instance's generation. Named backends, DNS cache duration and lifecycle time limits are unchanged.
