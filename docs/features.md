@@ -7,11 +7,11 @@ the feature is in the binaries under `bin/`.
 An earlier verification is not evidence for changed code. When a feature
 changes, its evidence is replaced by the verification run for that change.
 
-Source `ea95bf0` was installed with `make -B install PREFIX=/opt/homebrew`. The installed CLI records that exact clean revision. Direct `doctor` reports `nothing to do`; status confirms the existing trusted CA, current DNS agent and responding proxy. The installation copies binaries without restarting services or changing machine setup.
+The installed CLI records clean source `7df8a40`, installed with `make -B install PREFIX=/opt/homebrew`. Direct `doctor` reports `nothing to do` and a loaded, current DNS agent. Installation copies binaries without restarting services or changing machine setup. Earlier rows retain the implementation revisions and verification recorded for their unchanged behavior.
 
 | Feature | Status | Evidence | Shipped |
 | --- | --- | --- | --- |
-| Proxy reload errors preserve the original failure without restarting shared services | Implemented | `make check` and `go test -race ./internal/stack -count=1` pass; `TestReloadProxyOnlyExecutesReload` uses a fake CLI to verify the original nginx stderr and exactly one exec on success and failure, with no stop, start or replacement | Built; not installed |
+| Proxy reload errors preserve the original failure without restarting shared services | Implemented | `make check` and `go test -race ./internal/stack -count=1` pass; `TestReloadProxyOnlyExecutesReload` uses a fake CLI to verify the original nginx stderr and exactly one exec on success and failure, with no stop, start or replacement | Installed: `7df8a40` |
 | Status and doctor leave machine state unchanged | Implemented | `go test ./cmd/bay -run 'Test(Status\|Doctor\|Queries)'` uses isolated fixtures to preserve absent state and registration bytes, modes and modification times, report unreadable public certificates, and succeed with absent or malformed private keys | Installed: `ea95bf0` |
 | Local image tags are verified before process start | Implemented | `TestLocalImageTagActualRuntime` reproduces a missing digest alias and verifies local-tag initialization, unchanged reuse, private failure output and native log retention; unit tests reject changed image/owner/config before start | Installed: `ea95bf0` |
 | Compose-managed durable named volumes | Implemented | `make check` and `go test -race ./internal/stack` cover ownership and declaration validation; `BAY_SERVICE_E2E=1 go test -race ./internal/stack -run TestManagedVolumeActualRuntime` confirms data and volume identity survive service removal/recreation | Installed: `ea95bf0` |
