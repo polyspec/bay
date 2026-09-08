@@ -54,9 +54,10 @@
 IP 주소는 유지되지 않는다.
 
 따라서 프록시는 backend를 주소 대신 이름으로 지정한다. `proxy_pass`는 변수를
-사용하고 `resolver`는 네트워크 gateway를 가리키므로 nginx는 요청마다
-`<container>.container.test`를 해석한다. 서비스를 재시작해도 설정 변경 없이
-새 주소에 도달한다.
+사용하고 `resolver`는 네트워크 gateway를 가리킨다. nginx는
+`<container>.container.test`를 해석하고 응답을 10초 동안 캐시한다.
+컨테이너를 재시작하면 backend 이름이 같아도 프록시 설정 generation이 바뀐다.
+프록시는 계속 DNS 이름을 사용한다.
 
 ## 설정 다시 읽기
 
@@ -79,9 +80,12 @@ reload 실패로 프록시를 중지·시작·삭제·재생성해서는 안 된
 `nginx -s reload`는 신호를 보낸 뒤 반환한다. 교체되는 worker는 종료를 마칠 때까지
 listening 소켓을 보유하며, 그동안 연결을 받아도 요청을 처리하지 않을 수 있다.
 
-따라서 `bay`은 라우트 목록에서 generation 값을 계산해 설정에 넣고,
+따라서 `bay`은 라우트 목록과 라우팅되는 각 컨테이너의 현재 IPv4 주소·
+시작 시각에서 generation 값을 계산한다. 이 값을 설정에 넣고
 `http://<proxy>/__bay/health`가 그 값을 반환할 때까지 조회한다.
-`up`, `down`, `start`, `stop`, `restart`는 프록시가 새 설정을 제공한 뒤 반환한다.
+backend 재시작 전 generation을 제공하는 worker로는 이 대기를 완료할 수 없다.
+라우트와 인스턴스 정보가 같으면 generation도 유지된다. `up`, `down`, `start`,
+`stop`, `restart`는 프록시가 새 설정을 제공한 뒤 반환한다.
 
 ## 인증서
 

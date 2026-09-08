@@ -30,9 +30,8 @@ type ServiceInstance struct {
 
 func (s ServiceInstance) Running() bool { return s.State == "running" }
 
-// Backend returns the name and port the proxy connects to. The name is resolved
-// by the runtime DNS on each request, so a restarted container is reached at its
-// new address.
+// Backend returns the name and port the proxy connects to. nginx resolves this
+// name through the runtime DNS and caches answers for the configured interval.
 func (s ServiceInstance) Backend() string {
 	return s.Container + "." + BackendDomain + ":" + strconv.Itoa(s.Port)
 }
@@ -104,6 +103,8 @@ func Routes() ([]Route, []DomainConflict, error) {
 			Domain:  in.Domain,
 			Backend: in.Backend(),
 			Scheme:  in.Scheme,
+			ipv4:    in.IPv4,
+			started: in.Started,
 		})
 	}
 	sort.Slice(routes, func(i, j int) bool { return routes[i].Domain < routes[j].Domain })

@@ -55,9 +55,10 @@ routable from the host. Addresses are assigned by DHCP and change on every
 start; a fixed MAC address does not hold an address.
 
 The proxy therefore names backends instead of addressing them:
-`proxy_pass` uses a variable and `resolver` points at the network gateway, so
-nginx resolves `<container>.container.test` per request. A restarted container
-is reached at its new address without a configuration change.
+`proxy_pass` uses a variable and `resolver` points at the network gateway.
+nginx resolves `<container>.container.test` and caches answers for ten seconds.
+Restarting a container changes its proxy configuration generation even when
+the backend name is unchanged. The proxy continues to use DNS names.
 
 ## Configuration reload
 
@@ -83,10 +84,14 @@ the same proxy and must not be restarted as error recovery.
 hold the listening sockets until they finish shutting down, and one of them can
 accept a connection it then does not serve.
 
-`bay` therefore computes a generation value from the route list, writes
-it into the configuration, and polls `http://<proxy>/__bay/health`
-until that value is returned. `up`, `down`, `start`, `stop` and `restart` return
-only after the proxy serves the new configuration.
+`bay` therefore computes a generation value from the route list and
+each routed container's current IPv4 address and start timestamp. It writes
+that value into the configuration and polls
+`http://<proxy>/__bay/health` until the value is returned. A worker
+serving the generation from before a backend restart cannot complete this wait.
+Unchanged route and instance metadata retain the same generation. `up`, `down`,
+`start`, `stop` and `restart` return only after the proxy serves the new
+configuration.
 
 ## Certificates
 

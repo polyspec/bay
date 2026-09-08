@@ -10,6 +10,7 @@
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
+| 현재 백엔드 인스턴스를 확인한 후 재시작 완료 | 구현됨 | `TestBackendRestartWaitsForCurrentProxyGeneration`이 이전 인스턴스에서 대기가 종료되는 문제를 0.949초에 재현한다. 수정한 Routes·generation·대기 통합과 reload 회귀는 race 3.223초, 전체 stack race는 3.085초에 통과하며 `make check`도 통과한다. 실제 소비자 브라우저 검증은 대기 중이다 | 빌드됨; 미설치 |
 | 긴 라우트 이름을 위한 nginx server-name bucket 명시 | 구현됨 | 실제 `nginx -t`가 `TestRenderNginxLongNamesActualRuntime`의 61바이트 이름에서 `server_names_hash_bucket_size: 64` 오류를 재현(패키지 1.317초). Bucket 512로 수정 후 동일 테스트·이미지 통과(패키지 1.309초). `make check`와 전체 stack race 검사 통과(2.200초). 인증서 저장은 여전히 253바이트 도메인을 지원하지 않음 | 설치: `9823d0e` |
 | 공유 서비스를 재시작하지 않고 프록시 reload의 원래 오류 반환 | 구현됨 | `make check`와 `go test -race ./internal/stack -count=1` 통과. `TestReloadProxyOnlyExecutesReload`가 가짜 CLI로 성공·실패 모두 정확히 한 번의 exec, 원래 nginx stderr 반환, stop·start·교체 미호출을 검증 | 설치: `7df8a40` |
 | Status와 doctor가 머신 상태를 변경하지 않음 | 구현됨 | `go test ./cmd/bay -run 'Test(Status\|Doctor\|Queries)'`가 격리 fixture로 없는 상태·등록의 내용·모드·수정 시각 보존, 읽지 못한 공개 인증서 보고, 없거나 손상된 개인 키의 조회 성공을 검증 | 설치: `ea95bf0` |

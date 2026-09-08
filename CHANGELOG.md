@@ -5,6 +5,12 @@ the day the change was made.
 
 ## 2026-09-08
 
+### Verify the current backend instance after restart
+
+Proxy configuration generations include the routed container's current IPv4 address and start timestamp. Restart commands wait for a worker serving that instance's generation. Named backends, DNS cache duration and lifecycle time limits are unchanged.
+
+`TestBackendRestartWaitsForCurrentProxyGeneration` reproduces premature completion after an address or start-time change in 0.949 seconds. The corrected integration and reload regressions pass with race detection in 3.223 seconds. The full stack race suite passes in 3.085 seconds and `make check` passes. Installation and actual consumer browser verification remain pending.
+
 ### Size nginx's server-name bucket for long route names
 
 `RenderNginx` sets `server_names_hash_bucket_size 512` in the generated HTTP

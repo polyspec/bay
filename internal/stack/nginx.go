@@ -12,6 +12,8 @@ type Route struct {
 	Domain  string
 	Backend string // host:port reachable from inside the container network
 	Scheme  string // http or https
+	ipv4    string // current instance identity for the reload generation
+	started string
 }
 
 // HealthPath is served over plain HTTP by the default server and returns the

@@ -69,12 +69,12 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 	return res, nil
 }
 
-// routeGeneration returns a stable value for the route list. The health
-// endpoint reports it, so a caller can tell which configuration is running.
+// routeGeneration identifies routes and their current backend instances. A
+// worker from before a backend restart cannot satisfy the new generation wait.
 func routeGeneration(routes []Route) string {
 	h := sha256.New()
 	for _, r := range routes {
-		fmt.Fprintf(h, "%s\x00%s\x00%s\n", r.Domain, r.Scheme, r.Backend)
+		fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s\n", r.Domain, r.Scheme, r.Backend, r.ipv4, r.started)
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }
@@ -82,7 +82,10 @@ func routeGeneration(routes []Route) string {
 // WaitForGeneration polls the proxy's health endpoint until it reports the
 // configuration identified by generation, or the timeout expires.
 func WaitForGeneration(generation string, timeout time.Duration) error {
-	client := &http.Client{Timeout: 2 * time.Second}
+	return waitForGeneration(generation, timeout, &http.Client{Timeout: 2 * time.Second})
+}
+
+func waitForGeneration(generation string, timeout time.Duration, client *http.Client) error {
 	deadline := time.Now().Add(timeout)
 	var last string
 	for {

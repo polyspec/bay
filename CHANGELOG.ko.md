@@ -4,6 +4,12 @@
 
 ## 2026-09-08
 
+### 재시작 후 현재 백엔드 인스턴스 확인
+
+프록시 설정 generation에 라우트 컨테이너의 현재 IPv4 주소와 시작 시각을 포함한다. 재시작 명령은 해당 인스턴스의 generation을 제공하는 worker를 기다린다. DNS 백엔드 이름·캐시 시간·수명주기 제한 시간은 변경하지 않는다.
+
+`TestBackendRestartWaitsForCurrentProxyGeneration`이 주소 또는 시작 시각 변경 후 대기가 일찍 종료되는 문제를 0.949초에 재현한다. 수정한 통합 검사와 reload 회귀는 race 3.223초에 통과한다. 전체 stack race는 3.085초에 통과하며 `make check`도 통과한다. 설치와 실제 소비자 브라우저 검증은 대기 중이다.
+
 ### 긴 라우트 이름을 위한 nginx server-name bucket 크기 지정
 
 `RenderNginx`는 생성 HTTP 설정에 `server_names_hash_bucket_size 512`를
