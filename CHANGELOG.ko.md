@@ -18,7 +18,9 @@
 컨테이너와 임시 인증서를 소유하며 공유 프록시·DNS·이미지를 변경하지 않는다.
 네이티브 테스트를 끈 상태에서 `make check`가 통과했고
 `go test -race ./internal/stack -count=1 -timeout=120s`가 2.200초에 통과했다.
-설치와 애플리케이션 런타임·브라우저 검증은 별도이며 이 수정에 대해 아직 실행하지 않았다.
+`make -B install PREFIX=/opt/homebrew`로 설치한 바이너리는 변경 사항이 없는
+소스 `9823d0e`를 기록하며 `doctor`는 `nothing to do`를 보고한다.
+애플리케이션 런타임·브라우저 검증은 각 사용 프로젝트에서 기록한다.
 
 ### 프록시 reload 실패의 원래 오류 반환
 

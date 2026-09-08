@@ -20,8 +20,9 @@ With bucket 512, the unchanged test and image pass (test 1.010 seconds,
 and temporary certificates and does not change the shared proxy, DNS or images.
 With native tests disabled, `make check` passes and
 `go test -race ./internal/stack -count=1 -timeout=120s` passes in 2.200 seconds.
-Installation and application runtime/browser verification are separate and
-have not been performed for this correction.
+The installed binaries record clean source `9823d0e` after
+`make -B install PREFIX=/opt/homebrew`; `doctor` reports `nothing to do`.
+Application runtime and browser verification are recorded by each consumer.
 
 ### Proxy reload failures retain the original error
 
