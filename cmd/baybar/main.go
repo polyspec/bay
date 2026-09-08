@@ -184,15 +184,16 @@ func (a *app) setLanguageChoice(index string) {
 // report writes the outcome of an action to the window. Notifications require
 // a signed application and are not used.
 func (a *app) report(kind, format string, args ...any) {
+	line := fmt.Sprintf(format, args...)
 	a.mu.Lock()
-	a.message, a.kind = fmt.Sprintf(format, args...), kind
+	a.message, a.kind = line, kind
 	a.mu.Unlock()
 	if windowVisible() {
 		updateWindow(a.currentPanel())
 	}
-	if kind == "error" {
-		log.Printf("%s", fmt.Sprintf(format, args...))
-	}
+	// Every outcome is logged, not only the failures. What the window showed is
+	// otherwise gone as soon as the next action replaces it.
+	log.Printf("%s: %s", kind, line)
 }
 
 // machineClicked applies the machine setup when it is incomplete, and otherwise

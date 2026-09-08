@@ -14,14 +14,18 @@ them. `bay sync` rewrites it from the containers that are running,
 issues any certificate a route needs, reloads the proxy and waits until it
 serves the new configuration. It starts, stops and changes no container.
 
-The window carries the same action under Settings, MAINTENANCE.
+The window carries the same action under Settings, MAINTENANCE. It also logs
+every outcome now, not only the failures: what the window shows is otherwise
+gone as soon as the next action replaces it, and there was no way to read back
+what an action reported.
 `docs/operations/troubleshooting.md` names the symptom it answers, and how to
 read `X-Bay-Route` to tell which of a route's two targets replied.
 
 Verification: run on this machine it rewrote five routes and reloaded the proxy;
 every domain then answered 200 in under 45 ms and reported
 `x-bay-route: address`. From the window it rewrote
-`~/.bay/conf.d/stack.conf`, which the file's modification time confirms.
+`~/.bay/conf.d/stack.conf`, which the file's modification time confirms,
+and the window and the log both reported `프록시 설정을 다시 썼습니다 · 경로 5개`.
 
 ### A route is sent to the address it was built from
 
