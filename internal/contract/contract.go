@@ -85,6 +85,14 @@ func Commands() []Command {
 			Example: "bay doctor",
 		},
 		{
+			Name: "sync", Args: "",
+			Summary: "Rewrite the proxy configuration from the containers that are running.",
+			Effect: "Writes the server blocks and issues any certificate a route needs, " +
+				"then reloads the proxy and waits until it serves the new configuration. " +
+				"Starts, stops and changes no container.",
+			Example: "bay sync",
+		},
+		{
 			Name: "install", Args: "",
 			Summary: "Apply the machine setup now instead of during the next up.",
 			Effect: "Writes /etc/resolver entries, adds the certificate authority to " +

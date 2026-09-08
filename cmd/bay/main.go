@@ -90,6 +90,8 @@ func dispatch(cmd string) error {
 		return schema(flag.Args()[1:])
 	case "help":
 		return help(flag.Args()[1:])
+	case "sync":
+		return sync(m)
 	case "install":
 		return install(m)
 	case "uninstall":
@@ -306,6 +308,26 @@ func help(args []string) error {
 }
 
 // install applies the machine setup now, so the first up does not have to ask.
+// sync rewrites the proxy configuration from the containers that are running.
+// It is how a change to how that configuration is written reaches a machine
+// whose containers are already up: every other command that rewrites it also
+// starts or stops something.
+func sync(m *stack.Machine) error {
+	res, err := stack.SyncProxy(m)
+	if err != nil {
+		return err
+	}
+	for _, c := range res.Conflicts {
+		fmt.Fprintf(os.Stderr, "%s is served by %s; %s also claims it\n",
+			c.Domain, c.Kept, c.Dropped)
+	}
+	fmt.Printf("proxy %s with %d routes\n", res.Action, len(res.Routes))
+	for _, r := range res.Routes {
+		fmt.Printf("  %-28s %s\n", r.Domain, r.Address)
+	}
+	return nil
+}
+
 func install(m *stack.Machine) error {
 	// Register the project in the working directory so install covers it.
 	if cfg, err := stack.LoadIn(m, *file); err == nil {

@@ -5,6 +5,19 @@ the day the change was made.
 
 ## 2026-09-08
 
+### bay sync
+
+The proxy configuration is written by every command that starts or stops a
+container, and by nothing else. A change to how it is written therefore could
+not reach a machine whose containers were already running without restarting
+them. `bay sync` rewrites it from the containers that are running,
+issues any certificate a route needs, reloads the proxy and waits until it
+serves the new configuration. It starts, stops and changes no container.
+
+Verification: run on this machine it rewrote five routes and reloaded the proxy;
+every domain then answered 200 in under 45 ms and reported
+`x-bay-route: address`.
+
 ### A route is sent to the address it was built from
 
 A report said the proxy connected to an address the recreated container no

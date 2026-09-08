@@ -21,6 +21,7 @@ verifies that this file matches the code.
 | `domain [add|remove|default] [name]` | List the machine's domains, or change them. | Can require |
 | `status [--json]` | Print the proxy, the DNS server and every registered project. | No |
 | `doctor` | Report what machine setup is missing. Changes nothing. | No |
+| `sync` | Rewrite the proxy configuration from the containers that are running. | No |
 | `install` | Apply the machine setup now instead of during the next up. | Can require |
 | `uninstall` | Remove the DNS agent and the resolver entries. | Can require |
 | `brief [--json]` | Print the full usage contract on one screen. | No |
@@ -60,6 +61,10 @@ Reads state without registering the selected Compose project, creating certifica
 ### `doctor`
 
 Reads public certificate and setup state, including the selected project's domains without saving them. Creates no files and reads no private keys.
+
+### `sync`
+
+Writes the server blocks and issues any certificate a route needs, then reloads the proxy and waits until it serves the new configuration. Starts, stops and changes no container.
 
 ### `install`
 
