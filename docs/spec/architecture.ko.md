@@ -60,6 +60,16 @@ IP 주소는 유지되지 않는다.
 
 ## 설정 다시 읽기
 
+생성하는 HTTP 설정은 nginx의 기본 server-name bucket에 담기지 않는 긴 이름을
+위해 `server_names_hash_bucket_size 512`를 지정한다. 이름과 hash
+원소의 정렬·포인터 크기를 포함한 값이며 nginx의
+[2의 거듭제곱 지침](https://nginx.org/en/docs/http/server_names.html#optimization)을 따른다.
+`TestRenderNginxLongNamesActualRuntime`은 기존 `ProxyImage`의 `nginx -t`로
+61바이트 라우팅 이름의 실제 생성 설정을 검사한다. 명시 실행 명령은
+`BAY_SERVICE_E2E=1 go test ./internal/stack -run '^TestRenderNginxLongNamesActualRuntime$' -count=1 -v -timeout=120s`이다.
+이미지가 이미 있어야 하며, 자체 컨테이너와 임시 인증서를 만들고 소유권을 확인한
+컨테이너만 제거한다. 라우트 등록, 공유 프록시·DNS 변경, 이미지 pull·제거는 하지 않는다.
+
 공유 프록시의 설정을 다시 읽을 때는
 `container exec bay-edge nginx -s reload`를 정확히 한 번 실행한다.
 명령이 실패하면 nginx stderr를 포함한 원래 오류를 호출자에게 반환한다.
@@ -81,6 +91,10 @@ listening 소켓을 보유하며, 그동안 연결을 받아도 요청을 처리
 라우팅되는 도메인마다 유효 기간이 1년인 인증서를 하나 발급하며, 남은 기간이
 30일보다 짧으면 재발급한다. 기본 인증서는 위임한 모든 도메인과 각 wildcard를
 포함하므로 라우트가 없는 이름도 handshake를 완료하고 404를 받는다.
+
+인증서 파일명은 도메인 뒤에 `.crt` 또는 `.key`를 붙인다. 따라서 253바이트
+도메인은 파일시스템의 255바이트 파일명 한도를 넘으므로 현재 인증서 저장에서
+지원하지 않는다. 61바이트 설정 회귀는 이러한 이름의 TLS 지원을 검증하지 않는다.
 
 클라이언트는 상위 도메인이 단일 label인 wildcard를 거부하므로 `*.test`는
 `nope.test`에 적용되지 않는다. `dev.test`처럼 label이 둘인 도메인의

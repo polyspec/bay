@@ -10,6 +10,7 @@
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
+| 긴 라우트 이름을 위한 nginx server-name bucket 명시 | 구현됨 | 실제 `nginx -t`가 `TestRenderNginxLongNamesActualRuntime`의 61바이트 이름에서 `server_names_hash_bucket_size: 64` 오류를 재현(패키지 1.317초). Bucket 512로 수정 후 동일 테스트·이미지 통과(패키지 1.309초). `make check`와 전체 stack race 검사 통과(2.200초). 인증서 저장은 여전히 253바이트 도메인을 지원하지 않음 | 미설치 |
 | 공유 서비스를 재시작하지 않고 프록시 reload의 원래 오류 반환 | 구현됨 | `make check`와 `go test -race ./internal/stack -count=1` 통과. `TestReloadProxyOnlyExecutesReload`가 가짜 CLI로 성공·실패 모두 정확히 한 번의 exec, 원래 nginx stderr 반환, stop·start·교체 미호출을 검증 | 설치: `7df8a40` |
 | Status와 doctor가 머신 상태를 변경하지 않음 | 구현됨 | `go test ./cmd/bay -run 'Test(Status\|Doctor\|Queries)'`가 격리 fixture로 없는 상태·등록의 내용·모드·수정 시각 보존, 읽지 못한 공개 인증서 보고, 없거나 손상된 개인 키의 조회 성공을 검증 | 설치: `ea95bf0` |
 | 프로세스 시작 전에 로컬 이미지 tag 검증 | 구현됨 | `TestLocalImageTagActualRuntime`이 digest 별칭 누락을 재현하고 로컬 tag 초기화·재사용·비공개 실패 출력·네이티브 로그 보존을 검증하며 단위 테스트가 시작 전 이미지·소유자·설정 변경을 거부 | 설치: `ea95bf0` |

@@ -61,6 +61,18 @@ is reached at its new address without a configuration change.
 
 ## Configuration reload
 
+The generated HTTP configuration sets `server_names_hash_bucket_size 512`
+for names longer than nginx's default server-name bucket can hold.
+The value accounts for the name and the hash element's alignment and pointers;
+it follows nginx's [power-of-two guidance](https://nginx.org/en/docs/http/server_names.html#optimization).
+`TestRenderNginxLongNamesActualRuntime` checks the actual generated configuration
+for a 61-byte routed name with the existing `ProxyImage` and `nginx -t`.
+Its explicit command is
+`BAY_SERVICE_E2E=1 go test ./internal/stack -run '^TestRenderNginxLongNamesActualRuntime$' -count=1 -v -timeout=120s`.
+It requires the image to be present, creates its own container and temporary
+certificates, and removes only the container whose ownership it verifies. It
+does not register routes, change the shared proxy or DNS, or pull or remove images.
+
 Reloading the shared proxy runs exactly one
 `container exec bay-edge nginx -s reload`. If that command fails,
 the caller receives its original error, including nginx stderr. A reload
@@ -86,6 +98,11 @@ One leaf certificate is issued per routed domain, valid for one year and
 reissued when fewer than 30 days remain. A default certificate covers every
 delegated domain plus a wildcard, so a name with no route completes a
 handshake and receives 404.
+
+Certificate filenames append `.crt` or `.key` to the domain. A 253-byte domain
+therefore exceeds a filesystem's 255-byte filename limit and is not supported
+by the current certificate storage. The 61-byte configuration regression does
+not verify TLS support for such names.
 
 Clients reject a wildcard whose parent is a single label, so `*.test` does not
 apply to `nope.test`. A domain with two labels, such as `dev.test`, gives

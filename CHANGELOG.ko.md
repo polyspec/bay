@@ -4,6 +4,22 @@
 
 ## 2026-09-08
 
+### 긴 라우트 이름을 위한 nginx server-name bucket 크기 지정
+
+`RenderNginx`는 생성 HTTP 설정에 `server_names_hash_bucket_size 512`를
+지정한다. 라우트 이름과 reload 동작은 그대로다. 인증서 저장은 여전히 253바이트
+도메인에 필요한 파일명을 만들지 못한다.
+
+검증: 수정 전 격리된 `TestRenderNginxLongNamesActualRuntime`이 기존 프록시
+이미지의 실제 `nginx -t`로 61바이트 이름의 생성 설정을 검사했으며
+`server_names_hash_bucket_size: 64` 오류로 실패했다(테스트 0.990초, 패키지
+1.317초). Bucket 512로 수정한 뒤 변경하지 않은 테스트와 이미지가 통과했다
+(테스트 1.010초, 61바이트 하위 테스트 0.930초, 패키지 1.309초). 테스트는 자체
+컨테이너와 임시 인증서를 소유하며 공유 프록시·DNS·이미지를 변경하지 않는다.
+네이티브 테스트를 끈 상태에서 `make check`가 통과했고
+`go test -race ./internal/stack -count=1 -timeout=120s`가 2.200초에 통과했다.
+설치와 애플리케이션 런타임·브라우저 검증은 별도이며 이 수정에 대해 아직 실행하지 않았다.
+
 ### 프록시 reload 실패의 원래 오류 반환
 
 `ReloadProxy`는 `container exec bay-edge nginx -s reload`를 한 번

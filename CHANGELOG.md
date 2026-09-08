@@ -5,6 +5,24 @@ the day the change was made.
 
 ## 2026-09-08
 
+### Size nginx's server-name bucket for long route names
+
+`RenderNginx` sets `server_names_hash_bucket_size 512` in the generated HTTP
+configuration. Route names and reload behavior are unchanged. Certificate
+storage still cannot create the filenames required by a 253-byte domain.
+
+Verification: before the correction, the isolated
+`TestRenderNginxLongNamesActualRuntime` ran the existing proxy image's actual
+`nginx -t` against generated configuration for a 61-byte name and failed with
+`server_names_hash_bucket_size: 64` (test 0.990 seconds, package 1.317 seconds).
+With bucket 512, the unchanged test and image pass (test 1.010 seconds,
+61-byte subtest 0.930 seconds, package 1.309 seconds). The test owns its container
+and temporary certificates and does not change the shared proxy, DNS or images.
+With native tests disabled, `make check` passes and
+`go test -race ./internal/stack -count=1 -timeout=120s` passes in 2.200 seconds.
+Installation and application runtime/browser verification are separate and
+have not been performed for this correction.
+
 ### Proxy reload failures retain the original error
 
 `ReloadProxy` invokes `container exec bay-edge nginx -s reload` once.
