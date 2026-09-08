@@ -75,11 +75,13 @@ func Commands() []Command {
 		{
 			Name: "status", Args: "[--json]",
 			Summary: "Print the proxy, the DNS server and every registered project.",
+			Effect:  "Reads state without registering the selected Compose project, creating certificates, or changing machine setup. Missing or unreadable public certificates are reported; private keys are not read.",
 			Example: "bay status --json",
 		},
 		{
 			Name: "doctor", Args: "",
 			Summary: "Report what machine setup is missing. Changes nothing.",
+			Effect:  "Reads public certificate and setup state, including the selected project's domains without saving them. Creates no files and reads no private keys.",
 			Example: "bay doctor",
 		},
 		{

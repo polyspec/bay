@@ -20,8 +20,8 @@ type CertInfo struct {
 	Trusted   bool      `json:"trusted,omitempty"`
 	Path      string    `json:"path"`
 	Orphaned  bool      `json:"orphaned,omitempty"`
+	ReadError string    `json:"readError,omitempty"`
 	daysLeft  int
-	parseFail string
 }
 
 // DaysLeft returns the whole days remaining before the certificate expires. It
@@ -30,13 +30,13 @@ func (c CertInfo) DaysLeft() int { return c.daysLeft }
 
 // Unreadable returns why the certificate could not be parsed, or an empty
 // string when it was read.
-func (c CertInfo) Unreadable() string { return c.parseFail }
+func (c CertInfo) Unreadable() string { return c.ReadError }
 
 // Status returns a short description of the certificate's validity.
 func (c CertInfo) Status() string {
 	switch {
-	case c.parseFail != "":
-		return "unreadable: " + c.parseFail
+	case c.ReadError != "":
+		return "unreadable: " + c.ReadError
 	case c.Expired():
 		return "expired"
 	case c.daysLeft <= 30:
@@ -46,9 +46,9 @@ func (c CertInfo) Status() string {
 	}
 }
 
-func (c CertInfo) Expired() bool { return c.parseFail == "" && time.Now().After(c.NotAfter) }
+func (c CertInfo) Expired() bool { return c.ReadError == "" && time.Now().After(c.NotAfter) }
 func (c CertInfo) NeedsAttention() bool {
-	return c.parseFail != "" || c.Expired() || c.daysLeft <= 30 || c.Orphaned
+	return c.ReadError != "" || c.Expired() || c.daysLeft <= 30 || c.Orphaned
 }
 
 func pluralDays(n int) string {
@@ -61,7 +61,7 @@ func pluralDays(n int) string {
 // Certificates returns the leaf certificates in certDir. inUse names the
 // domains the machine routes; a certificate for any other name is reported as
 // orphaned.
-func (c *CA) Certificates(certDir string, inUse []string) ([]CertInfo, error) {
+func Certificates(certDir string, inUse []string) ([]CertInfo, error) {
 	entries, err := os.ReadDir(certDir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -91,12 +91,13 @@ func (c *CA) Certificates(certDir string, inUse []string) ([]CertInfo, error) {
 	return out, nil
 }
 
-// Info describes the CA itself.
-func (c *CA) Info() CertInfo {
-	info := readCert(c.CertPath())
+// AuthorityInfo reads the public CA certificate without opening a private key
+// or creating any machine state.
+func AuthorityInfo(dir string) CertInfo {
+	info := readCert(filepath.Join(dir, "ca.crt"))
 	info.Name = "ca"
 	info.IsCA = true
-	info.Trusted = CATrusted(c.CertPath())
+	info.Trusted = info.ReadError == "" && CATrusted(info.Path)
 	return info
 }
 
@@ -104,17 +105,13 @@ func readCert(path string) CertInfo {
 	info := CertInfo{Path: path}
 	pemBytes, err := os.ReadFile(path)
 	if err != nil {
-		info.parseFail = err.Error()
+		info.ReadError = err.Error()
 		return info
 	}
-	cert, _, err := parsePair(pemBytes, pemBytes)
+	cert, err := parseCertOnly(pemBytes)
 	if err != nil {
-		// parsePair also wants a key; fall back to reading the certificate.
-		cert, err = parseCertOnly(pemBytes)
-		if err != nil {
-			info.parseFail = err.Error()
-			return info
-		}
+		info.ReadError = err.Error()
+		return info
 	}
 	info.Subject = cert.Subject.CommonName
 	info.DNSNames = cert.DNSNames

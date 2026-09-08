@@ -10,8 +10,12 @@ bay status     # the proxy, and every project already registered
 bay domain     # the domains this machine serves
 ```
 
-`doctor` changes nothing. When it reports missing steps, run
-`bay install`; see [Install](install.md).
+`doctor` and `status` only read state. They do not register the selected Compose
+file, create a certificate authority, or read its private key. Missing or
+unreadable public certificates appear in the report; `status --json` includes
+`certificates.authority.readError` when the public CA cannot be read. `doctor`
+includes the selected project's domains in its setup report without saving them.
+When it reports missing steps, run `bay install`; see [Install](install.md).
 
 `status` lists the domains other projects already serve. Choose a different name
 for yours: `up` refuses a domain another running project serves and names that

@@ -2,6 +2,8 @@
 
 Status: implemented.
 
+Read-only commands follow the [diagnostic rules](diagnostics.md).
+
 The tables below are generated from `internal/contract`. Run
 `make docs-generate` after changing a command declaration, and `make docs-check`
 verifies that this file matches the code.
@@ -50,6 +52,14 @@ Recreates selected owned containers, including explicitly retried initializers, 
 ### `domain`
 
 add writes an /etc/resolver entry for the domain. remove deletes it. default changes the domain projects use when their Compose file names none.
+
+### `status`
+
+Reads state without registering the selected Compose project, creating certificates, or changing machine setup. Missing or unreadable public certificates are reported; private keys are not read.
+
+### `doctor`
+
+Reads public certificate and setup state, including the selected project's domains without saving them. Creates no files and reads no private keys.
 
 ### `install`
 

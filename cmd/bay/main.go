@@ -354,19 +354,6 @@ func status(m *stack.Machine, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	// Register the project in the working directory so status includes it
-	// before its first up.
-	// Register again when the recorded path or domains differ, so the entry
-	// matches the file on disk.
-	if cfg, err := stack.LoadIn(m, *file); err == nil {
-		if known, ok := groupKnown(m, cfg.Name); !ok || known.StackPath != cfg.Path() ||
-			!sameDomains(known.Domains, cfg.Ref().Domains) {
-			if err := m.Register(cfg.Ref()); err != nil {
-				return err
-			}
-		}
-	}
-
 	snap, err := stack.Take(m, *addr)
 	if err != nil {
 		return err
@@ -378,19 +365,6 @@ func status(m *stack.Machine, args []string) error {
 	}
 	printSnapshot(snap)
 	return nil
-}
-
-func groupKnown(m *stack.Machine, name string) (stack.GroupRef, bool) {
-	groups, err := m.Groups()
-	if err != nil {
-		return stack.GroupRef{}, false
-	}
-	for _, g := range groups {
-		if g.Name == name {
-			return g, true
-		}
-	}
-	return stack.GroupRef{}, false
 }
 
 func printSnapshot(snap stack.Snapshot) {
@@ -410,6 +384,9 @@ func printSnapshot(snap stack.Snapshot) {
 		dnsState = "loaded but out of date"
 	}
 	fmt.Printf("dns    %-22s %s on %s\n", d.Label, dnsState, d.Addr)
+	if authority := snap.Certificates.Authority; authority.Unreadable() != "" {
+		fmt.Printf("authority %s\n", authority.Status())
+	}
 	if len(snap.Machine.Pending) > 0 {
 		fmt.Printf("setup  %d step(s) pending; run \"bay install\"\n", len(snap.Machine.Pending))
 	}
@@ -442,10 +419,7 @@ func printSnapshot(snap stack.Snapshot) {
 // doctor reports what the machine setup would change. It changes nothing and
 // requests no privileges.
 func doctor(m *stack.Machine) error {
-	ca, err := stack.LoadOrCreateCA(m.Dir)
-	if err != nil {
-		return err
-	}
+	authority := stack.AuthorityInfo(m.Dir)
 	domains, err := m.Domains()
 	if err != nil {
 		return err
@@ -456,7 +430,7 @@ func doctor(m *stack.Machine) error {
 		domains = union(domains, cfg.Domains())
 		fmt.Printf("group     %s  (%s)\n", cfg.Name, cfg.Path())
 	}
-	in := stack.Install{Domains: domains, Addr: *addr, CAPath: ca.CertPath()}
+	in := stack.Install{Domains: domains, Addr: *addr, CAPath: authority.Path}
 
 	shown := "none"
 	if len(domains) > 0 {
@@ -475,9 +449,15 @@ func doctor(m *stack.Machine) error {
 		agent = "loaded but out of date"
 	}
 	fmt.Printf("dns agent %s\n", agent)
+	if authority.Unreadable() != "" {
+		fmt.Printf("authority %s\n", authority.Status())
+	}
 
 	pending := in.Pending()
-	if len(pending) == 0 && agent == "loaded and current" {
+	if _, err := os.Stat(authority.Path); os.IsNotExist(err) {
+		pending = append([]string{"create local certificate authority"}, pending...)
+	}
+	if len(pending) == 0 && agent == "loaded and current" && authority.Unreadable() == "" {
 		fmt.Println("\nnothing to do")
 		return nil
 	}

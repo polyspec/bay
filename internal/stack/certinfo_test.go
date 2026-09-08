@@ -26,7 +26,7 @@ func TestCertificatesReportUseAndExpiry(t *testing.T) {
 		}
 	}
 
-	list, err := ca.Certificates(certDir, []string{"a.test"})
+	list, err := Certificates(certDir, []string{"a.test"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,14 +56,14 @@ func TestCertificatesReportUseAndExpiry(t *testing.T) {
 }
 
 func TestCertificatesReportsUnreadableFiles(t *testing.T) {
-	ca, _, certDir := newCA(t)
+	_, _, certDir := newCA(t)
 	if err := os.MkdirAll(certDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(certDir, "broken.crt"), []byte("not pem"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	list, err := ca.Certificates(certDir, nil)
+	list, err := Certificates(certDir, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestRotateCAReplacesEverything(t *testing.T) {
 	if _, err := ca.Issue(certDir, "a.test"); err != nil {
 		t.Fatal(err)
 	}
-	before := ca.Info()
+	before := AuthorityInfo(dir)
 
 	retired, err := RotateCA(dir, certDir)
 	if err != nil {
@@ -123,7 +123,7 @@ func TestRotateCAReplacesEverything(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if next.Info().NotAfter.Equal(before.NotAfter) && next.cert.SerialNumber.Cmp(ca.cert.SerialNumber) == 0 {
+	if AuthorityInfo(dir).NotAfter.Equal(before.NotAfter) && next.cert.SerialNumber.Cmp(ca.cert.SerialNumber) == 0 {
 		t.Fatal("the authority was not actually replaced")
 	}
 }

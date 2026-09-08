@@ -139,11 +139,8 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 	if err != nil {
 		return snap, err
 	}
-	ca, err := LoadOrCreateCA(m.Dir)
-	if err != nil {
-		return snap, err
-	}
-	install := Install{Domains: domains, Addr: addr, CAPath: ca.CertPath()}
+	authority := AuthorityInfo(m.Dir)
+	install := Install{Domains: domains, Addr: addr, CAPath: authority.Path}
 	domainList, err := domainStatuses(m, domains)
 	if err != nil {
 		return snap, err
@@ -152,8 +149,8 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 		StateDir:   m.Dir,
 		Domains:    domains,
 		DomainList: domainList,
-		CAPath:     ca.CertPath(),
-		CATrusted:  CATrusted(ca.CertPath()),
+		CAPath:     authority.Path,
+		CATrusted:  authority.Trusted,
 		Pending:    install.Pending(),
 		DNS: DNSStatus{
 			Label:   DNSAgentLabel,
@@ -185,11 +182,11 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 	for _, r := range routes {
 		inUse = append(inUse, r.Domain)
 	}
-	issued, err := ca.Certificates(m.CertDir(), inUse)
+	issued, err := Certificates(m.CertDir(), inUse)
 	if err != nil {
 		return snap, err
 	}
-	snap.Certificates = CertStatus{Authority: ca.Info(), Issued: issued}
+	snap.Certificates = CertStatus{Authority: authority, Issued: issued}
 
 	byContainer := map[string]ServiceInstance{}
 	for _, in := range instances {

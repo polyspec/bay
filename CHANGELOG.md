@@ -5,6 +5,23 @@ the day the change was made.
 
 ## 2026-09-08
 
+### Status and doctor read public state without creating or registering it
+
+`status` no longer registers or refreshes the selected Compose project. `doctor`
+and the command/window snapshot read public certificates without creating a CA
+or opening its private key. Missing and unreadable public certificates are
+reported, including `certificates.authority.readError` in JSON. `doctor` still
+includes the selected project's domains when describing setup, without saving
+them. `up` and explicit installation retain their setup behavior.
+
+Verification: isolated CLI regressions reproduced state creation and failure on
+a malformed private key before the correction. They now preserve absent state
+and existing registration bytes, modes and modification times, report malformed
+public certificates, and allow public queries with an absent or malformed key.
+`make check` and `go test -race ./cmd/bay ./internal/stack
+./internal/contract -count=1 -timeout=120s` passed with native tests disabled.
+No installation or container lifecycle operation was run for this change.
+
 ### The window is built from the design file, and reads in English or Korean
 
 `design/Mockups.dc.html` holds ten screens of the window and is the source of its

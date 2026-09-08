@@ -30,6 +30,7 @@ var needsTwin = []string{
 	"docs/operations/troubleshooting.md",
 	"docs/spec/service-lifecycle.md",
 	"docs/spec/volumes.md",
+	"docs/spec/diagnostics.md",
 }
 
 var (

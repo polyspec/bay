@@ -10,7 +10,11 @@ bay status     # 프록시와 이미 등록된 모든 프로젝트
 bay domain     # 이 머신이 제공하는 도메인
 ```
 
-`doctor`는 아무것도 바꾸지 않는다. 빠진 단계를 보고하면 `bay install`을
+`doctor`와 `status`는 상태만 읽는다. 선택한 Compose 파일을 등록하거나 인증 기관을
+생성하거나 그 개인 키를 읽지 않는다. 없거나 읽을 수 없는 공개 인증서는 결과에
+표시하며, 공개 CA를 읽지 못하면 `status --json`에
+`certificates.authority.readError`가 포함된다. `doctor`는 선택한 프로젝트의 도메인을
+저장하지 않고 준비 보고에 포함한다. 빠진 단계를 보고하면 `bay install`을
 실행한다. [설치](install.ko.md) 참고.
 
 `status`는 다른 프로젝트가 이미 제공 중인 도메인도 보여준다. 자기 프로젝트에는
