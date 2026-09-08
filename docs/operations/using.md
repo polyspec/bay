@@ -172,10 +172,12 @@ bay restart web
 bay logs -f web        # follow one service's output
 bay status             # the proxy and every registered project
 bay status --json      # the same, for another program
+bay sync               # rewrite the proxy configuration, change no container
 ```
 
-The application performs the same actions. The project screen carries Start,
-Restart and Stop; each service row carries Start, Stop and Logs.
+The application performs the same actions. The project screen carries the start,
+restart and stop actions in its header; each service row carries Logs, and
+selecting a service opens its route, its container and the tail of its output.
 
 ## How a request is served
 

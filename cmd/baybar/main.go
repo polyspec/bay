@@ -411,14 +411,34 @@ func (a *app) run(rt *stack.Runtime, parts []string) error {
 	if parts[0] == "setup" {
 		return rt.EnsureInstalled()
 	}
+	if parts[0] == "proxy-sync" {
+		// The proxy configuration is written by every action that starts or
+		// stops a container, and by nothing else. This writes it from what is
+		// running, so a change to how it is written reaches a machine whose
+		// containers are already up.
+		res, err := stack.SyncProxy(rt.Machine)
+		if err != nil {
+			return err
+		}
+		n := len(res.Routes)
+		rt.Progress(text.P("rewrote the proxy configuration · %d route",
+			"rewrote the proxy configuration · %d routes", n, n))
+		return nil
+	}
 	if parts[0] == "proxy-restart" {
 		// The proxy is generated from the containers that are running, so
 		// removing it and syncing again re-publishes every route.
 		if err := stack.StopProxy(); err != nil {
 			return err
 		}
-		_, err := stack.SyncProxy(rt.Machine)
-		return err
+		res, err := stack.SyncProxy(rt.Machine)
+		if err != nil {
+			return err
+		}
+		n := len(res.Routes)
+		rt.Progress(text.P("rewrote the proxy configuration · %d route",
+			"rewrote the proxy configuration · %d routes", n, n))
+		return nil
 	}
 	if parts[0] == "do-machine-uninstall" {
 		return a.uninstallMachine(rt)

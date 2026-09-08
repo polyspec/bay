@@ -13,6 +13,24 @@ nothing, and `bay status`, which reports what is running.
 | Certificate warning on an unrouted name | A wildcard whose parent is a single label is rejected by clients | Use a two-label domain such as `shop.test` |
 | A command asks for the password | The project uses a domain the machine does not delegate yet | Expected; it is asked once per domain |
 | The browser still fails after a fix | The browser cached the certificate | Open a new window |
+| A name times out, or answers 504 | The route holds the address the container had before it was recreated | `bay sync` |
+
+## Which target answered
+
+Every response carries `X-Bay-Route`. `address` means the route reached
+the container at the address its configuration was built from. `name` means that
+address stopped answering and the route fell back to the container's name, which
+the runtime resolves.
+
+```sh
+curl -sD- -o /dev/null https://web.test/ | grep -i x-bay-route
+```
+
+A route that keeps answering through the name has an address that is out of
+date, which happens when a container is recreated by something other than
+bay. `bay sync` rewrites the configuration from the containers
+that are running and reloads the proxy. It starts, stops and changes no
+container.
 
 ## Reading the state from another program
 

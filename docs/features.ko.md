@@ -24,6 +24,7 @@
 | 컨테이너 주소 변경 추적 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestRecreatedServiceIsReachedAtOnceActualRuntime`가 서비스를 재생성하고 그에 맞춘 설정을 쓴 뒤, 요청 하나가 주소를 통해 21ms에 응답됨을 확인. 컨테이너 이름을 쓰던 이전 설계에서는 같은 요청이 1분 0.027초 뒤 504였음 | 예 |
 | bay 없이 재생성된 컨테이너에서 복구 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestRecreatedBehindBayRecoversActualRuntime`가 bay을 거치지 않고 컨테이너를 재생성한 뒤 경로가 이름으로 2초 만에 복구되고, 어떤 요청도 2.024초를 넘지 않음을 확인 | 예 |
 | 컨테이너를 건드리지 않고 프록시 설정 다시 쓰기 | 구현됨 | `bay sync`가 이 머신의 경로 5개를 다시 쓰고 프록시를 리로드했고, 이후 모든 도메인이 45ms 안에 200으로 응답하며 `x-bay-route: address`를 반환. 설정을 다시 쓰는 다른 모든 명령은 컨테이너를 시작하거나 정지시킴 | 예 |
+| 창에서 같은 다시 쓰기 | 구현됨 | 설정 화면 유지 관리에 있음. 눌렀을 때 `~/.bay/conf.d/stack.conf`가 다시 쓰였음을 파일 수정 시각으로 확인. 표시되는 문구는 화면에서 읽지 못했음. 합성 클릭이 창에 전달되지 않게 되었고, 다른 모든 동작의 결과와 같은 경로를 쓴다 | 예 |
 | 오래된 주소 연결은 매달리지 않고 실패 | 구현됨 | `go test ./internal/stack -run TestConnectTimeoutIsBounded`가 모든 `proxy_pass`에 상한이 있는지 검사. 상한이 없을 때 재생성된 컨테이너에서 1분 0.027초를 기다린 뒤 504가 났음 | 예 |
 | 프록시가 새 설정을 제공한 뒤 명령이 반환 | 구현됨 | `BAY_E2E=1 go test ./internal/stack`이 15초 클라이언트 시간 초과로 실패하던 자리에서 4초 이내에 완료 | 예 |
 | 도메인 없는 internal 서비스 | 구현됨 | `go test ./internal/stack`이 라벨을 검사하고, 종단 테스트가 라우트와 인증서가 없음을 확인 | 예 |
