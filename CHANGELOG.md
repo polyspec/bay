@@ -5,6 +5,19 @@ the day the change was made.
 
 ## 2026-09-08
 
+### Proxy reload failures retain the original error
+
+`ReloadProxy` invokes `container exec bay-edge nginx -s reload` once.
+A failed command returns its original error, including nginx stderr, without
+stopping, starting, deleting or recreating the shared proxy.
+
+Verification: `TestReloadProxyOnlyExecutesReload` first reproduced a swallowed
+error and unexpected stop/start calls through a fake CLI. The corrected function
+passes the success and failure cases with race detection. `make check` passes,
+and `go test -race ./internal/stack -count=1 -timeout=120s` passes in 1.958 seconds
+with native tests disabled. No installation or actual container lifecycle
+command was run for this change.
+
 ### Status and doctor read public state without creating or registering it
 
 `status` no longer registers or refreshes the selected Compose project. `doctor`

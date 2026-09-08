@@ -4,6 +4,18 @@
 
 ## 2026-09-08
 
+### 프록시 reload 실패의 원래 오류 반환
+
+`ReloadProxy`는 `container exec bay-edge nginx -s reload`를 한 번
+호출한다. 명령이 실패하면 공유 프록시를 중지·시작·삭제·재생성하지 않고 nginx
+stderr를 포함한 원래 오류를 반환한다.
+
+검증: `TestReloadProxyOnlyExecutesReload`가 가짜 CLI로 오류가 사라지고 stop/start가
+호출되는 현상을 먼저 재현했다. 수정한 함수의 성공·실패 경우는 race 검사를 통과했다.
+`make check`가 통과했고, 네이티브 테스트를 끈 상태에서
+`go test -race ./internal/stack -count=1 -timeout=120s`가 1.958초에 통과했다.
+이 변경의 검증에서 설치나 실제 컨테이너 생명주기 명령은 실행하지 않았다.
+
 ### Status와 doctor가 생성·등록 없이 공개 상태를 조회
 
 `status`는 선택한 Compose 프로젝트를 등록·갱신하지 않는다. `doctor`와 명령·창의

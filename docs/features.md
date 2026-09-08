@@ -11,6 +11,7 @@ Source `ea95bf0` was installed with `make -B install PREFIX=/opt/homebrew`. The 
 
 | Feature | Status | Evidence | Shipped |
 | --- | --- | --- | --- |
+| Proxy reload errors preserve the original failure without restarting shared services | Implemented | `make check` and `go test -race ./internal/stack -count=1` pass; `TestReloadProxyOnlyExecutesReload` uses a fake CLI to verify the original nginx stderr and exactly one exec on success and failure, with no stop, start or replacement | Built; not installed |
 | Status and doctor leave machine state unchanged | Implemented | `go test ./cmd/bay -run 'Test(Status\|Doctor\|Queries)'` uses isolated fixtures to preserve absent state and registration bytes, modes and modification times, report unreadable public certificates, and succeed with absent or malformed private keys | Installed: `ea95bf0` |
 | Local image tags are verified before process start | Implemented | `TestLocalImageTagActualRuntime` reproduces a missing digest alias and verifies local-tag initialization, unchanged reuse, private failure output and native log retention; unit tests reject changed image/owner/config before start | Installed: `ea95bf0` |
 | Compose-managed durable named volumes | Implemented | `make check` and `go test -race ./internal/stack` cover ownership and declaration validation; `BAY_SERVICE_E2E=1 go test -race ./internal/stack -run TestManagedVolumeActualRuntime` confirms data and volume identity survive service removal/recreation | Installed: `ea95bf0` |

@@ -275,19 +275,11 @@ func sameDir(a, b string) bool {
 // StopProxy removes the proxy. Callers remove it when no route remains.
 func StopProxy() error { return Remove(ProxyName) }
 
-// ReloadProxy signals the running nginx to re-read its configuration. It stops
-// and starts the container when the signal fails.
+// ReloadProxy signals the running nginx to re-read its configuration and
+// returns a failed command's original error without restarting the proxy.
 func ReloadProxy() error {
-	if _, err := run("exec", ProxyName, "nginx", "-s", "reload"); err != nil {
-		// The runtime has no restart subcommand.
-		if _, serr := run("stop", ProxyName); serr != nil {
-			return err
-		}
-		if _, serr := run("start", ProxyName); serr != nil {
-			return err
-		}
-	}
-	return nil
+	_, err := run("exec", ProxyName, "nginx", "-s", "reload")
+	return err
 }
 
 func run(args ...string) ([]byte, error) {

@@ -1,5 +1,7 @@
 # Architecture
 
+[Korean](architecture.ko.md).
+
 Status: implemented.
 
 `bay` runs Compose projects on Apple `container` and serves each
@@ -58,6 +60,12 @@ nginx resolves `<container>.container.test` per request. A restarted container
 is reached at its new address without a configuration change.
 
 ## Configuration reload
+
+Reloading the shared proxy runs exactly one
+`container exec bay-edge nginx -s reload`. If that command fails,
+the caller receives its original error, including nginx stderr. A reload
+failure must not stop, start, delete or recreate the proxy. Other projects use
+the same proxy and must not be restarted as error recovery.
 
 `nginx -s reload` returns after sending the signal. The workers being replaced
 hold the listening sockets until they finish shutting down, and one of them can
