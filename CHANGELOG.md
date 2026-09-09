@@ -12,9 +12,14 @@ the fourth ended 14, so nothing in a card lined up on the right. The four also
 took 14/12, 9/9, 14/8 and 10/10 above and below, so the gap at every boundary
 was different and nothing decided which gap belonged where.
 
-Every row takes the same box: 9 above and below, 14 on each side. What a row is
+Every row takes the same box: 5 above and below, 14 on each side. What a row is
 is carried by its type size and its colour. A rule inside a card that names its
 parts keeps to the same margin instead of running edge to edge.
+
+A row carries half the gap and the card carries the other half at its edges, so
+the space between two rows reads the same as the space at the card's edge. With
+a full gap on each row, two rows with no rule between them stood twice the
+card's own edge apart and read as unrelated.
 
 Verification: `make check` passes. The window was not seen: it is a menu bar
 application and does not come forward from a script.
