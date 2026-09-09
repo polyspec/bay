@@ -5,15 +5,16 @@ the day the change was made.
 
 ## 2026-09-09
 
-### Give every row in a card the same margins
+### Give every row in a card the same box
 
 Three of the four kinds of row ended 12 points from the card's right edge and
-the fourth ended 14, so nothing in a card lined up on the right. Every row now
-uses 14 on both sides, and a rule inside a card that names its parts keeps to
-the same margin instead of running edge to edge.
+the fourth ended 14, so nothing in a card lined up on the right. The four also
+took 14/12, 9/9, 14/8 and 10/10 above and below, so the gap at every boundary
+was different and nothing decided which gap belonged where.
 
-A title and a label mark where a part begins, so each takes more space above it
-than the rows it introduces: 14 above, and 12 and 8 below.
+Every row takes the same box: 9 above and below, 14 on each side. What a row is
+is carried by its type size and its colour. A rule inside a card that names its
+parts keeps to the same margin instead of running edge to edge.
 
 Verification: `make check` passes. The window was not seen: it is a menu bar
 application and does not come forward from a script.
