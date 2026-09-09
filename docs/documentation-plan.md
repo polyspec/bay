@@ -73,6 +73,7 @@ they cannot disagree with the implementation.
 | `cli.md` | Command contract: arguments, effects, exit behavior, privilege requirements |
 | `compose-schema.md` | `x-bay` keys, `bay.*` labels, defaults, validation rules |
 | `machine-state.md` | Files and system state created outside the repository, and how each is removed |
+| `peers.md` | Reaching another machine's domains: identity, what is published, what is admitted |
 
 ### Operations, `docs/operations/`
 

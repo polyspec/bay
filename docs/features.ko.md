@@ -25,6 +25,7 @@
 | bay 없이 재생성된 컨테이너에서 복구 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestRecreatedBehindBayRecoversActualRuntime`가 bay을 거치지 않고 컨테이너를 재생성한 뒤 경로가 이름으로 2초 만에 복구되고, 어떤 요청도 2.024초를 넘지 않음을 확인 | 예 |
 | 컨테이너를 건드리지 않고 프록시 설정 다시 쓰기 | 구현됨 | `bay sync`가 이 머신의 경로 5개를 다시 쓰고 프록시를 리로드했고, 이후 모든 도메인이 45ms 안에 200으로 응답하며 `x-bay-route: address`를 반환. 설정을 다시 쓰는 다른 모든 명령은 컨테이너를 시작하거나 정지시킴 | 예 |
 | 창에서 같은 다시 쓰기 | 구현됨 | 설정 화면 유지 관리에 있음. 눌렀을 때 `~/.bay/conf.d/stack.conf`가 다시 쓰였음을 파일 수정 시각으로 확인했고, 창과 로그 모두 `프록시 설정을 다시 썼습니다 · 경로 5개`를 보고함 | 예 |
+| 다른 기계의 도메인에 닿기 | 구현되지 않음 | `docs/spec/peers.ko.md`가 설계와 그 근거가 된 측정을 서술한다. `container run -p 443:80`이 관리자 권한 없이 `*.443`에 붙었고, 주소만으로는 기본 인증서와 함께 404, 주소와 올바른 이름으로는 그 사이트, 프록시가 받아들이지 않는 주소에서는 같은 요청이 403이었다 | 아니오 |
 | 미사용 인증서를 별도 목록으로, 개별과 일괄 제거 | 구현됨 | 인증서 화면이 발급됨과 미사용을 나누어 표시하고, 미사용 머리글에 `전체 N개 제거`, 각 행에 `제거`가 있음. `go test ./cmd/baybar -run TestUnusedCertificates`가 일괄 동작이 고르는 대상을 검사. 이 머신에서 머리글이 `전체 17개 제거`로 표시됐고 확인 창을 화면으로 읽었음. 취소했으므로 인증서 24개는 그대로 | 예 |
 | 그 이름을 요구하는 게 없을 때만 인증서가 미사용 | 구현됨 | `go test ./internal/stack -run 'TestOnlyANameNothingAsksForIsUnused\|TestAServedDomainsCertificateIsNotUnused\|TestTheUnusedTestIgnoresCase\|TestNothingIsUnusedWhileAProjectCannotBeRead'`가 라우트 없는 선언된 도메인, 제공 중인 도메인, 대소문자, 파일은 있으나 읽지 못한 프로젝트를 검사. 실행 여부는 판단 근거가 아님. 변경 전에는 프로젝트가 정지했을 뿐인데 `api.platform3.test`를 미사용이라 부르고 제거를 제안했음 | 예 |
 | 긴 이름은 구분되는 부분을 남긴다 | 구현됨 | 인증서 목록에 이름 24개가 있었고 그중 14개는 해시만 다름. 140포인트 고정 열에서는 전부 `console.platform-nat…`으로 읽혔음. 이제 이름이 행에서 남는 폭을 가져가고 가운데를 버려 `console.plat…605595.test`로 읽히며, 옆의 문구도 온전히 남음 | 예 |

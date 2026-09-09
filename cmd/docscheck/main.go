@@ -28,6 +28,7 @@ var needsTwin = []string{
 	"docs/operations/install.md",
 	"docs/operations/using.md",
 	"docs/operations/troubleshooting.md",
+	"docs/spec/peers.md",
 	"docs/spec/service-lifecycle.md",
 	"docs/spec/volumes.md",
 	"docs/spec/diagnostics.md",

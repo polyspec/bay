@@ -69,6 +69,7 @@ Compose 파일로 대체된 `stack.yaml` 형식을 설명한다. `GUIDE.md`는 �
 | `cli.md` | 명령 계약: 인자, 효과, 종료 동작, 권한 요구 |
 | `compose-schema.md` | `x-bay` 키, `bay.*` 라벨, 기본값, 검증 규칙 |
 | `machine-state.md` | 저장소 밖에 생성되는 파일과 시스템 상태, 각각의 제거 방법 |
+| `peers.md` | 다른 기계의 도메인에 닿기: 신원, 공개하는 것, 받아들이는 것 |
 
 ### 운영, `docs/operations/`
 
