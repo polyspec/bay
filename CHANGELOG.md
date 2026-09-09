@@ -5,6 +5,18 @@ the day the change was made.
 
 ## 2026-09-09
 
+### A certificate is unused only when nothing asks for its name
+
+A certificate was called unused when no route served its name. A stopped project
+serves nothing, so its certificates were all reported as unused and offered for
+removal, which is what the next start needs. A certificate is unused now only
+when neither a route nor a registered project asks for its name.
+
+Verification: `make check`, including a test over a declared domain with no
+route, a routed domain, and case. On this machine, with every project stopped,
+the list called `api.platform3.test` unused before the change; it now names the
+project that declares it.
+
 ### A long name in a list keeps what tells it apart
 
 The certificate list gives each name a fixed column. Names that share a prefix

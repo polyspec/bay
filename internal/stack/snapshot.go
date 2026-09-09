@@ -178,16 +178,6 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 		return snap, err
 	}
 
-	inUse := make([]string, 0, len(routes))
-	for _, r := range routes {
-		inUse = append(inUse, r.Domain)
-	}
-	issued, err := Certificates(m.CertDir(), inUse)
-	if err != nil {
-		return snap, err
-	}
-	snap.Certificates = CertStatus{Authority: authority, Issued: issued}
-
 	byContainer := map[string]ServiceInstance{}
 	for _, in := range instances {
 		byContainer[in.Container] = in
@@ -196,9 +186,29 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 	if err != nil {
 		return snap, err
 	}
+	// A stopped project still asks for its domains, and starting it needs their
+	// certificates, so what the projects declare is collected alongside what is
+	// routed right now.
+	var declared []string
 	for _, g := range groups {
-		snap.Groups = append(snap.Groups, groupStatus(m, g, byContainer, routed))
+		status := groupStatus(m, g, byContainer, routed)
+		snap.Groups = append(snap.Groups, status)
+		for _, svc := range status.Services {
+			if svc.Domain != "" {
+				declared = append(declared, svc.Domain)
+			}
+		}
 	}
+
+	served := make([]string, 0, len(routes))
+	for _, r := range routes {
+		served = append(served, r.Domain)
+	}
+	issued, err := Certificates(m.CertDir(), served, declared)
+	if err != nil {
+		return snap, err
+	}
+	snap.Certificates = CertStatus{Authority: authority, Issued: issued}
 	return snap, nil
 }
 

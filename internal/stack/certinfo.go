@@ -58,10 +58,12 @@ func pluralDays(n int) string {
 	return "s"
 }
 
-// Certificates returns the leaf certificates in certDir. inUse names the
-// domains the machine routes; a certificate for any other name is reported as
-// orphaned.
-func Certificates(certDir string, inUse []string) ([]CertInfo, error) {
+// Certificates returns the leaf certificates in certDir. routed names the
+// domains the machine serves right now; declared names the domains the
+// registered projects ask for, whether or not they are running. A certificate
+// for any other name is reported as orphaned: a stopped project needs its
+// certificate the moment it starts again.
+func Certificates(certDir string, routed, declared []string) ([]CertInfo, error) {
 	entries, err := os.ReadDir(certDir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -69,8 +71,11 @@ func Certificates(certDir string, inUse []string) ([]CertInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	used := make(map[string]bool, len(inUse))
-	for _, d := range inUse {
+	used := make(map[string]bool, len(routed)+len(declared))
+	for _, d := range routed {
+		used[strings.ToLower(d)] = true
+	}
+	for _, d := range declared {
 		used[strings.ToLower(d)] = true
 	}
 
