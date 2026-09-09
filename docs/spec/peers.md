@@ -15,50 +15,73 @@ software this project already owns.
 ## Identity
 
 A peer is identified by the fingerprint of its certificate authority. The
-fingerprint is what a peer is stored under, what the approval is given to, and
-what the proxy admits.
+fingerprint is what a peer is stored under and what the approval is given to.
 
 The machine's name and address are attributes read from the peer. They change
 without making it a different peer, they are never compared, and they never
 appear in a domain. A name is shown; nothing is decided by it.
 
+## Why a peer is not recognised by its address
+
+The runtime rewrites the source address of a published port. A request from the
+network and a request from this machine both reach the proxy as the network
+gateway, so the proxy cannot tell them apart. An address is therefore not used
+for any decision.
+
+A peer proves who it is by holding a certificate its own authority issued. That
+is what a machine checks before serving anything.
+
 ## What a machine publishes
 
-The proxy already serves `/__bay/health` over plain HTTP. Beside it,
-`/__bay/peer` returns what another machine needs:
+Each machine publishes one port on the network, the peer link. Two things answer
+on it.
 
-| Field | Meaning |
-| --- | --- |
-| `name` | The machine's `LocalHostName`, for display |
-| `address` | The address the machine is reachable at on the network |
-| `domains` | The domains it serves |
-| `ca` | Its certificate authority, in PEM |
+| Path | Client certificate | Content |
+| --- | --- | --- |
+| `/__bay/peer` | Not required | `name`, `address`, `domains`, and the authority in PEM |
+| Everything else | Required, from an approved peer's authority | The domains this machine serves |
+
+The peer endpoint has to answer before there is any approval, so it cannot ask
+for one.
 
 ## Approving a peer
 
-One machine is given the other's address. It reads `/__bay/peer` and
-shows the name, the domains and the authority's fingerprint. Approving it does
-three things: the peer is stored under its fingerprint, the authority is added
-to the user's trust settings, and the peer's address is admitted by the proxy.
+One machine is given the other's address and reads `/__bay/peer`. It
+cannot yet verify what it reads, so it shows the name, the domains and the
+authority's fingerprint, and asks.
 
-Adding the authority to the user's trust settings needs no administrator rights,
-which is how the machine's own authority is already trusted.
+Approving stores the peer under that fingerprint and writes the peer's authority
+into two places the proxy reads: the authorities whose client certificates are
+accepted on the peer link, and the authorities a peer's own certificate is
+verified against when this machine connects to it.
 
-## Reachability
+Nothing is written to the keychain. The peer's authority is a file the proxy
+reads, not a trust setting on the machine.
 
-The proxy publishes ports 80 and 443. Publishing them needs no administrator
-rights: the runtime's network helper already holds them.
+## Certificates
 
-Only an approved peer's address is admitted. A request from any other address is
-refused, whatever name it asks for.
+Each machine keeps one authority, which its own system already trusts.
+
+For a domain a peer serves, this machine issues a certificate **from its own
+authority**. A browser here is therefore offered a certificate from the
+authority this machine already trusts, and no peer's authority is installed
+anywhere.
+
+Each machine also holds one client certificate from its own authority. That is
+what it presents on a peer's link, and what the peer matches against the
+authorities it has approved.
 
 ## Name resolution
 
 `bayd` answers a name in this order:
 
 1. A container on this machine serves it: the answer is this machine's proxy.
-2. An approved peer serves it: the answer is that peer's address.
+2. An approved peer serves it: the answer is this machine's proxy as well.
 3. Otherwise: as it answers today.
+
+Both answers name the local proxy. For a peer's domain the proxy holds the
+certificate it issued for that name, terminates the request, and forwards it
+over the peer's link with this machine's client certificate.
 
 The first rule comes before the second, so a name this machine serves is always
 this machine's.
@@ -79,14 +102,15 @@ the domain on one side ends it.
 - No uniqueness of machine names. Two peers may carry the same name.
 - No change to the network. The router, the network's DNS and the other
   machine's system settings are untouched.
-- No access for anything that is not an approved peer, including a machine that
-  knows both the address and the name.
+- No authority of one machine installed on another.
+- No access without a client certificate from an approved authority, including
+  from a machine that knows both the address and the name.
 
 ## Measured before designing
 
 | Question | Answer |
 | --- | --- |
-| Can the proxy hold port 443 without administrator rights? | Yes. `container run -p 443:80` bound `*.443` and the machine's network address answered 200 |
-| What does an address alone reach? | 404, offered the default certificate, which does not match the address |
-| What does an address plus the right name reach? | The site |
-| What does an address plus the right name reach from an address the proxy does not admit? | 403 |
+| Does the source address survive a published port? | No. A request from the network and a request from this machine both arrived as `192.168.64.1`, the network gateway |
+| Can the proxy hold a port below 1024 without administrator rights? | Yes. `container run -p 443:80` bound `*.443` and the machine's network address answered 200 |
+| Can a machine require a peer's certificate? | Yes. Without one nginx answered 400; with one signed by an approved authority it served and named the peer, `CN=peer-b` |
+| Does a browser need the peer's authority? | No. A client trusting only its own machine's authority asked for `web.test` and received the peer's content |
