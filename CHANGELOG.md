@@ -5,6 +5,18 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Give every row in a card the same margins
+
+Three of the four kinds of row ended 12 points from the card's right edge and
+the fourth ended 14, so nothing in a card lined up on the right. Every row now
+uses 14 on both sides, and a rule inside a card that names its parts keeps to
+the same margin instead of running edge to edge.
+
+A title and a label mark where a part begins, so each takes more space above it
+than the rows it introduces: 14 above, and 12 and 8 below.
+
+Verification: `make check` passes. The window was not seen: it is a menu bar
+application and does not come forward from a script.
 ### Draw a rule only where a card's part begins
 
 The window drew a rule between every pair of rows in a card. A card made of a
