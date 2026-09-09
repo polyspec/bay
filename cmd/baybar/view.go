@@ -340,24 +340,28 @@ func peersView(p *panel, snap stack.Snapshot, busy bool, found []stack.Beacon) {
 		})
 	}
 	for _, peer := range snap.Machine.Peers {
-		machine := section{
-			Header:  peer.Name,
-			Buttons: []button{quiet("peer-remove:"+peer.Fingerprint, text.T("Remove"), busy)},
-			Rows: []row{
-				{Text: text.T("Address"), Kind: "kv", Detail: peer.Address, Mono: true},
-				{Text: text.T("Fingerprint"), Kind: "kv",
-					Detail: shortFingerprint(peer.Fingerprint), Mono: true,
-					Faint: text.T("what this machine is, not where it is")},
-			},
+		machine := section{Rows: []row{
+			{Text: peer.Name, Kind: "title", Buttons: []button{
+				quiet("peer-remove:"+peer.Fingerprint, text.T("Remove"), busy),
+			}},
+			{Text: text.T("Address"), Kind: "kv", Detail: peer.Address, Mono: true},
+			{Text: text.T("Fingerprint"), Kind: "kv",
+				Detail: shortFingerprint(peer.Fingerprint), Mono: true,
+				Hint: text.T("what this machine is, not where it is")},
+		}}
+		if n := len(peer.Domains); n > 0 {
+			machine.Rows = append(machine.Rows, row{Kind: "label",
+				Text: text.P("%d domain", "%d domains", n, n)})
+		} else {
+			machine.Rows = append(machine.Rows, row{Kind: "label",
+				Text: text.T("This machine provides no domain.")})
 		}
+		// The name is the address, so the row states it once and opens it when
+		// the row is clicked.
 		for _, d := range peer.Domains {
-			url := "https://" + d
 			machine.Rows = append(machine.Rows, row{
-				Text: d, Wide: true, Dot: "on", Link: url, LinkText: url,
+				Text: d, Wide: true, Dot: "on", ID: "https://" + d,
 			})
-		}
-		if len(peer.Domains) == 0 {
-			machine.Note = text.T("This machine provides no domain.")
 		}
 		p.Sections = append(p.Sections, machine)
 	}

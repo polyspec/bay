@@ -11,8 +11,9 @@ The screen named each approved machine and did not state which domains that
 machine provides, although the command line prints them. With several approved
 machines the reader could not tell which machine provides which domain.
 
-One machine is one section. The header states the machine and carries the remove
-action, and the first rows state the address and the fingerprint. The rows are the domains that
+One machine is one card. The card's first row states the machine and carries the
+remove action, the next two state the address and the fingerprint, and a label
+row states how many domains follow. The rows are the domains that
 machine provides, and each row opens its address. A machine that provides no
 domain states that.
 
@@ -21,10 +22,16 @@ column, which is read as one more attribute of the row. The section states it
 instead. The remove action belongs to the machine and the open action belongs to
 the domain, and each is now on the thing it acts on.
 
+A domain row states the domain and opens it when clicked. The address was
+written beside the name as well, which states the same thing twice.
+
 The address and the fingerprint were first placed in the section's `detail`
 field, which the window does not read, so both were dropped and the screen named
 the machine and stated nothing else about it. The field was read nowhere and is
 removed.
+
+The window draws two more kinds of row: `title` names what a card stands for and
+carries the actions on it, and `label` names the rows under it.
 
 Verification: `go test ./cmd/baybar -run 'TestThePeersScreen|TestAPeerSection'`
 covers two approved machines with three domains between them, checks that each

@@ -141,6 +141,7 @@ var korean = map[string]string{
 	"DOMAINS":                               "도메인",
 	"Fingerprint":                           "지문",
 	"what this machine is, not where it is": "이 기계가 무엇인지를 나타내며 어디에 있는지가 아닙니다",
+	"%d domains":                            "도메인 %d개",
 	"This machine provides no domain.":      "이 기계는 도메인을 제공하지 않습니다.",
 	"trusted in your keychain":              "키체인에서 신뢰됨",
 	"not trusted":                           "신뢰되지 않음",

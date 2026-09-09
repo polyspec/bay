@@ -101,12 +101,13 @@ func TestThePeersScreenListsEachPeersDomains(t *testing.T) {
 	// machine that provides it and nowhere else.
 	links := map[string]string{}
 	for _, sec := range p.Sections {
-		if sec.Header != "max" && sec.Header != "lab" {
+		name := sectionTitle(sec)
+		if name != "max" && name != "lab" {
 			continue
 		}
 		for _, r := range sec.Rows {
-			if r.Link != "" {
-				links[r.Text] = sec.Header
+			if r.ID != "" {
+				links[r.Text] = name
 			}
 		}
 	}
@@ -143,15 +144,18 @@ func TestAPeerSectionStatesItsAddressAndFingerprint(t *testing.T) {
 
 	var found *section
 	for i := range p.Sections {
-		if p.Sections[i].Header == "max" {
+		if sectionTitle(p.Sections[i]) == "max" {
 			found = &p.Sections[i]
 		}
 	}
 	if found == nil {
 		t.Fatal("the peers screen has no section for the approved machine")
 	}
-	var address, fingerprint bool
+	var address, fingerprint, remove bool
 	for _, r := range found.Rows {
+		if r.Kind == "title" && len(r.Buttons) > 0 {
+			remove = true
+		}
 		if r.Kind != "kv" {
 			continue
 		}
@@ -168,7 +172,19 @@ func TestAPeerSectionStatesItsAddressAndFingerprint(t *testing.T) {
 	if !fingerprint {
 		t.Error("the section does not state the machine's fingerprint in a row")
 	}
-	if len(found.Buttons) == 0 {
-		t.Error("the section carries no remove action")
+	if !remove {
+		t.Error("the machine's title row carries no remove action")
 	}
+}
+
+// sectionTitle returns the machine a section stands for, taken from its title
+// row. The name is inside the card, so a section with no title row belongs to
+// no machine.
+func sectionTitle(sec section) string {
+	for _, r := range sec.Rows {
+		if r.Kind == "title" {
+			return r.Text
+		}
+	}
+	return ""
 }

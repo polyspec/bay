@@ -809,8 +809,47 @@ static NSColor *hex(uint32_t rgb) {
   return hit;
 }
 
+// titleRow names what the card is about and carries the actions on that
+// subject. A card that stands for one thing states it inside the card, not in
+// the group header above it, which names a group of cards.
+- (NSView *)titleRow:(NSDictionary *)row {
+  NSStackView *line = [NSStackView new];
+  line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+  line.alignment = NSLayoutAttributeCenterY;
+  line.spacing = 8;
+  line.edgeInsets = NSEdgeInsetsMake(12, 14, 10, 12);
+
+  NSTextField *t = [NSTextField labelWithString:row[@"text"] ?: @""];
+  t.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
+  t.lineBreakMode = NSLineBreakByTruncatingTail;
+  [line addArrangedSubview:t];
+
+  NSView *spacer = [NSView new];
+  [spacer setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
+  [line addArrangedSubview:spacer];
+
+  for (NSDictionary *b in row[@"buttons"]) [line addArrangedSubview:[self buttonFor:b]];
+  return line;
+}
+
+// labelRow names the rows under it inside a card.
+- (NSView *)labelRow:(NSDictionary *)row {
+  NSStackView *line = [NSStackView new];
+  line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+  line.alignment = NSLayoutAttributeCenterY;
+  line.edgeInsets = NSEdgeInsetsMake(10, 14, 6, 12);
+
+  NSTextField *t = [NSTextField labelWithString:row[@"text"] ?: @""];
+  t.font = [NSFont systemFontOfSize:11];
+  t.textColor = [NSColor secondaryLabelColor];
+  [line addArrangedSubview:t];
+  return line;
+}
+
 - (NSView *)rowFor:(NSDictionary *)row {
   if ([row[@"kind"] isEqualToString:@"kv"]) return [self kvRow:row];
+  if ([row[@"kind"] isEqualToString:@"title"]) return [self titleRow:row];
+  if ([row[@"kind"] isEqualToString:@"label"]) return [self labelRow:row];
 
   NSStackView *line = [NSStackView new];
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
