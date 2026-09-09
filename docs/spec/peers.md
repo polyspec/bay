@@ -1,7 +1,10 @@
 # Peers
 
-Status: implemented. `bay peer` and the window's Peers screen both
-open the link, approve a machine and withdraw an approval.
+Status: implemented on a machine running one engine. `bay peer` and
+the window's Peers screen both open the link, approve a machine and withdraw an
+approval. On a machine running both engines the link is refused, because rule 8
+of the architecture puts it on a host process that reaches both and that process
+is not built.
 
 Two machines on one network, each running bay, reach each other's
 domains. Neither machine's network configuration changes: no router setting, no
@@ -68,6 +71,13 @@ matched by its authority's fingerprint and its stored address is replaced.
 The link is closed until it is opened. `bay peer open` answers it,
 announces this machine, and prints the address to give the other machine;
 `bay peer close` stops both.
+
+Opening is refused on a machine running more than one engine, and the refusal
+comes before anything is written: the link is one port and no engine's proxy
+serves the other engine's domains, so a link served from one of them would
+answer some of this machine's names and not the rest. Closing is never refused,
+because a machine that acquired a second engine while the link was open has to
+be able to close it.
 
 With the link open and no peer approved, only the document below answers. This
 machine's own domains appear on the link when there is an authority to check a

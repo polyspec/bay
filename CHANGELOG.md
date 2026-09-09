@@ -5,6 +5,24 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Opening the peer link no longer writes a setting it cannot serve
+
+The proxy configuration refuses the peer link on a machine running both
+engines. `peer open` and the window's button stored the setting first and met
+that refusal after, so a machine that was told no kept a link recorded as open
+and every later configuration write failed for the same reason, with no way
+back but editing the settings file.
+
+The refusal is now one function that both the setting and the configuration
+ask, and opening the link asks it before writing anything. Closing is never
+refused, so a machine that acquired a second engine while the link was open can
+still close it.
+
+Verification: `make check`, including tests over one engine, both, none, and
+closing after a second engine appeared. Without the change two of them fail:
+opening with two engines is allowed and leaves the setting on.
+
+
 ### The peers screen
 
 The window has a Peers screen. It shows the link, the machines that are

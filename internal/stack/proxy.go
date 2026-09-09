@@ -61,11 +61,8 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 	// document another machine approves it from.
 	linkEngine := ""
 	if settings.Peering || len(peers) > 0 {
-		if len(engines) > 1 {
-			return res, fmt.Errorf(
-				"the peer link is one port and this machine runs %d engines; "+
-					"it belongs to a host process that reaches both, which is not built",
-				len(engines))
+		if err := peerLinkServable(); err != nil {
+			return res, err
 		}
 		linkEngine = engines[0]
 		if err := preparePeerLink(m, peers, routes, linkEngine); err != nil {
@@ -159,6 +156,27 @@ func peerRoutesFor(m *Machine, peers []Peer, own []string) []PeerRoute {
 // preparePeerLink writes what the proxy reads to run the link: this machine's
 // client certificate, the approved authorities, the certificates for the
 // domains peers serve, and the document a machine is approved from.
+// peerLinkServable reports whether one engine's proxy can answer the whole of
+// the peer link. The link is one port and a proxy serves only its own engine's
+// containers, so a machine running both engines would answer some of its own
+// names on the link and none of the rest. Rule 8 of the architecture puts the
+// link on a host process that reaches both engines; until that exists the link
+// is refused rather than served incompletely.
+func peerLinkServable() error {
+	engines := Engines()
+	if len(engines) > 1 {
+		return fmt.Errorf(
+			"the peer link is one port and this machine runs %d engines; "+
+				"it belongs to a host process that reaches both, which is not built",
+			len(engines))
+	}
+	if len(engines) == 0 {
+		return fmt.Errorf("no container engine found: install Apple %s or %s",
+			AppleEngine, DockerEngine)
+	}
+	return nil
+}
+
 func preparePeerLink(m *Machine, peers []Peer, routes []Route, engine string) error {
 	ca, err := LoadOrCreateCA(m.Dir)
 	if err != nil {

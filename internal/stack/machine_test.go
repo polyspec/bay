@@ -152,3 +152,83 @@ func TestMachinePaths(t *testing.T) {
 		}
 	}
 }
+
+// withEngines makes exactly the named engines present for one test, so that a
+// machine running both, or neither, can be tested where only one is installed.
+func withEngines(t *testing.T, names ...string) {
+	t.Helper()
+	// An empty PATH leaves LookPath nothing to find, so an engine is present
+	// only when its variable names a program.
+	t.Setenv("PATH", "")
+	t.Setenv("CONTAINER_BIN", "")
+	t.Setenv("DOCKER_BIN", "")
+	for _, name := range names {
+		switch name {
+		case AppleEngine:
+			t.Setenv("CONTAINER_BIN", "/nonexistent/container")
+		case DockerEngine:
+			t.Setenv("DOCKER_BIN", "/nonexistent/docker")
+		default:
+			t.Fatalf("unknown engine %q", name)
+		}
+	}
+}
+
+func TestOpeningTheLinkOnOneEngineIsStored(t *testing.T) {
+	withEngines(t, AppleEngine)
+	m := &Machine{Dir: t.TempDir()}
+	if err := m.SetPeering(true); err != nil {
+		t.Fatalf("opening the link with one engine: %v", err)
+	}
+	s, err := m.Settings()
+	if err != nil {
+		t.Fatalf("reading settings: %v", err)
+	}
+	if !s.Peering {
+		t.Error("the link was opened and the setting is off")
+	}
+}
+
+func TestOpeningTheLinkOnBothEnginesWritesNothing(t *testing.T) {
+	withEngines(t, AppleEngine, DockerEngine)
+	m := &Machine{Dir: t.TempDir()}
+	if err := m.SetPeering(true); err == nil {
+		t.Fatal("opening the link with two engines was allowed")
+	}
+	s, err := m.Settings()
+	if err != nil {
+		t.Fatalf("reading settings: %v", err)
+	}
+	// A setting written before the refusal would be served by no proxy and
+	// would make every later configuration write fail.
+	if s.Peering {
+		t.Error("the refusal left the link recorded as open")
+	}
+}
+
+func TestClosingTheLinkOnBothEnginesIsAllowed(t *testing.T) {
+	withEngines(t, AppleEngine)
+	m := &Machine{Dir: t.TempDir()}
+	if err := m.SetPeering(true); err != nil {
+		t.Fatalf("opening the link: %v", err)
+	}
+	withEngines(t, AppleEngine, DockerEngine)
+	if err := m.SetPeering(false); err != nil {
+		t.Fatalf("closing the link after a second engine appeared: %v", err)
+	}
+	s, err := m.Settings()
+	if err != nil {
+		t.Fatalf("reading settings: %v", err)
+	}
+	if s.Peering {
+		t.Error("the link was closed and the setting is still on")
+	}
+}
+
+func TestOpeningTheLinkWithNoEngineIsRefused(t *testing.T) {
+	withEngines(t)
+	m := &Machine{Dir: t.TempDir()}
+	if err := m.SetPeering(true); err == nil {
+		t.Fatal("opening the link with no engine was allowed")
+	}
+}

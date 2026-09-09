@@ -175,7 +175,18 @@ func (m *Machine) RemoveDomain(domain string) error {
 // it when it is new.
 // SetPeering turns the peer link on or off. With it on and no peer approved,
 // the link answers only the document another machine is approved from.
+//
+// Turning it on is refused on a machine running more than one engine, before
+// the setting is written: the proxy configuration is refused for the same
+// reason, and a setting written first would leave the machine unable to write
+// any configuration at all. Turning it off is never refused, so a machine that
+// acquired a second engine while the link was open can still close it.
 func (m *Machine) SetPeering(on bool) error {
+	if on {
+		if err := peerLinkServable(); err != nil {
+			return err
+		}
+	}
 	s, err := m.Settings()
 	if err != nil {
 		return err
