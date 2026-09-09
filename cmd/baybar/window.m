@@ -817,7 +817,7 @@ static NSColor *hex(uint32_t rgb) {
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
   line.spacing = 8;
-  line.edgeInsets = NSEdgeInsetsMake(9, 14, 9, 14);
+  line.edgeInsets = NSEdgeInsetsMake(14, 14, 12, 14);
 
   NSTextField *t = [NSTextField labelWithString:row[@"text"] ?: @""];
   t.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
@@ -837,7 +837,7 @@ static NSColor *hex(uint32_t rgb) {
   NSStackView *line = [NSStackView new];
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
-  line.edgeInsets = NSEdgeInsetsMake(9, 14, 9, 14);
+  line.edgeInsets = NSEdgeInsetsMake(14, 14, 8, 14);
 
   NSTextField *t = [NSTextField labelWithString:row[@"text"] ?: @""];
   t.font = [NSFont systemFontOfSize:11];
@@ -855,7 +855,7 @@ static NSColor *hex(uint32_t rgb) {
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
   line.spacing = 12;
-  line.edgeInsets = NSEdgeInsetsMake(9, 14, 9, 14);
+  line.edgeInsets = NSEdgeInsetsMake(10, 14, 10, 14);
 
   [line addArrangedSubview:[DotView dot:row[@"dot"] ?: @""]];
 
