@@ -50,6 +50,7 @@ const (
 	viewDashboard = "dash"
 	viewDomains   = "domains"
 	viewCerts     = "certs"
+	viewPeers     = "peers"
 	viewSettings  = "settings"
 	viewProject   = "project:"
 	viewService   = "service:"
@@ -170,7 +171,8 @@ func iconFor(snap stack.Snapshot) fill {
 // because an action already changing containers should not be raced. log holds
 // the tail of the selected service's output, and is empty on every other
 // screen.
-func buildPanel(snap stack.Snapshot, busy bool, selected, message, kind string, log []string) panel {
+func buildPanel(snap stack.Snapshot, busy bool, selected, message, kind string, log []string,
+	found []stack.Beacon) panel {
 	p := panel{
 		Sidebar:     sidebar(snap, selected),
 		Message:     message,
@@ -181,6 +183,8 @@ func buildPanel(snap stack.Snapshot, busy bool, selected, message, kind string, 
 		domainsView(&p, snap, busy)
 	case selected == viewCerts:
 		certificatesView(&p, snap, busy)
+	case selected == viewPeers:
+		peersView(&p, snap, busy, found)
 	case selected == viewSettings:
 		settingsView(&p, snap, busy)
 	case strings.HasPrefix(selected, viewService):
@@ -246,6 +250,9 @@ func sidebar(snap stack.Snapshot, selected string) []sideGroup {
 		{ID: "select:" + viewCerts, Label: text.T("Certificates"),
 			Dot:   dotFor(snap.Machine.CATrusted),
 			Count: fmt.Sprint(len(snap.Certificates.Issued)), Selected: selected == viewCerts},
+		{ID: "select:" + viewPeers, Label: text.T("Peers"),
+			Dot:   peersDot(snap),
+			Count: fmt.Sprint(len(snap.Machine.Peers)), Selected: selected == viewPeers},
 		{ID: "select:" + viewSettings, Label: text.T("Settings"),
 			Dot: "on", Selected: selected == viewSettings},
 	}}
@@ -284,6 +291,91 @@ func sidebar(snap stack.Snapshot, selected string) []sideGroup {
 		return []sideGroup{machine}
 	}
 	return []sideGroup{machine, projects}
+}
+
+// peersDot is off while the link is closed: a machine that is not answering is
+// not a fault, it is a machine that was not asked to answer.
+func peersDot(snap stack.Snapshot) string {
+	if !snap.Machine.Peering {
+		return "off"
+	}
+	return "on"
+}
+
+// peersView shows the link, the machines approved, and the machines announcing
+// themselves that are not approved yet.
+func peersView(p *panel, snap stack.Snapshot, busy bool, found []stack.Beacon) {
+	p.Header = header{
+		Title:    text.T("Peers"),
+		Subtitle: text.T("machines whose domains this one reaches"),
+	}
+	if snap.Machine.Peering {
+		p.Header.Buttons = []button{quiet("peer-close", text.T("Close the link"), busy)}
+	} else {
+		p.Header.Buttons = []button{hero("peer-open", text.T("Open the link"), busy)}
+	}
+
+	link := section{Header: text.T("LINK")}
+	if snap.Machine.Peering {
+		link.Rows = []row{
+			{Text: text.T("Answering at"), Kind: "kv", Detail: snap.Machine.Link, Mono: true,
+				Faint: text.T("give this to the other machine")},
+			{Text: text.T("Announcing"), Kind: "kv", Detail: text.T("every second and a half"),
+				Faint: text.T("a machine on this network finds it without the address")},
+		}
+	} else {
+		link.Note = text.T("The link is closed. No machine reaches this one, and this one " +
+			"announces nothing.")
+	}
+	p.Sections = append(p.Sections, link)
+
+	approved := section{Header: text.T("APPROVED")}
+	for _, peer := range snap.Machine.Peers {
+		approved.Rows = append(approved.Rows, row{
+			Text: peer.Name, Wide: true, Dot: "on",
+			LinkText: peer.Address,
+			Detail:   shortFingerprint(peer.Fingerprint),
+			Buttons: []button{
+				quiet("peer-remove:"+peer.Fingerprint, text.T("Remove"), busy),
+			},
+		})
+	}
+	if len(approved.Rows) == 0 {
+		approved.Note = text.T("No machine is approved. Its domains are reachable here once it is.")
+	}
+	p.Sections = append(p.Sections, approved)
+
+	// A machine already approved is not offered again, and neither is this one.
+	known := map[string]bool{}
+	for _, peer := range snap.Machine.Peers {
+		known[peer.Fingerprint] = true
+	}
+	heard := section{Header: text.T("ON THIS NETWORK"),
+		Note: text.T("announcing themselves right now")}
+	for _, b := range found {
+		if known[b.ID] || b.Address == snap.Machine.Link {
+			continue
+		}
+		heard.Rows = append(heard.Rows, row{
+			Text: b.Name, Wide: true, Dot: "off",
+			LinkText: b.Address,
+			Detail:   shortFingerprint(b.ID),
+			Buttons:  []button{quiet("peer-approve:"+b.Address, text.T("Approve…"), busy)},
+		})
+	}
+	if len(heard.Rows) == 0 {
+		heard.Note = text.T("Nothing is announcing itself. A machine on another network is " +
+			"reached by its address.")
+	}
+	p.Sections = append(p.Sections, heard)
+}
+
+// shortFingerprint returns what a person compares between two machines.
+func shortFingerprint(fingerprint string) string {
+	if len(fingerprint) > 16 {
+		return fingerprint[:16]
+	}
+	return fingerprint
 }
 
 func dashboardDot(snap stack.Snapshot) string {

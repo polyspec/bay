@@ -1,8 +1,7 @@
 # Peers
 
-Status: implemented, without the window. `bay peer` opens the link,
-approves a machine and withdraws an approval. The window does not show peers
-yet.
+Status: implemented. `bay peer` and the window's Peers screen both
+open the link, approve a machine and withdraw an approval.
 
 Two machines on one network, each running bay, reach each other's
 domains. Neither machine's network configuration changes: no router setting, no
@@ -120,6 +119,27 @@ over the peer's link with this machine's client certificate.
 
 The first rule comes before the second, so a name this machine serves is always
 this machine's.
+
+## The window
+
+The Peers screen shows the link, the approved machines and what is being heard
+on the network, in that order.
+
+The link section carries the address to give another machine and the interval
+between announcements, or a line saying the link is closed when it is. One
+button opens and closes it.
+
+An approved machine is a row with its name, its address, its domains and the
+first characters of its authority's fingerprint, and a button that withdraws the
+approval. Withdrawing asks first.
+
+A machine heard announcing itself that is not approved is a row with an approve
+button. Approving asks first, and the question carries the fingerprint read from
+that machine, so what is approved is the authority and not the name. A machine
+that announces nothing is still approved by address from the command line.
+
+The sidebar's Peers row carries the number of approved machines and a dot: green
+while the link is open, off while it is closed.
 
 ## Duplicate domains
 

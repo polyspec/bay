@@ -5,6 +5,26 @@ the day the change was made.
 
 ## 2026-09-09
 
+### The peers screen
+
+The window has a Peers screen. It shows the link, the machines that are
+approved, and the machines heard announcing themselves that are not. One button
+opens and closes the link. An approved machine can have its approval withdrawn,
+and a machine heard on the network can be approved, both after a question; the
+approval question carries the fingerprint read from that machine, so what is
+approved is the authority and not the name. A machine that announces nothing is
+still approved by address from the command line, which is also what crosses
+subnets.
+
+The sidebar's Peers row carries the number of approved machines and a dot that
+is green while the link is open.
+
+Verification: `make check`. On this machine the link was opened from the window;
+the link section then read 192.168.0.57:8443 as the answering address and 1.5s
+as the announcement interval, the button became Close link, and
+`bay peer` reported the link open at that address. Clicking again
+closed it and the command reported the link closed.
+
 ### Both engines, side by side
 
 A machine runs Apple `container` and Docker at the same time and serves both.

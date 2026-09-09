@@ -25,6 +25,7 @@ var korean = map[string]string{
 	"Domains":      "도메인",
 	"Certificates": "인증서",
 	"Settings":     "설정",
+	"Peers":        "피어",
 
 	// Dashboard.
 	"Add project…":         "프로젝트 추가…",
@@ -184,6 +185,33 @@ var korean = map[string]string{
 	"Remove the resolver entries and the DNS agent":           "리졸버 항목과 DNS 에이전트를 제거합니다",
 	"Names under the delegated domains stop resolving.":       "위임된 도메인의 이름이 더 이상 해석되지 않습니다.",
 	"Remove…": "제거…",
+
+	// Peers.
+	"machines whose domains this one reaches": "이 기계가 도메인에 닿는 기계들",
+	"Open the link":                  "링크 열기",
+	"Close the link":                 "링크 닫기",
+	"LINK":                           "링크",
+	"Answering at":                   "응답 주소",
+	"give this to the other machine": "상대 기계에 이 주소를 알려주세요",
+	"Announcing":                     "알림",
+	"every second and a half":        "1.5초마다",
+	"a machine on this network finds it without the address":                           "같은 네트워크의 기계는 주소 없이 찾습니다",
+	"The link is closed. No machine reaches this one, and this one announces nothing.": "링크가 닫혀 있습니다. 어떤 기계도 이 기계에 닿지 않고, 이 기계도 아무것도 알리지 않습니다.",
+	"APPROVED": "승인됨",
+	"No machine is approved. Its domains are reachable here once it is.": "승인된 기계가 없습니다. 승인하면 그 기계의 도메인에 여기서 닿습니다.",
+	"ON THIS NETWORK":                 "이 네트워크에서",
+	"announcing themselves right now": "지금 자신을 알리고 있는 기계",
+	"Nothing is announcing itself. A machine on another network is reached by its address.": "알리고 있는 기계가 없습니다. 다른 네트워크의 기계는 주소로 닿습니다.",
+	"Approve…":    "승인…",
+	"Approve %s?": "%s을(를) 승인할까요?",
+	"Its authority is %s. Compare it with what that machine reports. Approving makes its domains reachable here and lets it reach this machine's.": "그 기계의 인증기관은 %s입니다. 그 기계가 보고하는 값과 비교하세요. 승인하면 그 기계의 도메인에 여기서 닿고, 그 기계도 이 기계의 도메인에 닿습니다.",
+	"Approve":                 "승인",
+	"Withdraw this approval?": "이 승인을 거둘까요?",
+	"That machine's domains stop being reachable here, and it stops reaching this machine's.": "그 기계의 도메인에 여기서 닿지 않게 되고, 그 기계도 이 기계의 도메인에 닿지 않게 됩니다.",
+	"the link is open at %s":    "링크가 %s에서 열렸습니다",
+	"the link is closed":        "링크를 닫았습니다",
+	"approved %s":               "%s을(를) 승인했습니다",
+	"the approval is withdrawn": "승인을 거뒀습니다",
 
 	// Dialogs.
 	"Add a domain": "도메인 추가",

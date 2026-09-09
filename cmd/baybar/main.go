@@ -7,6 +7,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -41,6 +42,9 @@ var (
 
 type app struct {
 	rt *stack.Runtime
+	// watcher keeps the machines announcing themselves on this network, so the
+	// peers screen shows one as it appears.
+	watcher *stack.Watcher
 
 	openItem    *systray.MenuItem
 	machineItem *systray.MenuItem
@@ -81,6 +85,7 @@ func main() {
 		HelperBin: beside("bay", ""),
 		Elevate:   elevate,
 	}, icon: fill(-1)}
+	a.watcher = stack.Watch(context.Background(), 0)
 	actionHandler = a.handle
 	promptHandler = a.handlePrompt
 	sheetHandler = a.handleSheet
@@ -152,7 +157,7 @@ func (a *app) currentPanel() panel {
 		group, service, _ := strings.Cut(rest, ":")
 		log = a.serviceLogTail(group, service, logTail)
 	}
-	return buildPanel(snap, busy, selected, message, kind, log)
+	return buildPanel(snap, busy, selected, message, kind, log, a.watcher.List())
 }
 
 // showAtLaunch reports whether the window opens with the application. The
@@ -384,6 +389,28 @@ func (a *app) ask(parts []string) bool {
 		confirm("do-cert-remove:"+parts[1], text.T("Remove the certificate for %s?", parts[1]),
 			text.T("It is reissued automatically if a route still needs it."),
 			text.T("Remove"), false)
+	case "peer-approve":
+		// The address carries a colon, so what was split is put back together.
+		address := strings.Join(parts[1:], ":")
+		doc, err := stack.FetchPeer(address)
+		if err != nil {
+			a.report("error", "%s", err.Error())
+			return true
+		}
+		fingerprint, err := stack.Fingerprint(doc.CA)
+		if err != nil {
+			a.report("error", "%s", err.Error())
+			return true
+		}
+		confirm("do-peer-approve:"+address, text.T("Approve %s?", doc.Name),
+			text.T("Its authority is %s. Compare it with what that machine reports. "+
+				"Approving makes its domains reachable here and lets it reach this "+
+				"machine's.", shortFingerprint(fingerprint)),
+			text.T("Approve"), false)
+	case "peer-remove":
+		confirm("do-peer-remove:"+parts[1], text.T("Withdraw this approval?"),
+			text.T("That machine's domains stop being reachable here, and it stops "+
+				"reaching this machine's."), text.T("Remove"), false)
 	case "cert-remove-unused":
 		confirm("do-cert-remove-unused", text.T("Remove every unused certificate?"),
 			text.T("They are the certificates no route and no registered project asks for. "+
@@ -416,6 +443,48 @@ func (a *app) handleSheet(id, value string, option bool) {
 func (a *app) run(rt *stack.Runtime, parts []string) error {
 	if parts[0] == "setup" {
 		return rt.EnsureInstalled()
+	}
+	if parts[0] == "peer-open" || parts[0] == "peer-close" {
+		if err := rt.Machine.SetPeering(parts[0] == "peer-open"); err != nil {
+			return err
+		}
+		if _, err := stack.SyncProxy(rt.Machine); err != nil {
+			return err
+		}
+		if parts[0] == "peer-close" {
+			rt.Progress(text.T("the link is closed"))
+			return nil
+		}
+		rt.Progress(text.T("the link is open at %s", stack.PeerLinkAddress(stack.LANAddress())))
+		return nil
+	}
+	if parts[0] == "do-peer-approve" && len(parts) > 1 {
+		// The address is rejoined: it carries the port after a colon.
+		address := strings.Join(parts[1:], ":")
+		doc, err := stack.FetchPeer(address)
+		if err != nil {
+			return err
+		}
+		if err := stack.ApprovePeer(rt.Machine.Dir, stack.Peer{
+			Name: doc.Name, Address: doc.Address, Domains: doc.Domains, CA: doc.CA,
+		}); err != nil {
+			return err
+		}
+		if _, err := stack.SyncProxy(rt.Machine); err != nil {
+			return err
+		}
+		rt.Progress(text.T("approved %s", doc.Name))
+		return nil
+	}
+	if parts[0] == "do-peer-remove" && len(parts) > 1 {
+		if err := stack.RemovePeer(rt.Machine.Dir, parts[1]); err != nil {
+			return err
+		}
+		if _, err := stack.SyncProxy(rt.Machine); err != nil {
+			return err
+		}
+		rt.Progress(text.T("the approval is withdrawn"))
+		return nil
 	}
 	if parts[0] == "proxy-sync" {
 		// The proxy configuration is written by every action that starts or

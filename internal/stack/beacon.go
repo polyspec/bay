@@ -238,3 +238,27 @@ func Discover(ctx context.Context, port int, d time.Duration) ([]Beacon, error) 
 	}
 	return h.list(time.Now()), nil
 }
+
+// Watcher keeps the machines announcing themselves right now. A window shows
+// what it holds, so a machine that starts announcing appears without anything
+// being asked for.
+type Watcher struct{ heard *heardSet }
+
+// Watch listens until the context ends and keeps what it hears.
+func Watch(ctx context.Context, port int) *Watcher {
+	w := &Watcher{heard: newHeard(BeaconStaleAfter)}
+	go func() {
+		// A machine that cannot listen is one that shows nothing, which is what
+		// an address given by hand is for.
+		_ = Listen(ctx, port, func(b Beacon) { w.heard.put(b, time.Now()) })
+	}()
+	return w
+}
+
+// List returns the machines heard recently.
+func (w *Watcher) List() []Beacon {
+	if w == nil {
+		return nil
+	}
+	return w.heard.list(time.Now())
+}

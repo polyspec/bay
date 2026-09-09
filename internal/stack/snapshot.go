@@ -47,6 +47,11 @@ type MachineStatus struct {
 	// Pending lists the setup steps that still need root. It is empty on a
 	// machine that is ready.
 	Pending []string `json:"pending"`
+	// Peering says the link is open, and Link is where it answers.
+	Peering bool   `json:"peering"`
+	Link    string `json:"link,omitempty"`
+	// Peers are the machines whose domains this one reaches.
+	Peers []Peer `json:"peers,omitempty"`
 }
 
 type ProxyStatus struct {
@@ -150,8 +155,23 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 	if err != nil {
 		return snap, err
 	}
+	settings, err := m.Settings()
+	if err != nil {
+		return snap, err
+	}
+	peers, err := Peers(m.Dir)
+	if err != nil {
+		return snap, err
+	}
+	link := ""
+	if settings.Peering {
+		link = PeerLinkAddress(LANAddress())
+	}
 	snap.Machine = MachineStatus{
 		StateDir:   m.Dir,
+		Peering:    settings.Peering,
+		Link:       link,
+		Peers:      peers,
 		Domains:    domains,
 		DomainList: domainList,
 		CAPath:     authority.Path,
