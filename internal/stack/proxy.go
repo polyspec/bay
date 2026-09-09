@@ -7,6 +7,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
+	"sort"
 	"strings"
 	"time"
 )
@@ -15,6 +17,8 @@ import (
 type SyncResult struct {
 	Routes    []Route
 	Conflicts []DomainConflict
+	// Peers are the approved peers the configuration was written with.
+	Peers []Peer
 	// Action is "started", "reloaded" or "stopped".
 	Action string
 }
@@ -32,7 +36,18 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 	}
 	res := SyncResult{Routes: routes, Conflicts: conflicts}
 
-	if len(routes) == 0 {
+	peers, err := Peers(m.Dir)
+	if err != nil {
+		return res, err
+	}
+	own := make([]string, 0, len(routes))
+	for _, r := range routes {
+		own = append(own, r.Domain)
+	}
+	peerRoutes := peerRoutesFor(m, peers, own)
+	res.Peers = peers
+
+	if len(routes) == 0 && len(peerRoutes) == 0 {
 		if err := StopProxy(); err != nil {
 			return res, err
 		}
@@ -47,12 +62,38 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 	if err != nil {
 		return res, err
 	}
-	generation := routeGeneration(routes)
-	if err := RenderNginx(m.ConfDir(), routes, gateway, DefaultCertName, generation); err != nil {
+	conf := NginxConfig{
+		Routes:      routes,
+		Resolver:    gateway,
+		DefaultCert: DefaultCertName,
+		PeerRoutes:  peerRoutes,
+	}
+	settings, err := m.Settings()
+	if err != nil {
+		return res, err
+	}
+	peerDir := ""
+	// The link is open before there is any peer: a machine has to answer the
+	// document another machine approves it from.
+	if settings.Peering || len(peers) > 0 {
+		if err := preparePeerLink(m, peers, routes); err != nil {
+			return res, err
+		}
+		peerDir = PeerDir(m.Dir)
+		conf.PeerPort = PeerPort
+		if len(peers) > 0 {
+			conf.PeerAuthorities = "/etc/nginx/peers/" + PeerAuthoritiesName
+		}
+		conf.ClientCert = "/etc/nginx/peers/" + ClientCertName + ".crt"
+		conf.ClientKey = "/etc/nginx/peers/" + ClientCertName + ".key"
+	}
+	conf.Generation = configGeneration(conf)
+	generation := conf.Generation
+	if err := RenderNginxConfig(m.ConfDir(), conf); err != nil {
 		return res, err
 	}
 
-	created, err := EnsureProxy(m.ConfDir(), m.CertDir())
+	created, err := EnsureProxy(m.ConfDir(), m.CertDir(), peerDir)
 	if err != nil {
 		return res, err
 	}
@@ -67,6 +108,79 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 		return res, err
 	}
 	return res, nil
+}
+
+// peerRoutesFor returns the domains approved peers serve that this machine does
+// not serve itself. Every one of them is answered here, with a certificate this
+// machine issues, and forwarded over that peer's link.
+func peerRoutesFor(m *Machine, peers []Peer, own []string) []PeerRoute {
+	byDomain := PeerDomains(peers, own)
+	domains := make([]string, 0, len(byDomain))
+	for d := range byDomain {
+		domains = append(domains, d)
+	}
+	sort.Strings(domains)
+	out := make([]PeerRoute, 0, len(domains))
+	for _, d := range domains {
+		p := byDomain[d]
+		out = append(out, PeerRoute{
+			Domain:    d,
+			Address:   p.Address,
+			Authority: "/etc/nginx/peers/" + p.Fingerprint + ".crt",
+		})
+	}
+	return out
+}
+
+// preparePeerLink writes what the proxy reads to run the link: this machine's
+// client certificate, the approved authorities, the certificates for the
+// domains peers serve, and the document a machine is approved from.
+func preparePeerLink(m *Machine, peers []Peer, routes []Route) error {
+	ca, err := LoadOrCreateCA(m.Dir)
+	if err != nil {
+		return err
+	}
+	if err := ca.IssueClient(PeerDir(m.Dir), MachineName()); err != nil {
+		return err
+	}
+	if err := WritePeerAuthorities(m.Dir, peers); err != nil {
+		return err
+	}
+	own := make([]string, 0, len(routes))
+	for _, r := range routes {
+		own = append(own, r.Domain)
+	}
+	// A peer's domain is served here with a certificate this machine issues, so
+	// a browser is offered one from the authority this machine already trusts.
+	for d := range PeerDomains(peers, own) {
+		if _, err := ca.Issue(m.CertDir(), d); err != nil {
+			return err
+		}
+	}
+	caPEM, err := os.ReadFile(ca.CertPath())
+	if err != nil {
+		return err
+	}
+	return WritePeerDocument(m.ConfDir(), PeerDocument{
+		Name:    MachineName(),
+		Address: PeerLinkAddress(LANAddress()),
+		Domains: own,
+		CA:      string(caPEM),
+	})
+}
+
+// configGeneration identifies a configuration. It covers the peers as well as
+// the routes, so approving one is a change the proxy is waited for.
+func configGeneration(c NginxConfig) string {
+	h := sha256.New()
+	for _, r := range c.Routes {
+		fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s\n", r.Domain, r.Scheme, r.Backend, r.ipv4, r.started)
+	}
+	for _, r := range c.PeerRoutes {
+		fmt.Fprintf(h, "peer\x00%s\x00%s\x00%s\n", r.Domain, r.Address, r.Authority)
+	}
+	fmt.Fprintf(h, "link\x00%d\n", c.PeerPort)
+	return hex.EncodeToString(h.Sum(nil))[:16]
 }
 
 // routeGeneration identifies routes and their current backend instances. A

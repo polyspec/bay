@@ -32,7 +32,7 @@ func requireE2E(t *testing.T) {
 		return
 	}
 	if _, found, err := Lookup(ProxyName); err == nil && found {
-		conf, _, err := ProxyMounts()
+		conf, _, _, err := ProxyMounts()
 		if err == nil && !strings.HasPrefix(conf, os.TempDir()) {
 			t.Skipf("%s is running for %s; stop it, or set BAY_E2E_FORCE=1 to take it over",
 				ProxyName, filepath.Dir(conf))

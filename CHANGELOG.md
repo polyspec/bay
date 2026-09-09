@@ -5,6 +5,39 @@ the day the change was made.
 
 ## 2026-09-09
 
+### bay peer
+
+Two machines on one network, each running bay, reach each other's
+domains. Neither machine's network configuration changes.
+
+`bay peer open` answers a link on a published port and prints the
+address to give the other machine. `peer add <address>` reads what that machine
+says about itself, checks that it holds the authority it names, prints the
+fingerprint and asks before approving. `peer` lists what is approved and whether
+the link is open. `peer remove` withdraws an approval and `peer close` stops
+answering.
+
+A peer is what its authority is: it is stored under that authority's
+fingerprint, and its name and address are attributes that change without making
+it a different peer.
+
+A published port does not keep the source address, so a machine is not
+recognised by one. It presents a certificate its own authority issued, and a
+link serves only a holder of one from an approved authority. Nothing is added to
+the keychain: an approved authority is a file the proxy reads.
+
+A peer's domain is answered here, with a certificate this machine issues from
+its own authority, and forwarded over that peer's link. A browser is therefore
+offered a certificate from the authority its own machine already trusts. A name
+this machine serves is always this machine's.
+
+Verification: `make check`. On this machine the link was opened, the document
+answered with the name, the address, the domains and the authority, and `peer
+add` approved it after checking the certificate against the authority it named.
+A served name on the link was then refused without a client certificate, 400,
+and served with one, 200. `peer remove` and `peer close` released the port and
+left the machine's own sites answering 200.
+
 ### Unused certificates are their own list
 
 A certificate something asks for and one left behind are answered differently:

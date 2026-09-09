@@ -1,7 +1,8 @@
 # Peers
 
-Status: not implemented. This document states the design; nothing below is in
-the binaries yet.
+Status: implemented, without the window. `bay peer` opens the link,
+approves a machine and withdraws an approval. The window does not show peers
+yet.
 
 Two machines on one network, each running bay, reach each other's
 domains. Neither machine's network configuration changes: no router setting, no
@@ -43,6 +44,17 @@ on it.
 
 The peer endpoint has to answer before there is any approval, so it cannot ask
 for one.
+
+## Opening the link
+
+The link is closed until it is opened. `bay peer open` answers it and
+prints the address to give the other machine; `bay peer close` stops
+answering.
+
+With the link open and no peer approved, only the document below answers. This
+machine's own domains appear on the link when there is an authority to check a
+client against, which is what makes the first approval possible: a machine has
+to answer before anyone can approve it.
 
 ## Approving a peer
 
@@ -114,3 +126,13 @@ the domain on one side ends it.
 | Can the proxy hold a port below 1024 without administrator rights? | Yes. `container run -p 443:80` bound `*.443` and the machine's network address answered 200 |
 | Can a machine require a peer's certificate? | Yes. Without one nginx answered 400; with one signed by an approved authority it served and named the peer, `CN=peer-b` |
 | Does a browser need the peer's authority? | No. A client trusting only its own machine's authority asked for `web.test` and received the peer's content |
+
+## Measured after building
+
+| Question | Answer |
+| --- | --- |
+| Does the link answer the document? | Yes. `bay peer open` published the port and the document carried the name, the address, the domains and the authority |
+| Is the authority the machine names proved? | Yes. `peer add` verified the certificate the machine presented against the authority in its document before printing the fingerprint |
+| Is a served name offered on the link without a certificate? | No. 400 |
+| Is it offered with one from an approved authority? | Yes. 200 |
+| Does closing the link release the port? | Yes. Nothing listened on it afterwards, and the machine's own sites still answered |

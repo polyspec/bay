@@ -174,17 +174,19 @@ func serviceArguments(group string, s *Service, fingerprint string) []string {
 //
 // A proxy running against a different state directory is replaced, because it
 // serves that directory's configuration and ignores this one.
-func EnsureProxy(confDir, certDir string) (created bool, err error) {
+func EnsureProxy(confDir, certDir, peerDir string) (created bool, err error) {
 	in, found, err := Lookup(ProxyName)
 	if err != nil {
 		return false, err
 	}
 	if found && in.State == "running" {
-		conf, certs, err := ProxyMounts()
+		conf, certs, peers, err := ProxyMounts()
 		if err != nil {
 			return false, err
 		}
-		if sameDir(conf, confDir) && sameDir(certs, certDir) {
+		// The peer link is a published port and a mount, neither of which can
+		// be added to a container that is already running.
+		if sameDir(conf, confDir) && sameDir(certs, certDir) && sameDir(peers, peerDir) {
 			return false, nil
 		}
 	}
@@ -193,12 +195,19 @@ func EnsureProxy(confDir, certDir string) (created bool, err error) {
 			return false, err
 		}
 	}
-	_, err = run("run", "--detach", "--name", ProxyName,
+	args := []string{"run", "--detach", "--name", ProxyName,
 		"--network", ProxyNetwork,
-		"--label", LabelRole+"="+roleProxy,
-		"--volume", confDir+":/etc/nginx/conf.d:ro",
-		"--volume", certDir+":/etc/nginx/certs:ro",
-		ProxyImage)
+		"--label", LabelRole + "=" + roleProxy,
+		"--volume", confDir + ":/etc/nginx/conf.d:ro",
+		"--volume", certDir + ":/etc/nginx/certs:ro",
+	}
+	if peerDir != "" {
+		port := strconv.Itoa(PeerPort)
+		args = append(args,
+			"--volume", peerDir+":/etc/nginx/peers:ro",
+			"--publish", port+":"+port)
+	}
+	_, err = run(append(args, ProxyImage)...)
 	return err == nil, err
 }
 
@@ -234,10 +243,10 @@ func Logs(name string, follow bool, tail int, w io.Writer) error {
 
 // ProxyMounts returns the configuration and certificate directories the running
 // proxy was started with.
-func ProxyMounts() (confDir, certDir string, err error) {
+func ProxyMounts() (confDir, certDir, peerDir string, err error) {
 	out, err := run("inspect", ProxyName)
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
 	var raw []struct {
 		Configuration struct {
@@ -248,7 +257,7 @@ func ProxyMounts() (confDir, certDir string, err error) {
 		} `json:"configuration"`
 	}
 	if err := json.Unmarshal(out, &raw); err != nil || len(raw) == 0 {
-		return "", "", fmt.Errorf("reading the proxy's mounts: %w", err)
+		return "", "", "", fmt.Errorf("reading the proxy's mounts: %w", err)
 	}
 	for _, m := range raw[0].Configuration.Mounts {
 		switch m.Destination {
@@ -256,9 +265,11 @@ func ProxyMounts() (confDir, certDir string, err error) {
 			confDir = m.Source
 		case "/etc/nginx/certs":
 			certDir = m.Source
+		case "/etc/nginx/peers":
+			peerDir = m.Source
 		}
 	}
-	return confDir, certDir, nil
+	return confDir, certDir, peerDir, nil
 }
 
 // sameDir compares two paths after resolving symlinks. On macOS /tmp and

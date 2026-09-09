@@ -34,6 +34,46 @@ const HealthPath = "/__bay/health"
 // slow service.
 const RouteHeader = "X-Bay-Route"
 
+// PeerPath is served over the peer link without a client certificate. It has to
+// answer before there is an approval, so it cannot ask for one.
+const PeerPath = "/__bay/peer"
+
+// NginxConfig is everything the proxy configuration is written from.
+type NginxConfig struct {
+	Routes []Route
+	// Resolver is the container network's DNS address, used by the fallback
+	// that reaches a backend by name.
+	Resolver string
+	// DefaultCert names the certificate the default server presents for a name
+	// under a delegated domain that has no route.
+	DefaultCert string
+	// Generation identifies this configuration and is returned by HealthPath.
+	Generation string
+
+	// PeerPort is where this machine's link answers. Zero leaves the link out,
+	// which is a machine with no peers.
+	PeerPort int
+	// PeerAuthorities is the file holding the authorities whose client
+	// certificates the link accepts.
+	PeerAuthorities string
+	// ClientCert and ClientKey are what this machine presents on a peer's link.
+	ClientCert string
+	ClientKey  string
+	// PeerRoutes are the domains an approved peer serves. This machine answers
+	// them and forwards them over that peer's link.
+	PeerRoutes []PeerRoute
+}
+
+// PeerRoute is one domain a peer serves.
+type PeerRoute struct {
+	Domain string
+	// Address is the peer's link, as host:port.
+	Address string
+	// Authority is the file holding that peer's certificate authority, which
+	// the peer's own certificate is checked against.
+	Authority string
+}
+
 // A container is given a new address every time it is recreated, and the proxy
 // names its backends rather than addressing them. Three settings decide what
 // happens between the moment the address changes and the moment the proxy
@@ -58,10 +98,19 @@ const (
 // restarted container is reached at its new address. generation identifies this
 // configuration and is returned by HealthPath.
 func RenderNginx(confDir string, routes []Route, resolver, defaultCert, generation string) error {
+	return RenderNginxConfig(confDir, NginxConfig{
+		Routes: routes, Resolver: resolver, DefaultCert: defaultCert, Generation: generation,
+	})
+}
+
+// RenderNginxConfig writes the whole configuration, including the peer link and
+// the domains approved peers serve.
+func RenderNginxConfig(confDir string, c NginxConfig) error {
+	routes, resolver, defaultCert, generation := c.Routes, c.Resolver, c.DefaultCert, c.Generation
 	if err := os.MkdirAll(confDir, 0o755); err != nil {
 		return err
 	}
-	if len(routes) == 0 {
+	if len(routes) == 0 && len(c.PeerRoutes) == 0 {
 		return fmt.Errorf("no routes to render")
 	}
 
@@ -112,7 +161,89 @@ func RenderNginx(confDir string, routes []Route, resolver, defaultCert, generati
 		}
 		fmt.Fprintf(&b, "}\n\n")
 	}
+	writePeerLink(&b, c)
+	writePeerRoutes(&b, c)
 	return os.WriteFile(filepath.Join(confDir, "stack.conf"), []byte(b.String()), 0o644)
+}
+
+// writePeerLink adds the port approved peers reach this machine on. What this
+// machine serves is offered there as well, to a client holding a certificate
+// from an authority this machine has approved. The endpoint a machine is
+// approved from answers without one.
+func writePeerLink(b *strings.Builder, c NginxConfig) {
+	if c.PeerPort == 0 {
+		return
+	}
+	fmt.Fprintf(b, "server {\n    listen %d ssl default_server;\n    http2 on;\n", c.PeerPort)
+	fmt.Fprintf(b, "    ssl_certificate     /etc/nginx/certs/%s.crt;\n", c.DefaultCert)
+	fmt.Fprintf(b, "    ssl_certificate_key /etc/nginx/certs/%s.key;\n", c.DefaultCert)
+	// Nothing is asked for and nothing is checked here: this server answers the
+	// endpoint, and the endpoint is what an approval is made from.
+	b.WriteString("    ssl_verify_client optional_no_ca;\n")
+	fmt.Fprintf(b, "    location = %s {\n", PeerPath)
+	b.WriteString("        default_type application/json;\n")
+	b.WriteString("        alias /etc/nginx/conf.d/peer.json;\n    }\n")
+	b.WriteString("    location / {\n        return 404;\n    }\n}\n\n")
+
+	// Without an approved authority there is nothing to check a client against,
+	// so this machine's own domains are not offered on the link yet. The
+	// document above still answers, which is how the first peer is approved.
+	if c.PeerAuthorities == "" {
+		return
+	}
+	for _, r := range c.Routes {
+		fmt.Fprintf(b, "server {\n    listen %d ssl;\n    http2 on;\n", c.PeerPort)
+		fmt.Fprintf(b, "    server_name %s;\n", r.Domain)
+		fmt.Fprintf(b, "    ssl_certificate     /etc/nginx/certs/%s.crt;\n", r.Domain)
+		fmt.Fprintf(b, "    ssl_certificate_key /etc/nginx/certs/%s.key;\n", r.Domain)
+		fmt.Fprintf(b, "    ssl_client_certificate %s;\n", c.PeerAuthorities)
+		b.WriteString("    ssl_verify_client on;\n")
+		b.WriteString("    client_max_body_size 0;\n")
+		b.WriteString("    location / {\n")
+		fmt.Fprintf(b, "        set $backend \"%s://%s\";\n", r.Scheme, addressOrName(r))
+		b.WriteString(proxyPass("$backend", addressPath(r)))
+		b.WriteString("    }\n}\n\n")
+	}
+}
+
+// writePeerRoutes adds the domains approved peers serve. This machine answers
+// them with a certificate it issued and forwards them over the peer's link with
+// its own client certificate, so nothing of the peer is installed here.
+func writePeerRoutes(b *strings.Builder, c NginxConfig) {
+	for _, r := range c.PeerRoutes {
+		b.WriteString("server {\n    listen 443 ssl;\n    http2 on;\n")
+		fmt.Fprintf(b, "    server_name %s;\n", r.Domain)
+		fmt.Fprintf(b, "    ssl_certificate     /etc/nginx/certs/%s.crt;\n", r.Domain)
+		fmt.Fprintf(b, "    ssl_certificate_key /etc/nginx/certs/%s.key;\n", r.Domain)
+		b.WriteString("    client_max_body_size 0;\n")
+		b.WriteString("    location / {\n")
+		fmt.Fprintf(b, "        add_header %s peer always;\n", RouteHeader)
+		fmt.Fprintf(b, "        proxy_pass https://%s;\n", r.Address)
+		fmt.Fprintf(b, "        proxy_connect_timeout %s;\n", connectWait)
+		fmt.Fprintf(b, "        proxy_ssl_certificate           %s;\n", c.ClientCert)
+		fmt.Fprintf(b, "        proxy_ssl_certificate_key       %s;\n", c.ClientKey)
+		fmt.Fprintf(b, "        proxy_ssl_trusted_certificate   %s;\n", r.Authority)
+		b.WriteString("        proxy_ssl_verify        on;\n")
+		b.WriteString("        proxy_ssl_server_name   on;\n")
+		fmt.Fprintf(b, "        proxy_ssl_name          %s;\n", r.Domain)
+		b.WriteString("        proxy_http_version 1.1;\n")
+		b.WriteString("        proxy_set_header Host $host;\n")
+		b.WriteString("        proxy_set_header X-Real-IP $remote_addr;\n")
+		b.WriteString("        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n")
+		b.WriteString("        proxy_set_header X-Forwarded-Proto https;\n")
+		b.WriteString("        proxy_set_header Upgrade $http_upgrade;\n")
+		b.WriteString("        proxy_set_header Connection $connection_upgrade;\n")
+		b.WriteString("    }\n}\n\n")
+	}
+}
+
+// addressOrName returns what a route is sent to: its address when it has one,
+// and the container's name otherwise.
+func addressOrName(r Route) string {
+	if r.Address != "" {
+		return r.Address
+	}
+	return r.Backend
 }
 
 // addressPath names the target the primary location sends to. A route with no

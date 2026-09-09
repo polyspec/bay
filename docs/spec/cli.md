@@ -21,6 +21,7 @@ verifies that this file matches the code.
 | `domain [add|remove|default] [name]` | List the machine's domains, or change them. | Can require |
 | `status [--json]` | Print the proxy, the DNS server and every registered project. | No |
 | `doctor` | Report what machine setup is missing. Changes nothing. | No |
+| `peer [open|close|add|remove] [address|fingerprint]` | List the machines whose domains this one reaches, or change them. | No |
 | `sync` | Rewrite the proxy configuration from the containers that are running. | No |
 | `install` | Apply the machine setup now instead of during the next up. | Can require |
 | `uninstall` | Remove the DNS agent and the resolver entries. | Can require |
@@ -61,6 +62,10 @@ Reads state without registering the selected Compose project, creating certifica
 ### `doctor`
 
 Reads public certificate and setup state, including the selected project's domains without saving them. Creates no files and reads no private keys.
+
+### `peer`
+
+With no argument it lists them and says whether the link is open. "open" answers the link, which another machine reads to approve this one; "close" stops answering it. "add" reads what the machine at the address says about itself, checks that it holds the authority it names, prints the fingerprint and asks before approving. "remove" withdraws an approval. Every change rewrites the proxy configuration. Nothing is added to the keychain.
 
 ### `sync`
 

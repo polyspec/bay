@@ -59,6 +59,10 @@ type Settings struct {
 	Domain string `json:"domain"`
 	// Extra are further domains delegated on this machine.
 	Extra []string `json:"extra,omitempty"`
+	// Peering says this machine answers the peer link. It is off until it is
+	// turned on, because the link is what another machine on the network
+	// reaches this one through.
+	Peering bool `json:"peering,omitempty"`
 }
 
 // DefaultDomain is the domain a project uses when none is set. RFC 6761
@@ -156,6 +160,17 @@ func (m *Machine) RemoveDomain(domain string) error {
 
 // SetDefaultDomain sets the domain projects use when none is set, and delegates
 // it when it is new.
+// SetPeering turns the peer link on or off. With it on and no peer approved,
+// the link answers only the document another machine is approved from.
+func (m *Machine) SetPeering(on bool) error {
+	s, err := m.Settings()
+	if err != nil {
+		return err
+	}
+	s.Peering = on
+	return m.SaveSettings(s)
+}
+
 func (m *Machine) SetDefaultDomain(domain string) error {
 	domain = normalizeDomain(domain)
 	if err := checkDomain(domain); err != nil {

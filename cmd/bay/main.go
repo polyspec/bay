@@ -90,6 +90,8 @@ func dispatch(cmd string) error {
 		return schema(flag.Args()[1:])
 	case "help":
 		return help(flag.Args()[1:])
+	case "peer":
+		return peer(m, flag.Args()[1:])
 	case "sync":
 		return sync(m)
 	case "install":
@@ -308,6 +310,150 @@ func help(args []string) error {
 }
 
 // install applies the machine setup now, so the first up does not have to ask.
+// peer lists the machines whose domains this one reaches, or changes them.
+func peer(m *stack.Machine, args []string) error {
+	if len(args) == 0 {
+		return listPeers(m)
+	}
+	switch args[0] {
+	case "open", "close":
+		on := args[0] == "open"
+		if err := m.SetPeering(on); err != nil {
+			return err
+		}
+		if !on {
+			return syncAfterPeerChange(m, "the link is closed")
+		}
+		return syncAfterPeerChange(m,
+			fmt.Sprintf("the link is open at %s", stack.PeerLinkAddress(stack.LANAddress())))
+	case "add":
+		if len(args) < 2 {
+			return fmt.Errorf("peer add needs the address of the other machine, " +
+				"for example 192.168.0.42:8443")
+		}
+		return addPeer(m, args[1])
+	case "remove":
+		if len(args) < 2 {
+			return fmt.Errorf("peer remove needs a fingerprint; run \"bay peer\"")
+		}
+		return removePeer(m, args[1])
+	default:
+		return fmt.Errorf("unknown peer action %q; use open, close, add or remove", args[0])
+	}
+}
+
+func listPeers(m *stack.Machine) error {
+	peers, err := stack.Peers(m.Dir)
+	if err != nil {
+		return err
+	}
+	settings, err := m.Settings()
+	if err != nil {
+		return err
+	}
+	link := "closed"
+	if settings.Peering {
+		link = "open at " + stack.PeerLinkAddress(stack.LANAddress())
+	}
+	fmt.Printf("link   %s\n", link)
+	if len(peers) == 0 {
+		fmt.Println("peers  none")
+		return nil
+	}
+	for _, p := range peers {
+		fmt.Printf("%-16s %-22s %s\n", p.Name, p.Address, short(p.Fingerprint))
+		for _, d := range p.Domains {
+			fmt.Printf("    %s\n", d)
+		}
+	}
+	return nil
+}
+
+// addPeer reads what the machine at the address says about itself and asks
+// before approving it. The fingerprint is printed so it can be compared with
+// what the other machine reports.
+func addPeer(m *stack.Machine, address string) error {
+	doc, err := stack.FetchPeer(address)
+	if err != nil {
+		return err
+	}
+	fingerprint, err := stack.Fingerprint(doc.CA)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("machine     %s\n", doc.Name)
+	fmt.Printf("address     %s\n", doc.Address)
+	fmt.Printf("fingerprint %s\n", short(fingerprint))
+	if len(doc.Domains) == 0 {
+		fmt.Println("domains     none yet")
+	}
+	for i, d := range doc.Domains {
+		if i == 0 {
+			fmt.Printf("domains     %s\n", d)
+			continue
+		}
+		fmt.Printf("            %s\n", d)
+	}
+	fmt.Print("\nApprove this machine? Its domains will be reachable here. [y/N] ")
+	var answer string
+	fmt.Scanln(&answer)
+	if answer != "y" && answer != "Y" {
+		fmt.Println("not approved")
+		return nil
+	}
+	if err := stack.ApprovePeer(m.Dir, stack.Peer{
+		Name: doc.Name, Address: doc.Address, Domains: doc.Domains, CA: doc.CA,
+	}); err != nil {
+		return err
+	}
+	return syncAfterPeerChange(m, "approved "+doc.Name)
+}
+
+func removePeer(m *stack.Machine, fingerprint string) error {
+	peers, err := stack.Peers(m.Dir)
+	if err != nil {
+		return err
+	}
+	var match stack.Peer
+	var found int
+	for _, p := range peers {
+		if strings.HasPrefix(p.Fingerprint, fingerprint) {
+			match, found = p, found+1
+		}
+	}
+	switch found {
+	case 0:
+		return fmt.Errorf("no peer whose fingerprint starts with %q", fingerprint)
+	case 1:
+	default:
+		return fmt.Errorf("%d peers start with %q; give more of it", found, fingerprint)
+	}
+	if err := stack.RemovePeer(m.Dir, match.Fingerprint); err != nil {
+		return err
+	}
+	return syncAfterPeerChange(m, "removed "+match.Name)
+}
+
+// syncAfterPeerChange rewrites the proxy configuration for the new peer list.
+func syncAfterPeerChange(m *stack.Machine, what string) error {
+	res, err := stack.SyncProxy(m)
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%s; proxy %s with %d routes and %d peers\n",
+		what, res.Action, len(res.Routes), len(res.Peers))
+	return nil
+}
+
+// short returns the first part of a fingerprint, which is what a person
+// compares between two machines.
+func short(fingerprint string) string {
+	if len(fingerprint) > 16 {
+		return fingerprint[:16]
+	}
+	return fingerprint
+}
+
 // sync rewrites the proxy configuration from the containers that are running.
 // It is how a change to how that configuration is written reaches a machine
 // whose containers are already up: every other command that rewrites it also
