@@ -5,6 +5,28 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Say when the authority was not trusted
+
+Setup reported nothing left to do while no keychain held the authority, so every
+name this machine served was refused by a browser and nothing said why. Two
+faults made that possible and each hid the other.
+
+The check asked whether the authority verified against itself. A self-signed
+certificate is its own anchor, so that succeeds with no keychain involved and
+answered yes for an authority created a moment earlier. It now asks whether the
+machine holds the authority, comparing the certificate itself rather than its
+name, because a retired authority carries the name of the one that replaced it.
+
+The command that adds it named no keychain. Without one it exits zero and adds
+nothing. It names the login keychain, and both adding and removing read the
+result back rather than trusting the exit status, so a command that reports
+success and changes nothing is an error rather than a silent one.
+
+Verification: on this machine the authority was in no keychain and a certificate
+it issued failed `security verify-cert -p ssl`, while setup reported nothing
+pending. After the change setup reported the trust step, ran it, and the same
+certificate verified; asking twice gives the same answer, and running setup again
+reports nothing to do. `make check` passes.
 ### Stop cutting a response short by asking the upstream to close
 
 A request that is not a protocol upgrade carried `Connection: close` to the

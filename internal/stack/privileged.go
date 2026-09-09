@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"errors"
 	"fmt"
 	"net"
 	"os"
@@ -231,29 +232,118 @@ func UninstallResolver(helper string, elevate Elevator, domains ...string) error
 // CATrusted reports whether the certificate at path already verifies against
 // the machine's trust settings.
 func CATrusted(path string) bool {
-	// verify-cert exits non-zero and prints to stderr when the chain does not
-	// terminate in a trusted root, which is exactly the question being asked.
-	cmd := exec.Command("security", "verify-cert", "-c", path, "-p", "basic")
+	// A self-signed certificate is its own anchor, so verify-cert accepts one
+	// that is in no keychain at all and answers nothing on its own. What
+	// decides whether a browser accepts the names this authority signs is
+	// whether the machine holds the authority, so that is asked first.
+	if !inKeychain(path) {
+		return false
+	}
+	cmd := exec.Command("security", "verify-cert", "-c", path, "-p", "ssl")
 	cmd.Stdout, cmd.Stderr = nil, nil
 	return cmd.Run() == nil
 }
 
+// inKeychain reports whether this exact certificate is in one of the machine's
+// keychains. The comparison is on the certificate itself rather than on its
+// name, because a retired authority carries the same name as the one that
+// replaced it.
+func inKeychain(path string) bool {
+	want, err := certificateBody(path)
+	if err != nil || want == "" {
+		return false
+	}
+	out, err := exec.Command("security", "find-certificate", "-a", "-p").Output()
+	if err != nil {
+		return false
+	}
+	for _, block := range strings.Split(string(out), "-----END CERTIFICATE-----") {
+		if body, err := certificateBodyFrom(block); err == nil && body == want {
+			return true
+		}
+	}
+	return false
+}
+
+// certificateBody returns a certificate's base64 body with every space removed,
+// which is what two PEM files of the same certificate share whatever their line
+// endings and wrapping.
+func certificateBody(path string) (string, error) {
+	pem, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	return certificateBodyFrom(string(pem))
+}
+
+func certificateBodyFrom(pem string) (string, error) {
+	_, rest, found := strings.Cut(pem, "-----BEGIN CERTIFICATE-----")
+	if !found {
+		return "", errNoCertificate
+	}
+	body, _, _ := strings.Cut(rest, "-----END CERTIFICATE-----")
+	return strings.Join(strings.Fields(body), ""), nil
+}
+
+var errNoCertificate = errors.New("no certificate in PEM form")
+
 // trustCA adds the authority to the user's trust settings. The -d flag would
 // use the administrator store, which requires root and cannot present the
 // confirmation the operation needs.
+//
+// The keychain is named. Without it the command exits zero and adds nothing, so
+// setup reported the authority trusted while no keychain held it and every name
+// this machine serves was refused by a browser.
 func trustCA(path string) error {
-	out, err := exec.Command("security", "add-trusted-cert", "-r", "trustRoot", path).CombinedOutput()
+	out, err := exec.Command("security", trustArgs(path)...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("trusting %s: %s", path, strings.TrimSpace(string(out)))
 	}
+	// The command reports success whether or not it changed anything, so the
+	// result is read back rather than assumed. Adding an authority the machine
+	// already holds changes nothing and still reports it trusted.
+	if !CATrusted(path) {
+		return fmt.Errorf("trusting %s: the command reported success and no keychain holds it", path)
+	}
 	fmt.Printf("trusted %s\n", path)
 	return nil
+}
+
+// trustArgs names the keychain the authority is added to. A login keychain is
+// where a user's own certificates belong, and naming it is what makes the
+// command act.
+func trustArgs(path string) []string {
+	args := []string{"add-trusted-cert", "-r", "trustRoot"}
+	if k := loginKeychain(); k != "" {
+		args = append(args, "-k", k)
+	}
+	return append(args, path)
+}
+
+// loginKeychain returns the user's login keychain, or an empty string when it
+// is not where it is expected, in which case the command is left to choose.
+func loginKeychain() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	path := filepath.Join(home, "Library", "Keychains", "login.keychain-db")
+	if _, err := os.Stat(path); err != nil {
+		return ""
+	}
+	return path
 }
 
 func untrustCA(path string) error {
 	out, err := exec.Command("security", "remove-trusted-cert", path).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("untrusting %s: %s", path, strings.TrimSpace(string(out)))
+	}
+	// Read back rather than assume, for the same reason adding does. Removing
+	// an authority the machine does not hold changes nothing and still reports
+	// it gone.
+	if CATrusted(path) {
+		return fmt.Errorf("untrusting %s: the command reported success and a keychain still holds it", path)
 	}
 	fmt.Printf("stopped trusting %s\n", path)
 	return nil
