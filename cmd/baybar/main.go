@@ -384,6 +384,11 @@ func (a *app) ask(parts []string) bool {
 		confirm("do-cert-remove:"+parts[1], text.T("Remove the certificate for %s?", parts[1]),
 			text.T("It is reissued automatically if a route still needs it."),
 			text.T("Remove"), false)
+	case "cert-remove-unused":
+		confirm("do-cert-remove-unused", text.T("Remove every unused certificate?"),
+			text.T("They are the certificates no route and no registered project asks for. "+
+				"A name a project asks for again is issued again."),
+			text.T("Remove"), true)
 	case "ca-rotate":
 		confirm("do-ca-rotate", text.T("Replace the certificate authority?"),
 			text.T("Every certificate it signed is discarded and reissued, and the keychain "+
@@ -552,6 +557,26 @@ func (a *app) runEdit(rt *stack.Runtime, parts []string) (bool, error) {
 		}
 		_, err := stack.SyncProxy(m)
 		return true, err
+
+	case "do-cert-remove-unused":
+		// The list is read again here rather than carried through the dialog, so
+		// a certificate that came into use while the question was open is kept.
+		snap, err := stack.Take(m, rt.Addr)
+		if err != nil {
+			return true, err
+		}
+		names := unusedCertificates(snap)
+		for _, name := range names {
+			if err := ca.RemoveCertificate(m.CertDir(), name); err != nil {
+				return true, err
+			}
+		}
+		if _, err := stack.SyncProxy(m); err != nil {
+			return true, err
+		}
+		rt.Progress(text.P("removed %d unused certificate", "removed %d unused certificates",
+			len(names), len(names)))
+		return true, nil
 
 	case "cert-reissue":
 		if err := ca.Reissue(m.CertDir(), parts[1]); err != nil {

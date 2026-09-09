@@ -670,31 +670,39 @@ func certificatesView(p *panel, snap stack.Snapshot, busy bool) {
 	}
 	p.Sections = append(p.Sections, section{Header: text.T("AUTHORITY"), Rows: []row{authority}})
 
+	// The certificates something asks for and the ones left behind are two
+	// different lists: one is reissued, the other is removed.
 	issued := section{Header: text.T("ISSUED")}
+	unused := section{Header: text.T("UNUSED"),
+		Note: text.T("no route and no project asks for these names")}
 	for _, info := range snap.Certificates.Issued {
 		r := row{
 			Text: info.Name, Wide: true, Dot: dotFor(!info.NeedsAttention()),
 			Detail: certLife(info),
 		}
-		// A certificate no route uses is offered for removal; every other one
-		// is offered for reissue.
 		if info.Orphaned {
-			r.LinkText = text.T("no route uses it")
 			r.Buttons = []button{quiet("cert-remove:"+info.Name, text.T("Remove"), busy)}
-		} else {
-			r.LinkText = certOwner(snap, info)
-			reissue := quiet("cert-reissue:"+info.Name, text.T("Reissue"), busy)
-			if info.NeedsAttention() {
-				reissue.Style = ""
-			}
-			r.Buttons = []button{reissue}
+			unused.Rows = append(unused.Rows, r)
+			continue
 		}
+		r.LinkText = certOwner(snap, info)
+		reissue := quiet("cert-reissue:"+info.Name, text.T("Reissue"), busy)
+		if info.NeedsAttention() {
+			reissue.Style = ""
+		}
+		r.Buttons = []button{reissue}
 		issued.Rows = append(issued.Rows, r)
 	}
 	if len(issued.Rows) == 0 {
 		issued.Note = text.T("Nothing issued yet. Certificates appear as routes do.")
 	}
 	p.Sections = append(p.Sections, issued)
+	if len(unused.Rows) > 0 {
+		unused.Buttons = []button{
+			quiet("cert-remove-unused", text.T("Remove all %d", len(unused.Rows)), busy),
+		}
+		p.Sections = append(p.Sections, unused)
+	}
 }
 
 func settingsView(p *panel, snap stack.Snapshot, busy bool) {
@@ -802,6 +810,20 @@ func certLife(info stack.CertInfo) string {
 	default:
 		return text.T("valid until %s", info.NotAfter.Format("2006-01-02"))
 	}
+}
+
+// unusedCertificates returns the names no route and no registered project asks
+// for. It is read from the snapshot at the moment of removal rather than
+// carried through the dialog, so a certificate that came into use while the
+// question was open is kept.
+func unusedCertificates(snap stack.Snapshot) []string {
+	var names []string
+	for _, info := range snap.Certificates.Issued {
+		if info.Orphaned {
+			names = append(names, info.Name)
+		}
+	}
+	return names
 }
 
 // certOwner returns the project a certificate's domain belongs to.

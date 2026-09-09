@@ -5,6 +5,21 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Unused certificates are their own list
+
+A certificate something asks for and one left behind are answered differently:
+one is reissued, the other is removed. The certificates screen shows them as two
+lists. UNUSED carries `Remove all N` in its header beside `Remove` on each row,
+and asks before removing, because a removed certificate is gone.
+
+What the bulk action removes is read from the machine at the moment it runs, not
+carried through the question, so a name that came into use while the question
+was open is kept.
+
+Verification: `make check`, including a test over what the bulk action selects.
+On this machine the header read `전체 17개 제거`, the question was read on
+screen and cancelled, and the twenty-four certificates are unchanged.
+
 ### A certificate is unused only when nothing asks for its name
 
 A certificate was called unused when no route served its name. Whether a project
