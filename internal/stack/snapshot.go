@@ -230,6 +230,17 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 	for _, r := range routes {
 		use.Routed = append(use.Routed, r.Domain)
 	}
+	// A peer's domain is answered here with a certificate this machine issued,
+	// so that certificate is in use for as long as the peer is approved.
+	if peers, err := Peers(m.Dir); err == nil {
+		own := make([]string, 0, len(routes))
+		for _, r := range routes {
+			own = append(own, r.Domain)
+		}
+		for d := range PeerDomains(peers, own) {
+			use.Peered = append(use.Peered, d)
+		}
+	}
 
 	issued, err := Certificates(m.CertDir(), use)
 	if err != nil {

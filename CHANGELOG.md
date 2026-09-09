@@ -5,6 +5,21 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Count a peer's domain as a name in use
+
+A peer's domain is answered here with a certificate this machine issued, so the
+browser is offered one from an authority it already trusts. The certificates
+screen judged a name used by what the routes and the projects ask for and by
+nothing else, so those certificates were listed as unused and offered for
+removal. Removing one takes away the only thing that lets the name be opened.
+
+What approved peers serve is now part of what asks for a name. A name that no
+route, project or peer asks for is still reported, which is what a removed
+project leaves behind.
+
+Verification: `bay status --json` listed polyspec.test and
+registry.soksak.test as orphaned while both were being served; after the change
+neither is, and a name nothing asks for still is. `make check` passes.
 ### Say when the authority was not trusted
 
 Setup reported nothing left to do while no keychain held the authority, so every

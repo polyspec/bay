@@ -67,6 +67,10 @@ type CertUse struct {
 	// Declared are the domains the registered projects ask for, read from their
 	// Compose files.
 	Declared []string
+	// Peered are the domains approved peers serve. This machine answers them
+	// with a certificate it issued, so the browser is offered one from an
+	// authority it already trusts, and that certificate is in use here.
+	Peered []string
 	// Unread says a registered project's file is there but could not be read.
 	// What it asks for is not known, so no certificate is called unused: the
 	// alternative is offering to remove one the project needs.
@@ -84,9 +88,11 @@ func Certificates(certDir string, use CertUse) ([]CertInfo, error) {
 	if err != nil {
 		return nil, err
 	}
-	used := make(map[string]bool, len(use.Routed)+len(use.Declared))
-	for _, d := range append(append([]string{}, use.Routed...), use.Declared...) {
-		used[strings.ToLower(d)] = true
+	used := make(map[string]bool, len(use.Routed)+len(use.Declared)+len(use.Peered))
+	for _, group := range [][]string{use.Routed, use.Declared, use.Peered} {
+		for _, d := range group {
+			used[strings.ToLower(d)] = true
+		}
 	}
 
 	var out []CertInfo
