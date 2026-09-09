@@ -5,6 +5,22 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Stop cutting a response short by asking the upstream to close
+
+A request that is not a protocol upgrade carried `Connection: close` to the
+upstream, which ended the response before the body was complete. The reply was
+answered 200 with a body shorter than its own content length, so the loss was
+silent: a browser reported a protocol error on a request it had been told
+succeeded, and a page loaded its markup and none of its scripts.
+
+An upgrade still carries `Connection: upgrade`. Every other request now carries
+no Connection header, which nginx omits when the mapped value is empty.
+
+Verification: measured against a peer's link. The same 327197-byte asset arrived
+whole four times in a row after the change, and before it arrived cut short at
+163440, 212536, 310744 and 114351 bytes on successive tries, answered 200 every
+time. The header was isolated by sending each of the four headers this proxy
+adds on its own: only Connection: close reproduced it. `make check` passes.
 ### Start the Docker proxy on an address the machine has
 
 The Docker proxy published on 127.0.0.2, which macOS does not assign to lo0, so

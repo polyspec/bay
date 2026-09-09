@@ -113,3 +113,30 @@ func readConf(t *testing.T, dir string) string {
 	}
 	return string(body)
 }
+
+// A request that is not a protocol upgrade must not carry Connection: close to
+// the upstream. Measured against a peer's link, that header made the upstream
+// close before it finished the body: the same 327197-byte asset arrived whole
+// without it and cut short at a different point every time with it, answered
+// 200 each time, so the loss was silent. An upgrade still needs the header, so
+// the map keeps its default and only its empty case changes to no header.
+func TestAnOrdinaryRequestCarriesNoConnectionClose(t *testing.T) {
+	dir := t.TempDir()
+	conf := NginxConfig{
+		Routes:      []Route{{Domain: "a.test", Address: "10.0.0.2:80", Backend: "c.container.test:80", Scheme: "http"}},
+		Resolver:    "10.0.0.1",
+		DefaultCert: DefaultCertName,
+		Generation:  "g",
+	}
+	if err := RenderNginxConfig(dir, conf); err != nil {
+		t.Fatal(err)
+	}
+	body := readConf(t, dir)
+	if strings.Contains(body, "''      close;") {
+		t.Errorf("a request with no Upgrade header is sent Connection: close:\n%s",
+			body[:strings.Index(body, "\n\n")+1])
+	}
+	if !strings.Contains(body, "default upgrade;") {
+		t.Error("an upgrade request no longer carries Connection: upgrade")
+	}
+}

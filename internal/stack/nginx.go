@@ -125,7 +125,11 @@ func RenderNginxConfig(confDir string, c NginxConfig) error {
 	if resolver != "" {
 		fmt.Fprintf(&b, "resolver %s valid=%s ipv6=off;\n\n", resolver, heldAddress)
 	}
-	b.WriteString("map $http_upgrade $connection_upgrade {\n    default upgrade;\n    ''      close;\n}\n\n")
+	// An upgrade carries Connection: upgrade. Every other request carries no
+	// Connection header at all: nginx omits a header set to an empty value, and
+	// sending close makes an upstream end the response before the body is
+	// complete, which arrives as a short 200 rather than as an error.
+	b.WriteString("map $http_upgrade $connection_upgrade {\n    default upgrade;\n    ''      \"\";\n}\n\n")
 
 	// Plain HTTP redirects to HTTPS. The health endpoint answers on HTTP so no
 	// certificate is required.
