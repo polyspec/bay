@@ -40,7 +40,11 @@ make uninstall  # remove them
    earlier result as evidence for changed code.
 5. Documents, comments and commit messages describe this project only.
 6. Use direct language: name the action, state the subject and the object, give
-   the cause in one sentence.
+   the cause in one sentence. Name the action with the verb for it: create,
+   publish, receive, register, remove, return, fail. Do not use metaphor,
+   personification or figures of speech. A document, a comment, a commit message
+   and an interface string carry the same information in English and in Korean.
+   This applies to code comments and commit messages as well as to documents.
 
 After changing a declaration in `internal/contract`, run:
 

@@ -5,9 +5,9 @@ import (
 	"testing"
 )
 
-// dockerInspect is the shape `docker inspect` returns for a container: the name
-// carries a leading slash, the labels are a map, the image is the identifier
-// the container was resolved to, and every network is keyed by its name.
+// dockerInspect is the output `docker inspect` returns for a container. The
+// name has a leading slash, the labels are a map, the image is an identifier,
+// and the networks are a map keyed by network name.
 const dockerInspect = `[
   {
     "Id": "9f3c1b",
@@ -66,8 +66,8 @@ func TestDockerContainersAreDecoded(t *testing.T) {
 	}
 }
 
-// A user-defined network and the default bridge can both be attached. The
-// address chosen must not depend on Go's map ordering.
+// A container can be attached to several networks. The address returned must
+// not depend on Go's map iteration order.
 func TestADockerContainerOnSeveralNetworksPicksTheSameOneEveryTime(t *testing.T) {
 	const many = `[{"Id":"1","Name":"/many","State":{"Status":"running"},
 	  "Config":{"Labels":{}},
@@ -102,9 +102,9 @@ func TestAppleContainersCarryTheirEngine(t *testing.T) {
 	}
 }
 
-// An engine that is absent, or present with nothing answering, contributes no
-// containers. A machine with one engine behaves as it did before the other was
-// supported, so a failure from one must not hide the other's containers.
+// An engine that is absent, or whose daemon does not respond, returns no
+// containers. A failure from one engine must not hide another engine's
+// containers.
 func TestAnEngineThatDoesNotAnswerContributesNothing(t *testing.T) {
 	answering := engineReader{name: AppleEngine, read: func() ([]Instance, error) {
 		return []Instance{{Name: "edge", Engine: AppleEngine}}, nil
@@ -122,8 +122,7 @@ func TestAnEngineThatDoesNotAnswerContributesNothing(t *testing.T) {
 	}
 }
 
-// With no engine present at all there is nothing to run containers with, and
-// that is worth reporting rather than reading as an empty machine.
+// With no engine present, List returns an error rather than an empty list.
 func TestNoEnginePresentIsReported(t *testing.T) {
 	if _, err := listFrom(nil); err == nil {
 		t.Fatal("a machine with no engine reported an empty list instead of an error")
@@ -131,7 +130,7 @@ func TestNoEnginePresentIsReported(t *testing.T) {
 }
 
 // Two containers with the same name on different engines are two containers.
-// Merging must not drop either, because the domain conflict is what reports it.
+// The merged list must contain both.
 func TestBothEnginesContributeToOneList(t *testing.T) {
 	apple := engineReader{name: AppleEngine, read: func() ([]Instance, error) {
 		return []Instance{{Name: "web", Engine: AppleEngine}}, nil
@@ -151,9 +150,8 @@ func TestBothEnginesContributeToOneList(t *testing.T) {
 	}
 }
 
-// A container is reachable from its own engine's proxy and from no other. While
-// the machine runs one proxy, a route may only name a container that proxy can
-// reach; the other engine's containers are still read, and still claim domains.
+// A container is reachable only from its own engine's proxy, so each proxy
+// receives only the routes of its own engine.
 func TestRoutesNameOnlyTheContainersTheProxyCanReach(t *testing.T) {
 	instances := []ServiceInstance{
 		{Container: "shop-web", Group: "shop", Domain: "shop.test", Port: 80,
@@ -176,10 +174,9 @@ func TestRoutesNameOnlyTheContainersTheProxyCanReach(t *testing.T) {
 	}
 }
 
-// A domain is claimed once per machine, not once per engine. Two containers on
-// different engines claiming one domain is the same conflict as two on one, and
-// the claim is settled before the engine filter, so the loser gets no route by
-// running somewhere else.
+// One domain is claimed once per machine. Two containers on different engines
+// claiming one domain produce one conflict, and the claim is resolved before
+// the routes are split by engine.
 func TestOneDomainIsClaimedOncePerMachineAcrossEngines(t *testing.T) {
 	instances := []ServiceInstance{
 		{Container: "blog-web", Group: "blog", Domain: "shop.test", Port: 80,
@@ -195,7 +192,7 @@ func TestOneDomainIsClaimedOncePerMachineAcrossEngines(t *testing.T) {
 		t.Errorf("conflict kept %q and dropped %q, want the first in order kept",
 			conflicts[0].Kept, conflicts[0].Dropped)
 	}
-	// The Docker container won the domain, so the Apple proxy serves nothing.
+	// The Docker container holds the domain, so the Apple proxy has no route.
 	if got := RoutesOn(routes, AppleEngine); len(got) != 0 {
 		t.Fatalf("apple proxy got %v, want none: the domain is held on the other engine", got)
 	}

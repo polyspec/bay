@@ -5,169 +5,152 @@ the day the change was made.
 
 ## 2026-09-09
 
-### Count a peer's domain as a name in use
+### Include peer domains when deciding whether a certificate is used
 
-A peer's domain is answered here with a certificate this machine issued, so the
-browser is offered one from an authority it already trusts. The certificates
-screen judged a name used by what the routes and the projects ask for and by
-nothing else, so those certificates were listed as unused and offered for
-removal. Removing one takes away the only thing that lets the name be opened.
+This machine serves an approved peer's domain with a certificate it issued. The
+certificates screen decided whether a name was used from the routes and the
+projects only, so it reported those certificates as unused and offered to remove
+them. Removing one removes the certificate required to serve the name.
 
-What approved peers serve is now part of what asks for a name. A name that no
-route, project or peer asks for is still reported, which is what a removed
-project leaves behind.
+The domains of approved peers are now included. A name required by no route, no
+project and no peer is still reported as unused.
 
-Verification: `bay status --json` listed polyspec.test and
-registry.soksak.test as orphaned while both were being served; after the change
-neither is, and a name nothing asks for still is. `make check` passes.
-### Say when the authority was not trusted
+Verification: `bay status --json` reported polyspec.test and
+registry.soksak.test as orphaned while both were served. After the change
+neither is reported as orphaned, and a name nothing requires still is.
+`make check` passes.
 
-Setup reported nothing left to do while no keychain held the authority, so every
-name this machine served was refused by a browser and nothing said why. Two
-faults made that possible and each hid the other.
+### Report an untrusted certificate authority
 
-The check asked whether the authority verified against itself. A self-signed
-certificate is its own anchor, so that succeeds with no keychain involved and
-answered yes for an authority created a moment earlier. It now asks whether the
-machine holds the authority, comparing the certificate itself rather than its
-name, because a retired authority carries the name of the one that replaced it.
+Setup reported no remaining steps while no keychain contained the authority, so
+a browser rejected every name this machine served and no message stated why.
+Two defects caused this.
 
-The command that adds it named no keychain. Without one it exits zero and adds
-nothing. It names the login keychain, and both adding and removing read the
-result back rather than trusting the exit status, so a command that reports
-success and changes nothing is an error rather than a silent one.
+The check verified the authority against itself. A self-signed certificate is
+its own root, so the check succeeded without any keychain and returned true for
+an authority created moments earlier. The check now tests whether a keychain
+contains the certificate, comparing the certificate bytes rather than the
+subject name, because a replaced authority has the same subject name as its
+replacement.
 
-Verification: on this machine the authority was in no keychain and a certificate
-it issued failed `security verify-cert -p ssl`, while setup reported nothing
-pending. After the change setup reported the trust step, ran it, and the same
-certificate verified; asking twice gives the same answer, and running setup again
-reports nothing to do. `make check` passes.
-### Stop cutting a response short by asking the upstream to close
+The command that adds the authority named no keychain. Without a named keychain
+it exits zero and adds nothing. It now names the login keychain, and both adding
+and removing read the result back instead of relying on the exit status.
 
-A request that is not a protocol upgrade carried `Connection: close` to the
-upstream, which ended the response before the body was complete. The reply was
-answered 200 with a body shorter than its own content length, so the loss was
-silent: a browser reported a protocol error on a request it had been told
-succeeded, and a page loaded its markup and none of its scripts.
+Verification: no keychain contained the authority and a certificate it issued
+failed `security verify-cert -p ssl`, while setup reported no pending steps.
+After the change setup reported the trust step, ran it, and the certificate
+verified. Two calls return the same result, and a second run of setup reports no
+remaining steps. `make check` passes.
 
-An upgrade still carries `Connection: upgrade`. Every other request now carries
+### Remove Connection: close from a proxied request
+
+A request that is not a protocol upgrade sent `Connection: close` to the
+upstream, and the upstream ended the response before the body was complete. The
+proxy returned status 200 with a body shorter than its content length, so a
+browser reported a protocol error for a request it was told had succeeded, and a
+page loaded its markup and none of its scripts.
+
+An upgrade request still sends `Connection: upgrade`. Every other request sends
 no Connection header, which nginx omits when the mapped value is empty.
 
-Verification: measured against a peer's link. The same 327197-byte asset arrived
-whole four times in a row after the change, and before it arrived cut short at
-163440, 212536, 310744 and 114351 bytes on successive tries, answered 200 every
-time. The header was isolated by sending each of the four headers this proxy
-adds on its own: only Connection: close reproduced it. `make check` passes.
-### Start the Docker proxy on an address the machine has
+Verification: measured against a peer link. A 327197-byte file was received in
+full four times after the change. Before the change the same request returned
+163440, 212536, 310744 and 114351 bytes on successive tries, with status 200 each
+time. Each of the four headers this proxy adds was sent alone; only
+`Connection: close` reproduced the truncation. `make check` passes.
 
-The Docker proxy published on 127.0.0.2, which macOS does not assign to lo0, so
-Docker refused to create it and opening the peer link failed. Adding that
-address needs an alias written as root, and root is for `/etc/resolver` alone.
-It publishes on 127.0.0.1.
+### Publish the Docker proxy on 127.0.0.1
 
-Two more faults stopped the same command. A configuration with no route of its
-own wrote an empty resolver directive, which nginx refuses to start on, and a
-machine with the link open but nothing served stopped its proxy instead of
-running it, so the document a machine is approved from had nothing to answer it.
-The resolver is written only when there is one, and the proxy carrying the link
-runs with no routes.
+The Docker proxy published on 127.0.0.2. macOS assigns no such address to lo0,
+so Docker refused to create the container and opening the peer link failed.
+Adding that address requires root, and root is used only for `/etc/resolver`.
 
-A Docker proxy is given Docker's own resolver rather than the network gateway,
-which answers nothing.
+Two further defects stopped the same command. A configuration with no route of
+its own wrote a resolver directive with no address, and nginx fails to start on
+one. A machine with the peer link open and no route stopped its proxy instead of
+running it, so nothing served the document used to approve the machine. The
+resolver directive is written only when there is an address, and the proxy that
+publishes the link runs with no route.
 
-Verification: the published address is asked to bind in a test, which is what
-would have caught the first fault. `bay peer open` reports the link
-open at 192.168.0.10:8443 and the proxy running with 80 and 443 on 127.0.0.1 and
-8443 on the network; the document answers over the network address with this
-machine's name, address and authority. `make check` passes.
-### Opening the peer link no longer writes a setting it cannot serve
+The Docker proxy uses Docker's resolver address instead of the network gateway,
+because Docker does not answer on the gateway.
 
-The proxy configuration refuses the peer link on a machine running both
-engines. `peer open` and the window's button stored the setting first and met
-that refusal after, so a machine that was told no kept a link recorded as open
-and every later configuration write failed for the same reason, with no way
-back but editing the settings file.
+Verification: a test binds the published address, which reproduces the first
+defect. `bay peer open` reported the link open at 192.168.0.10:8443 and
+the proxy running with 80 and 443 on 127.0.0.1 and 8443 on the network. A request
+to the network address returned the document with this machine's name, address
+and authority. `make check` passes.
 
-The refusal is now one function that both the setting and the configuration
-ask, and opening the link asks it before writing anything. Closing is never
-refused, so a machine that acquired a second engine while the link was open can
-still close it.
+### Refuse the peer link before storing the setting
 
-Verification: `make check`, including tests over one engine, both, none, and
-closing after a second engine appeared. Without the change two of them fail:
-opening with two engines is allowed and leaves the setting on.
+The proxy configuration refuses the peer link on a machine running both engines.
+`peer open` and the window's button stored the setting first and met the refusal
+after, so a machine that was refused kept the link recorded as open and every
+later configuration write failed for the same reason, with no way to recover but
+editing the settings file.
 
+The refusal is one function, called by the setting and by the configuration, and
+opening calls it before writing. Closing is never refused, so a machine that
+gained a second engine while the link was open can still close it.
 
-### The peers screen
+Verification: `make check`, including tests over one engine, both engines, no
+engine, and closing after a second engine appeared. Without the change two of
+them fail: opening with two engines is allowed and leaves the setting on.
 
-The window has a Peers screen. It shows the link, the machines that are
-approved, and the machines heard announcing themselves that are not. One button
-opens and closes the link. An approved machine can have its approval withdrawn,
-and a machine heard on the network can be approved, both after a question; the
-approval question carries the fingerprint read from that machine, so what is
-approved is the authority and not the name. A machine that announces nothing is
-still approved by address from the command line, which is also what crosses
-subnets.
+### Show peers in the window
 
-The sidebar's Peers row carries the number of approved machines and a dot that
-is green while the link is open.
+The window lists the machines this machine reaches domains through. The screen
+shows the link address, the announcement interval, the approved machines with
+their domains, and the machines announcing on this network. The link is opened
+and closed from the same screen.
 
-Verification: `make check`. On this machine the link was opened from the window;
-the link section then read 192.168.0.57:8443 as the answering address and 1.5s
-as the announcement interval, the button became Close link, and
-`bay peer` reported the link open at that address. Clicking again
-closed it and the command reported the link closed.
+Verification: the link was opened and closed from the window, and the command
+line reported the same state.
 
-### Both engines, side by side
+### Support Apple container and Docker together
 
 A machine runs Apple `container` and Docker at the same time and serves both.
-Neither is preferred. `bay status` on a machine that has one engine's
-command and not the other's now runs, where before it could not start.
+Neither is preferred. `bay status` now runs on a machine that has one
+engine's command and not the other's; before this change it did not start.
 
 Containers are read from every engine present and merged into one list, each
-carrying the engine that holds it. An engine that is absent, or whose socket
-does not answer, contributes nothing and is not an error.
+recording its engine. An engine that is absent, or whose daemon does not
+respond, returns no containers and does not cause an error.
 
-Each engine runs its own proxy, because a container is reachable on its own
-engine's network and on no other. The host reaches an Apple proxy at the
-proxy's own address and a Docker proxy at 80 and 443 published on 127.0.0.2,
-which is a loopback address of its own so it takes no port from anything else.
-A service's own port is still published on neither. `bayd` answers a
-name with the address of the proxy for that name's engine.
+Each engine runs its own proxy, because a container is reachable only on its own
+engine's network. The host reaches an Apple proxy at the proxy's own address and
+a Docker proxy at 80 and 443 published on 127.0.0.1. A service's own port is
+published on neither. `bayd` returns the address of the proxy for the
+engine of the requested name.
 
-A domain is still claimed once per machine. The claim is settled over every
-engine's containers before any proxy is configured, so a container cannot hold
-a name twice by running on both and does not lose one by running on either.
+One domain is claimed once per machine. The claim is resolved over the
+containers of every engine before any proxy is configured.
 
-The DNS server's per-service mode is removed. It answered a name with the
-container's own address, which only a network the host routes to can satisfy,
-so it could never serve a Docker container. Its `-proxy` and `-aliases` flags
-go with it, and the agent is registered without them.
+The DNS server's per-service mode is removed. It returned the container's own
+address, which requires a network the host has a route to, so it could not serve
+a Docker container. Its `-proxy` and `-aliases` flags are removed with it, and
+the agent is registered without them.
 
-The peer link is not moved yet. It is one port and rule 8 puts it on a host
-process that reaches both engines. Until that exists, opening the link on a
-machine with two engines is refused rather than served from one of them and
-silently missing the other's domains.
+`docs/spec/architecture.md` states ten numbered rules with the condition each
+depends on. `AGENTS.md` states where the code implements each rule and which one
+it does not.
 
-The document carries ten numbered rules and they are the standard the code is
-held to. Each is forced by the one above it and the first is a fact rather than
-a decision: a container is reachable on its own engine's network, and whether
-the host reaches that network is a property of the engine. `AGENTS.md` names
-where the code carries each rule and says which one it does not carry yet. A
-rule holds on a stated condition, so a rule whose condition changes is reviewed
-rather than assumed.
+The peer link is not moved. It uses one port, and rule 8 places it in a host
+process that reaches both engines. Until that process exists, opening the link
+on a machine with two engines returns an error instead of serving it from one
+engine and omitting the other engine's domains.
 
 Verification: `make check` passes and `go test -race ./internal/stack` passes in
-4.430 seconds. The unit tests cover decoding `docker inspect`, choosing one
-address for a container on several networks, an engine that does not answer, no
-engine present, and a domain claimed once across engines. Against a running
-Docker daemon, `stack.List` read this machine's five containers, each tagged
-with its engine, the three running ones carrying their bridge addresses and the
-two exited ones carrying none, and the field names `docker inspect` returns were
-compared against the decoder one by one. `bay status` reported the
-Docker engine's proxy on a machine that has no Apple `container` command, where
-before this change it could not start. Nothing was verified on Apple
-`container`: this machine does not have it.
+4.430 seconds. The unit tests cover parsing `docker inspect`, selecting one
+address for a container on several networks, an engine that does not respond, no
+engine present, and one domain claimed across engines. Against a running Docker
+daemon, `stack.List` read this machine's five containers, each recording its
+engine, the three running ones with their bridge addresses and the two exited
+ones with none. The field names `docker inspect` returns were compared with the
+parser. Nothing was verified on Apple `container`, which this machine does not
+have.
+
 ### Two ways to find a machine, and one way to prove it
 
 A machine with the link open announces itself to the network every second and a

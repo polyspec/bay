@@ -27,7 +27,7 @@ type ServiceInstance struct {
 	// Started is when the runtime started the container, in RFC 3339. It is
 	// empty for a container that has never run.
 	Started string
-	// Engine names the engine holding this container.
+	// Engine is the engine running this container.
 	Engine string
 }
 
@@ -102,11 +102,9 @@ func Routes() ([]Route, []DomainConflict, error) {
 	return routes, conflicts, nil
 }
 
-// routesFrom settles the domain claims over every engine's containers. A domain
-// is claimed once per machine, so a container cannot hold a name twice by
-// running on both engines and does not lose one by running on either. Each
-// route carries the engine that holds its container, because only that engine's
-// proxy can serve it.
+// routesFrom resolves domain claims over the containers of every engine. One
+// domain is claimed once per machine. Each route records the engine of its
+// container, because only that engine's proxy can serve it.
 func routesFrom(instances []ServiceInstance) ([]Route, []DomainConflict) {
 	var routes []Route
 	var conflicts []DomainConflict
@@ -136,7 +134,7 @@ func routesFrom(instances []ServiceInstance) ([]Route, []DomainConflict) {
 	return routes, conflicts
 }
 
-// RoutesOn returns the routes one engine's proxy can serve.
+// RoutesOn returns the routes served by one engine's proxy.
 func RoutesOn(routes []Route, engine string) []Route {
 	out := make([]Route, 0, len(routes))
 	for _, r := range routes {
@@ -162,8 +160,8 @@ func NetworkGateway(engine string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// The gateway is written into one engine's proxy as its resolver, so it has
-	// to come from a container on that same engine.
+	// The gateway is written into one engine's proxy configuration, so it is
+	// read from a container of that engine.
 	for _, in := range list {
 		if in.State == "running" && in.Gateway != "" && in.Engine == engine {
 			return in.Gateway, nil

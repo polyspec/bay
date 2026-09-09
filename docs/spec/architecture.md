@@ -43,48 +43,48 @@ claiming one domain is the same conflict as two on one engine.
 
 ## Rules
 
-A rule is not a truth. Each holds on a condition, and each after the first is
-forced by the one above it. A rule whose condition stops holding is reviewed
-here before any code is written against it.
+Each rule depends on a condition, and each rule after the first follows from the
+rule above it. When a condition no longer holds, the rule is revised here before
+any code is written against it.
 
 1. A container is reachable on its own engine's network. Whether the host can
    reach that network is a property of the engine, not of the container.
-   Condition: on this machine Apple `container` puts containers on a subnet the
-   host routes to, and Docker puts them on a bridge the host does not route to.
-   An engine that gave the host a route would change this rule and every rule
+   Condition: on macOS, Apple `container` places containers on a subnet the
+   host has a route to, and Docker places them on a bridge the host has no route
+   to. An engine that gives the host a route changes this rule and every rule
    below it.
 
-2. Nothing may depend on reaching a container from another engine. It is not
-   slow or unreliable there; it does not work.
+2. Nothing depends on reaching a container from another engine. Such a
+   connection fails.
 
-3. One proxy per engine. A proxy serves the containers of its own engine,
-   because by rule 2 it can serve no others.
+3. One proxy per engine. A proxy serves the containers of its own engine and,
+   by rule 2, no others.
 
 4. Every proxy is reachable from the host, which is where the answers point. An
    Apple proxy already is. A Docker proxy publishes on 127.0.0.1, which is the
    only address macOS assigns to lo0: any other loopback address needs an alias
    added as root, and rule 9 leaves root to `/etc/resolver`.
 
-5. A domain is claimed once per machine. Claims are settled over every engine's
-   containers before any proxy is configured, so a container cannot hold a name
-   twice by running on both, and does not lose one by running on either.
+5. A domain is claimed once per machine. Claims are resolved over the
+   containers of every engine before any proxy is configured.
 
 6. A name resolves to the address of the proxy for the engine its container runs
    on.
 
-7. The machine offers the network one port and it is the peer link. Everything
-   else is on loopback or on an engine's own network.
+7. The machine publishes one port to the network, the peer link. Every other
+   port is on loopback or on an engine's own network.
 
 8. The peer link serves every domain this machine serves. By rule 2 no engine
-   can do that, so the peer link is a host process that forwards to each
+   can do this, so the peer link runs as a host process that forwards to each
    engine's proxy.
 
-9. Only `/etc/resolver` writes need administrator rights. The peer link binds
-   8443, which is unprivileged, so rule 8 does not change this.
+9. Only `/etc/resolver` writes require administrator rights. The peer link
+   binds port 8443, which requires no privilege, so rule 8 does not change
+   this.
 
-10. A name no container claims, and a peer's domain, belong to no engine. Every
-    proxy is configured to serve them, so whichever one an answer names is
-    correct, and the answer names the first engine present.
+10. A name claimed by no container, and a peer's domain, belong to no engine.
+    Every proxy is configured to serve them, so any proxy is a correct answer,
+    and the answer names the first engine present.
 
 ## Request path
 

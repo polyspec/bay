@@ -2,13 +2,11 @@ package stack
 
 import "testing"
 
-// A machine reports what it still has to do, and trusting the authority is one
-// of those steps. An authority the machine does not hold cannot be trusted by
-// it, whatever a self-signed certificate says about itself: verifying one
-// against itself succeeds without any keychain, so asking that question reports
-// every fresh authority as trusted, leaves the trust step out of the pending
-// list, and lets setup finish while every name the machine serves is refused by
-// a browser with nothing said about it.
+// An authority that is in no keychain is not trusted. Verifying a self-signed
+// certificate against itself succeeds without a keychain, so that check reports
+// every new authority as trusted, omits the trust step from the pending list,
+// and lets setup report success while a browser rejects every name the machine
+// serves.
 func TestAnAuthorityTheMachineDoesNotHoldIsNotTrusted(t *testing.T) {
 	dir := t.TempDir()
 	ca, err := LoadOrCreateCA(dir)
@@ -24,8 +22,8 @@ func TestAnAuthorityTheMachineDoesNotHoldIsNotTrusted(t *testing.T) {
 	}
 }
 
-// The answer does not change between two readings, so a machine that is asked
-// twice is told the same thing and setup run twice does the same work.
+// The result does not change between calls, so setup run twice performs the
+// same work.
 func TestTheTrustAnswerIsTheSameEachTime(t *testing.T) {
 	dir := t.TempDir()
 	ca, err := LoadOrCreateCA(dir)
@@ -40,8 +38,7 @@ func TestTheTrustAnswerIsTheSameEachTime(t *testing.T) {
 	}
 }
 
-// A path with no certificate is not an authority the machine holds, and asking
-// must answer rather than fail.
+// A path with no certificate returns false rather than an error.
 func TestAMissingAuthorityIsNotTrusted(t *testing.T) {
 	if CATrusted(t.TempDir() + "/absent.crt") {
 		t.Fatal("a certificate that is not there is reported as trusted")
@@ -49,8 +46,7 @@ func TestAMissingAuthorityIsNotTrusted(t *testing.T) {
 }
 
 // The command that adds an authority exits zero whether or not it changed
-// anything, and without a keychain named it changes nothing. Naming one is what
-// makes it act, so the arguments carry it.
+// anything, and without a named keychain it changes nothing.
 func TestTheTrustCommandNamesAKeychain(t *testing.T) {
 	if loginKeychain() == "" {
 		t.Skip("this machine has no login keychain to name")

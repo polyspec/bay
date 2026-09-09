@@ -20,13 +20,12 @@ const (
 	// a container name only on a user-defined network.
 	DockerNetwork = "bay"
 	// DockerProxyAddr is the address the Docker proxy publishes on. The host
-	// cannot route to a Docker container, so this is the only way it is
-	// reached. macOS assigns this one address to lo0 and no other, so any
-	// other loopback address needs an alias added as root, and root is for
-	// /etc/resolver alone.
+	// has no route to a Docker container, so the published port is the only way
+	// to reach it. macOS assigns no other address to lo0, and adding one
+	// requires root.
 	DockerProxyAddr = "127.0.0.1"
-	// DockerResolver is where Docker answers a container name. It is not the
-	// network gateway, which answers nothing.
+	// DockerResolver is the DNS address on which Docker resolves a container
+	// name. Docker does not answer on the network gateway.
 	DockerResolver   = "127.0.0.11"
 	BackendDomain    = "container.test"
 	DefaultDNSAddr   = "127.0.0.1:5354"
@@ -57,8 +56,8 @@ func NewMachine(dir string) *Machine { return &Machine{Dir: dir} }
 
 func (m *Machine) CertDir() string { return filepath.Join(m.Dir, "certs") }
 
-// ConfDir is where one engine's proxy configuration is written. Each engine has
-// its own proxy, so each has its own directory.
+// ConfDir returns the directory holding one engine's proxy configuration. Each
+// engine runs its own proxy and uses its own directory.
 func (m *Machine) ConfDir(engine string) string {
 	return filepath.Join(m.Dir, "conf.d", engine)
 }

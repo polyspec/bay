@@ -67,9 +67,8 @@ type CertUse struct {
 	// Declared are the domains the registered projects ask for, read from their
 	// Compose files.
 	Declared []string
-	// Peered are the domains approved peers serve. This machine answers them
-	// with a certificate it issued, so the browser is offered one from an
-	// authority it already trusts, and that certificate is in use here.
+	// Peered are the domains served by approved peers. This machine serves them
+	// with a certificate it issued, so that certificate is in use.
 	Peered []string
 	// Unread says a registered project's file is there but could not be read.
 	// What it asks for is not known, so no certificate is called unused: the

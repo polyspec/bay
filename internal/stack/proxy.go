@@ -72,9 +72,9 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 
 	stopped := 0
 	for _, engine := range engines {
-		// A peer's domain is backed by no container, so every proxy serves it.
-		// The proxy carrying the link runs with neither, because the document a
-		// machine is approved from is what it answers first.
+		// A peer's domain has no container, so every proxy serves it. The proxy
+		// that publishes the link runs with no route, because it returns the
+		// document used to approve this machine.
 		own := RoutesOn(routes, engine)
 		if len(own) == 0 && len(peerRoutes) == 0 && engine != linkEngine {
 			if err := StopProxy(engine); err != nil {
@@ -91,9 +91,8 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 			DefaultCert: DefaultCertName,
 			PeerRoutes:  peerRoutes,
 		}
-		// The resolver is only read by a route's name fallback, so a
-		// configuration with no route of its own needs none, and nginx refuses
-		// to start on one written empty.
+		// The resolver is used only by a route's name fallback, so a
+		// configuration with no route needs none.
 		if len(own) > 0 {
 			gateway, err := NetworkGateway(engine)
 			if err != nil {
@@ -161,7 +160,7 @@ func peerRoutesFor(m *Machine, peers []Peer, own []string) []PeerRoute {
 // preparePeerLink writes what the proxy reads to run the link: this machine's
 // client certificate, the approved authorities, the certificates for the
 // domains peers serve, and the document a machine is approved from.
-// peerLinkServable reports whether one engine's proxy can answer the whole of
+// peerLinkServable reports whether one engine's proxy can serve all of
 // the peer link. The link is one port and a proxy serves only its own engine's
 // containers, so a machine running both engines would answer some of its own
 // names on the link and none of the rest. Rule 8 of the architecture puts the

@@ -232,10 +232,9 @@ func UninstallResolver(helper string, elevate Elevator, domains ...string) error
 // CATrusted reports whether the certificate at path already verifies against
 // the machine's trust settings.
 func CATrusted(path string) bool {
-	// A self-signed certificate is its own anchor, so verify-cert accepts one
-	// that is in no keychain at all and answers nothing on its own. What
-	// decides whether a browser accepts the names this authority signs is
-	// whether the machine holds the authority, so that is asked first.
+	// verify-cert accepts a self-signed certificate that is in no keychain,
+	// because such a certificate is its own root. The presence of the
+	// certificate in a keychain is checked first.
 	if !inKeychain(path) {
 		return false
 	}
@@ -244,10 +243,9 @@ func CATrusted(path string) bool {
 	return cmd.Run() == nil
 }
 
-// inKeychain reports whether this exact certificate is in one of the machine's
-// keychains. The comparison is on the certificate itself rather than on its
-// name, because a retired authority carries the same name as the one that
-// replaced it.
+// inKeychain reports whether this certificate is in one of the machine's
+// keychains. The comparison uses the certificate bytes, not the subject name,
+// because a replaced authority has the same subject name as its replacement.
 func inKeychain(path string) bool {
 	want, err := certificateBody(path)
 	if err != nil || want == "" {
@@ -265,9 +263,8 @@ func inKeychain(path string) bool {
 	return false
 }
 
-// certificateBody returns a certificate's base64 body with every space removed,
-// which is what two PEM files of the same certificate share whatever their line
-// endings and wrapping.
+// certificateBody returns a certificate's base64 body with all whitespace
+// removed, so that two PEM encodings of the same certificate compare equal.
 func certificateBody(path string) (string, error) {
 	pem, err := os.ReadFile(path)
 	if err != nil {
@@ -291,17 +288,14 @@ var errNoCertificate = errors.New("no certificate in PEM form")
 // use the administrator store, which requires root and cannot present the
 // confirmation the operation needs.
 //
-// The keychain is named. Without it the command exits zero and adds nothing, so
-// setup reported the authority trusted while no keychain held it and every name
-// this machine serves was refused by a browser.
+// The command names a keychain. Without one it exits zero and adds nothing.
 func trustCA(path string) error {
 	out, err := exec.Command("security", trustArgs(path)...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("trusting %s: %s", path, strings.TrimSpace(string(out)))
 	}
-	// The command reports success whether or not it changed anything, so the
-	// result is read back rather than assumed. Adding an authority the machine
-	// already holds changes nothing and still reports it trusted.
+	// The command exits zero whether or not it changed anything, so the result
+	// is read back. Adding a certificate already present changes nothing.
 	if !CATrusted(path) {
 		return fmt.Errorf("trusting %s: the command reported success and no keychain holds it", path)
 	}
@@ -309,9 +303,8 @@ func trustCA(path string) error {
 	return nil
 }
 
-// trustArgs names the keychain the authority is added to. A login keychain is
-// where a user's own certificates belong, and naming it is what makes the
-// command act.
+// trustArgs returns the arguments used to add the authority, including the
+// keychain it is added to.
 func trustArgs(path string) []string {
 	args := []string{"add-trusted-cert", "-r", "trustRoot"}
 	if k := loginKeychain(); k != "" {
@@ -320,8 +313,8 @@ func trustArgs(path string) []string {
 	return append(args, path)
 }
 
-// loginKeychain returns the user's login keychain, or an empty string when it
-// is not where it is expected, in which case the command is left to choose.
+// loginKeychain returns the path of the user's login keychain, or an empty
+// string when that path does not exist.
 func loginKeychain() string {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -339,9 +332,8 @@ func untrustCA(path string) error {
 	if err != nil {
 		return fmt.Errorf("untrusting %s: %s", path, strings.TrimSpace(string(out)))
 	}
-	// Read back rather than assume, for the same reason adding does. Removing
-	// an authority the machine does not hold changes nothing and still reports
-	// it gone.
+	// The command exits zero whether or not it changed anything, so the result
+	// is read back.
 	if CATrusted(path) {
 		return fmt.Errorf("untrusting %s: the command reported success and a keychain still holds it", path)
 	}

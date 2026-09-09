@@ -1,8 +1,12 @@
 # bay
 
-`bay`은 Apple `container` 위에서 Compose 프로젝트를 실행하고, 각
-서비스를 로컬 도메인 이름으로 HTTPS 제공한다. 호스트 포트를 게시하지 않고
+`bay`은 Apple `container`와 Docker 위에서 Compose 프로젝트를 실행하고,
+각 서비스를 로컬 도메인 이름으로 HTTPS 제공한다. 서비스 포트를 게시하지 않고
 `/etc/hosts`에 항목을 추가하지 않는다.
+
+한 기계가 두 엔진을 동시에 실행할 수 있다. 엔진마다 자기 프록시를 실행하고 자기
+컨테이너를 제공한다. 없는 엔진이나 데몬이 응답하지 않는 엔진은 컨테이너를
+제공하지 않으며 오류가 아니다.
 
 프로젝트는 Compose 파일이다. 추가 설정이 없는 서비스는 `<서비스>.test`로
 제공된다.
@@ -51,5 +55,5 @@ bay status --json   # 현재 머신 상태
 
 ## 요구 사항
 
-Apple `container` 1.3 이상이 설치된 macOS, Go 1.27 이상. 앱은 Xcode 명령줄
+Apple `container` 1.3 이상 또는 Docker가 설치된 macOS, Go 1.27 이상. 앱은 Xcode 명령줄
 도구도 필요하다.

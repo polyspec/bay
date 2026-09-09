@@ -6,10 +6,9 @@ import (
 	"testing"
 )
 
-// A peer's domain is answered here with a certificate this machine issued, so
-// the browser is offered one from an authority it already trusts. That
-// certificate is in use. Reporting it as unused offers to remove the one thing
-// that lets the name be opened at all.
+// This machine serves a peer's domain with a certificate it issued, so that
+// certificate is in use. Reporting it as unused offers to remove the certificate
+// required to serve the name.
 func TestAPeersDomainCertificateIsInUse(t *testing.T) {
 	dir := t.TempDir()
 	ca, err := LoadOrCreateCA(dir)
@@ -43,8 +42,7 @@ func TestAPeersDomainCertificateIsInUse(t *testing.T) {
 	}
 }
 
-// A name that no route, project or peer asks for is still reported, because
-// that is what a removed project leaves behind.
+// A name required by no route, project or peer is still reported as unused.
 func TestANameNothingAsksForIsStillUnused(t *testing.T) {
 	dir := t.TempDir()
 	ca, err := LoadOrCreateCA(dir)

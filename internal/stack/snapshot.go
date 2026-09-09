@@ -37,8 +37,8 @@ type MachineStatus struct {
 	StateDir   string         `json:"stateDir"`
 	Domains    []string       `json:"domains"`
 	DomainList []DomainStatus `json:"domainList"`
-	// Proxies holds one entry per engine present, because each engine runs its
-	// own proxy and serves only its own containers.
+	// Proxies holds one entry per engine present. Each engine runs its own
+	// proxy and serves only its own containers.
 	Proxies []ProxyStatus `json:"proxies"`
 	DNS     DNSStatus     `json:"dns"`
 	CAPath  string        `json:"caPath"`
@@ -230,8 +230,8 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 	for _, r := range routes {
 		use.Routed = append(use.Routed, r.Domain)
 	}
-	// A peer's domain is answered here with a certificate this machine issued,
-	// so that certificate is in use for as long as the peer is approved.
+	// This machine serves a peer's domain with a certificate it issued, so that
+	// certificate is in use while the peer is approved.
 	if peers, err := Peers(m.Dir); err == nil {
 		own := make([]string, 0, len(routes))
 		for _, r := range routes {
@@ -287,8 +287,8 @@ func domainStatuses(m *Machine, domains []string) ([]DomainStatus, error) {
 	return out, nil
 }
 
-// proxyStatuses describes the proxy of every engine present. Routes are counted
-// per engine because a proxy serves only its own engine's containers.
+// proxyStatuses returns the status of every present engine's proxy. Routes are
+// counted per engine, because a proxy serves only its own engine's containers.
 func proxyStatuses(routes []Route) ([]ProxyStatus, error) {
 	var out []ProxyStatus
 	for _, engine := range Engines() {
@@ -317,7 +317,7 @@ func proxyStatuses(routes []Route) ([]ProxyStatus, error) {
 	return out, nil
 }
 
-// ServingRoutes totals the routes every engine's proxy serves.
+// ServingRoutes returns the total number of routes served by all proxies.
 func (m MachineStatus) ServingRoutes() int {
 	n := 0
 	for _, p := range m.Proxies {
@@ -326,9 +326,8 @@ func (m MachineStatus) ServingRoutes() int {
 	return n
 }
 
-// ProxiesServing reports that every proxy with routes to serve is running and
-// answering. One engine's proxy being down leaves its domains unreachable, so
-// this is false unless all of them are up.
+// ProxiesServing reports whether every proxy that has routes is running and
+// responding. It returns false when any such proxy is not running.
 func (m MachineStatus) ProxiesServing() bool {
 	serving := false
 	for _, p := range m.Proxies {
@@ -343,7 +342,7 @@ func (m MachineStatus) ProxiesServing() bool {
 	return serving
 }
 
-// ProxyAddrs lists the addresses the running proxies are reached at.
+// ProxyAddrs returns the addresses of the running proxies.
 func (m MachineStatus) ProxyAddrs() []string {
 	var out []string
 	for _, p := range m.Proxies {

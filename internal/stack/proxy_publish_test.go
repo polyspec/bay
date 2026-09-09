@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// publishedAddrs returns the address each --publish argument binds on the host.
+// publishedAddrs returns the host address of each --publish argument.
 func publishedAddrs(args []string) []string {
 	var out []string
 	for i, a := range args {
@@ -25,9 +25,9 @@ func publishedAddrs(args []string) []string {
 	return out
 }
 
-// Rule 9: only /etc/resolver writes need administrator rights. macOS assigns
-// one address to lo0, so publishing on any other loopback address needs an
-// alias added as root and the proxy would never start without it.
+// Rule 9: only /etc/resolver writes require administrator rights. macOS assigns
+// one address to lo0, so publishing on any other loopback address requires an
+// alias added as root and the proxy fails to start without it.
 func TestThePublishedProxyAddressBindsWithoutRoot(t *testing.T) {
 	args := proxyRunArgs(DockerEngine, "/conf", "/certs", "/peers")
 	addrs := publishedAddrs(args)
@@ -46,9 +46,8 @@ func TestThePublishedProxyAddressBindsWithoutRoot(t *testing.T) {
 	}
 }
 
-// The host routes to an Apple container, so that proxy publishes nothing but
-// the peer link. Publishing 80 or 443 there would take the host's ports for no
-// reason.
+// The host has a route to an Apple container, so the Apple proxy publishes only
+// the peer link.
 func TestTheAppleProxyPublishesOnlyThePeerLink(t *testing.T) {
 	args := proxyRunArgs(AppleEngine, "/conf", "/certs", "/peers")
 	published := strings.Join(args, " ")
@@ -62,7 +61,7 @@ func TestTheAppleProxyPublishesOnlyThePeerLink(t *testing.T) {
 	}
 }
 
-// A machine that is not peering offers the network nothing at all.
+// A machine with no peer link publishes no port to the network.
 func TestNoPeerLinkPublishesNoNetworkPort(t *testing.T) {
 	for _, engine := range []string{AppleEngine, DockerEngine} {
 		args := proxyRunArgs(engine, "/conf", "/certs", "")
@@ -77,8 +76,8 @@ func TestNoPeerLinkPublishesNoNetworkPort(t *testing.T) {
 	}
 }
 
-// nginx rejects a resolver directive with no address, so a configuration with
-// no name to resolve must leave the directive out rather than write it empty.
+// nginx fails to start when the resolver directive has no address, so a
+// configuration with no name to resolve omits the directive.
 func TestNoResolverWritesNoResolverDirective(t *testing.T) {
 	dir := t.TempDir()
 	conf := NginxConfig{DefaultCert: DefaultCertName, PeerPort: PeerPort, Generation: "g"}
@@ -94,8 +93,8 @@ func TestNoResolverWritesNoResolverDirective(t *testing.T) {
 	}
 }
 
-// Docker resolves a container name through its own resolver, not through the
-// network gateway, so a Docker proxy is given that address.
+// Docker resolves a container name on its own resolver address, not on the
+// network gateway.
 func TestTheDockerResolverIsDockersOwn(t *testing.T) {
 	if got := engineResolver(DockerEngine, "172.20.0.1"); got != DockerResolver {
 		t.Errorf("docker resolver = %q, want %q", got, DockerResolver)
@@ -114,12 +113,12 @@ func readConf(t *testing.T, dir string) string {
 	return string(body)
 }
 
-// A request that is not a protocol upgrade must not carry Connection: close to
-// the upstream. Measured against a peer's link, that header made the upstream
-// close before it finished the body: the same 327197-byte asset arrived whole
-// without it and cut short at a different point every time with it, answered
-// 200 each time, so the loss was silent. An upgrade still needs the header, so
-// the map keeps its default and only its empty case changes to no header.
+// A request that is not a protocol upgrade must not send Connection: close to
+// the upstream. Measured against a peer link, that header made the upstream end
+// the response before the body was complete: the same 327197-byte file was
+// received in full without it and truncated at a different offset with it,
+// returning status 200 in both cases. An upgrade request still requires the
+// header, so only the empty case of the map changes.
 func TestAnOrdinaryRequestCarriesNoConnectionClose(t *testing.T) {
 	dir := t.TempDir()
 	conf := NginxConfig{

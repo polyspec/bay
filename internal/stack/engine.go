@@ -10,23 +10,22 @@ import (
 	"strings"
 )
 
-// The engines that run containers. Neither is preferred. An engine is named by
-// the command that speaks to it rather than by the product that installed it,
-// so Docker Desktop, OrbStack and Colima are one engine here.
+// The engines that run containers. Each engine is named by the command used to
+// control it.
 const (
 	AppleEngine  = "container"
 	DockerEngine = "docker"
 )
 
-// An engineReader names one engine and reads the containers it holds.
+// engineReader reads the container list of one engine.
 type engineReader struct {
 	name string
 	read func() ([]Instance, error)
 }
 
-// engineReaders returns a reader for every engine whose command is on PATH. A
-// command that is absent is left out here; a command that is present but whose
-// socket does not answer fails at read time, and listFrom treats both the same.
+// engineReaders returns one reader per engine whose command is on PATH. A
+// missing command is excluded here. A present command whose daemon does not
+// respond fails in listFrom.
 func engineReaders() []engineReader {
 	var readers []engineReader
 	if bin := engineBin(AppleEngine); bin != "" {
@@ -38,10 +37,9 @@ func engineReaders() []engineReader {
 	return readers
 }
 
-// listFrom merges the containers of every reader into one list. A reader that
-// fails contributes nothing and is not an error: a machine with one engine
-// behaves as it did before the other was supported. With no reader at all there
-// is nothing to run containers with, which is reported.
+// listFrom merges the container lists of every reader. A reader that fails
+// returns no containers and does not cause an error. With no reader, listFrom
+// returns an error.
 func listFrom(readers []engineReader) ([]Instance, error) {
 	if len(readers) == 0 {
 		return nil, fmt.Errorf("no container engine found: install Apple %s or %s",
@@ -58,9 +56,9 @@ func listFrom(readers []engineReader) ([]Instance, error) {
 	return list, nil
 }
 
-// engineBin returns the command that speaks to an engine, or an empty string
-// when it is not on PATH. The environment overrides the name so a test can put
-// its own program in its place.
+// engineBin returns the command used to control an engine, or an empty string
+// when the command is not on PATH. An environment variable overrides the name so
+// that a test can substitute its own program.
 func engineBin(engine string) string {
 	env := "CONTAINER_BIN"
 	if engine == DockerEngine {
@@ -75,8 +73,8 @@ func engineBin(engine string) string {
 	return ""
 }
 
-// runEngine runs one command against an engine and returns its output, with a
-// failure carrying the command's own diagnostic.
+// runEngine runs one command against an engine and returns its output. On
+// failure the error contains the command's stderr.
 func runEngine(engine string, args ...string) ([]byte, error) {
 	bin := engineBin(engine)
 	if bin == "" {
@@ -102,9 +100,9 @@ func appleContainers() ([]Instance, error) {
 	return decodeInstances(out)
 }
 
-// dockerContainers reads the identifiers first and inspects them, because
-// `docker container ls` reports labels as one joined string and reports no
-// address at all. Inspect answers both, keyed and per network.
+// dockerContainers reads the container identifiers and then inspects them.
+// `docker container ls` returns labels as one joined string and returns no
+// address, so inspect is required.
 func dockerContainers() ([]Instance, error) {
 	out, err := runEngine(DockerEngine, "container", "ls", "--all", "--quiet", "--no-trunc")
 	if err != nil {
@@ -121,10 +119,10 @@ func dockerContainers() ([]Instance, error) {
 	return decodeDockerInstances(out)
 }
 
-// decodeDockerInstances reads `docker inspect`. Docker writes a container's name
-// with a leading slash and keys its networks by name, so the name is trimmed and
-// the networks are taken in name order: a container on several networks must
-// report the same address every time it is read.
+// decodeDockerInstances parses `docker inspect` output. Docker returns the
+// container name with a leading slash, which is trimmed, and returns networks as
+// a map, which is read in name order so that a container on several networks
+// returns the same address on every call.
 func decodeDockerInstances(out []byte) ([]Instance, error) {
 	var raw []struct {
 		ID      string `json:"Id"`
@@ -176,7 +174,7 @@ func decodeDockerInstances(out []byte) ([]Instance, error) {
 }
 
 // Engines returns the name of every engine present, in a fixed order so that a
-// name belonging to no engine is answered the same way every time.
+// domain belonging to no engine resolves to the same proxy on every call.
 func Engines() []string {
 	var names []string
 	for _, e := range []string{AppleEngine, DockerEngine} {
@@ -187,10 +185,9 @@ func Engines() []string {
 	return names
 }
 
-// ProxyHostAddr returns the address the host reaches one engine's proxy at. The
-// host routes to an Apple container directly, so that proxy is reached at its
-// own address. It routes to no Docker container, so that proxy is reached only
-// at the loopback address it publishes on.
+// ProxyHostAddr returns the address the host uses to reach one engine's proxy.
+// The host has a route to an Apple container, so its address is used. The host
+// has no route to a Docker container, so the published loopback address is used.
 func ProxyHostAddr(engine string, in Instance) string {
 	if engine == DockerEngine {
 		return DockerProxyAddr
@@ -198,9 +195,9 @@ func ProxyHostAddr(engine string, in Instance) string {
 	return in.IPv4
 }
 
-// ServiceEngine returns the engine a project's containers are created on. A
-// container is reachable on its own engine's network only, so all of a
-// project's services belong to one engine, and it is the first one present.
+// ServiceEngine returns the engine used to create a project's containers. A
+// container is reachable only on its own engine's network, so all services of
+// one project are created on one engine, the first engine present.
 func ServiceEngine() string {
 	if names := Engines(); len(names) > 0 {
 		return names[0]
@@ -208,9 +205,9 @@ func ServiceEngine() string {
 	return AppleEngine
 }
 
-// ensureNetwork creates the network the proxy and the services share. Apple
-// `container` has it already; Docker has no network called "default" and
-// resolves a container name only on a user-defined network.
+// ensureNetwork creates the network shared by the proxy and the services. Apple
+// `container` provides it. Docker has no network named "default" and resolves a
+// container name only on a user-defined network.
 func ensureNetwork(engine string) error {
 	if engine != DockerEngine {
 		return nil
@@ -222,9 +219,9 @@ func ensureNetwork(engine string) error {
 	return err
 }
 
-// engineResolver returns the address the proxy resolves a container name at.
-// Apple `container` answers at the network gateway; Docker answers at its own
-// address, and its gateway answers nothing.
+// engineResolver returns the DNS address the proxy uses to resolve a container
+// name. Apple `container` answers on the network gateway. Docker answers on its
+// own resolver address and does not answer on the gateway.
 func engineResolver(engine, gateway string) string {
 	if engine == DockerEngine {
 		return DockerResolver

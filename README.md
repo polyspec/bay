@@ -1,8 +1,12 @@
 # bay
 
-`bay` runs Compose projects on Apple `container` and serves each
-service over HTTPS at a local domain name. No host port is published, and no
-entry is added to `/etc/hosts`.
+`bay` runs Compose projects on Apple `container` and on Docker, and
+serves each service over HTTPS at a local domain name. No service port is
+published, and no entry is added to `/etc/hosts`.
+
+A machine can run both engines at the same time. Each engine runs its own proxy
+and serves its own containers. An engine that is absent, or whose daemon does
+not respond, contributes no containers and does not cause an error.
 
 A project is a Compose file. A service with no extra settings is served at
 `<service>.test`.
@@ -52,5 +56,5 @@ Korean documents carry the suffix `.ko.md`.
 
 ## Requirements
 
-macOS with Apple `container` 1.3 or later, and Go 1.27 or later. The
-application also needs the Xcode command line tools.
+macOS with Apple `container` 1.3 or later or with Docker, and Go 1.27 or later.
+The application also needs the Xcode command line tools.

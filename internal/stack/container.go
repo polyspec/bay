@@ -37,13 +37,12 @@ type Instance struct {
 	Created     string
 	Started     string
 	ImageDigest string
-	// Engine names the engine holding this container. A container is reached
-	// from its own engine's network and from no other.
+	// Engine is the engine that reported this container.
 	Engine string
 }
 
-// List returns every container of every engine present, in one list. An engine
-// that is absent or not answering contributes nothing to it.
+// List returns the containers of every engine present in one list. An engine
+// that is absent or does not respond returns no containers.
 func List() ([]Instance, error) {
 	return listFrom(engineReaders())
 }
@@ -93,8 +92,8 @@ func decodeInstances(out []byte) ([]Instance, error) {
 	return list, nil
 }
 
-// engineOf returns the engine holding a container. A mutation sent to the wrong
-// engine does not fail safely: it acts on nothing while reporting success.
+// engineOf returns the engine that reported a container. A command sent to the
+// wrong engine changes nothing and returns success.
 func engineOf(name string) (string, error) {
 	in, found, err := Lookup(name)
 	if err != nil {
@@ -218,15 +217,14 @@ func EnsureProxy(engine, confDir, certDir, peerDir string) (created bool, err er
 	return err == nil, err
 }
 
-// proxyRunArgs returns the arguments that create one engine's proxy.
+// proxyRunArgs returns the arguments used to create one engine's proxy.
 //
-// The host routes to an Apple container, so that proxy publishes nothing and is
-// reached at its own address. It routes to no Docker container, so that proxy
-// is reached only through a published port. The port is published on the
-// loopback address rather than on every interface, because the one port this
-// machine offers the network is the peer link. It is 127.0.0.1 because that is
-// the only address macOS assigns to lo0: any other needs an alias added as
-// root, and root is for /etc/resolver alone.
+// The host has a route to an Apple container, so the Apple proxy publishes no
+// port. The host has no route to a Docker container, so the Docker proxy
+// publishes 80 and 443. It publishes them on the loopback address, not on every
+// interface, because the peer link is the only port published to the network.
+// The address is 127.0.0.1 because macOS assigns no other address to lo0 and
+// adding one requires root.
 func proxyRunArgs(engine, confDir, certDir, peerDir string) []string {
 	args := []string{"run", "--detach", "--name", ProxyName,
 		"--network", proxyNetwork(engine),
@@ -249,9 +247,8 @@ func proxyRunArgs(engine, confDir, certDir, peerDir string) []string {
 	return args
 }
 
-// lookupOn finds a container on one engine. The proxies share a name because
-// engines do not share a namespace, so the engine has to be named to tell them
-// apart.
+// lookupOn returns a container from one engine. Each engine's proxy uses the
+// same name, so the engine is required to select one.
 func lookupOn(engine, name string) (Instance, bool, error) {
 	list, err := List()
 	if err != nil {
@@ -265,8 +262,8 @@ func lookupOn(engine, name string) (Instance, bool, error) {
 	return Instance{}, false, nil
 }
 
-// proxyNetwork returns the network the proxy joins. Docker resolves a container
-// name only on a user-defined network, and has no network called "default".
+// proxyNetwork returns the network the proxy joins. Docker has no network named
+// "default" and resolves a container name only on a user-defined network.
 func proxyNetwork(engine string) string {
 	if engine == DockerEngine {
 		return DockerNetwork
@@ -340,7 +337,7 @@ func ProxyMounts(engine string) (confDir, certDir, peerDir string, err error) {
 	return confDir, certDir, peerDir, nil
 }
 
-// mount is one bind mount, read from whichever shape the engine reports.
+// mount is one bind mount, parsed from either engine's output format.
 type mount struct{ Source, Destination string }
 
 func decodeMounts(engine string, out []byte) ([]mount, error) {
@@ -382,8 +379,8 @@ func sameDir(a, b string) bool {
 	return erra == nil && errb == nil && ra == rb
 }
 
-// StopProxy removes one engine's proxy. Callers remove it when no route remains
-// on that engine.
+// StopProxy removes one engine's proxy. Callers call it when that engine has no
+// route.
 func StopProxy(engine string) error {
 	_, err := runEngine(engine, "rm", "--force", ProxyName)
 	if err != nil && strings.Contains(err.Error(), "not found") {
@@ -400,8 +397,8 @@ func ReloadProxy(engine string) error {
 }
 
 // serviceNetworkOn returns the network a service joins. Docker has no network
-// called "default" and resolves a container name only on a user-defined one, so
-// a service that did not name a network joins the one this program creates.
+// named "default", so a service that names no network joins the network this
+// program creates.
 func serviceNetworkOn(engine, named string) string {
 	if engine == DockerEngine && named == ProxyNetwork {
 		return DockerNetwork

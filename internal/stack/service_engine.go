@@ -20,15 +20,13 @@ type serviceEngine struct {
 	command func(context.Context, ...string) ([]byte, error)
 	dir     string
 	timeout time.Duration
-	// engine is where this project's containers are created. A container is
-	// reachable on its own engine's network only, so a project's services all
-	// belong to one engine.
+	// engine is the engine used to create this project's containers.
 	engine string
 }
 
 func newServiceEngine(dir string) *serviceEngine {
 	engine := ServiceEngine()
-	// The network a service joins has to exist before the first one is created.
+	// The network must exist before the first service is created.
 	_ = ensureNetwork(engine)
 	return &serviceEngine{
 		command: func(ctx context.Context, args ...string) ([]byte, error) {
