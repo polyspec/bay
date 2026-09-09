@@ -19,6 +19,10 @@ static const CGFloat kSideRowHeight = 27;   // .sitem
 static const CGFloat kBeaconSize = 11;      // .beacon
 static const CGFloat kBeaconHalo = 4;       // .beacon halo
 static const CGFloat kSubIndent = 18;       // one service under its project
+static const CGFloat kCardLine = 15;        // one line of type in a card
+static const CGFloat kCardPad = 9;          // the space at a card's edge, which
+                                            // is also the space between two of
+                                            // its rows
 
 
 // gLabels holds the words Go supplies for the controls this file builds, so the
@@ -667,12 +671,18 @@ static NSColor *hex(uint32_t rgb) {
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = tall ? NSLayoutAttributeTop : NSLayoutAttributeCenterY;
   line.spacing = 0;
-  line.edgeInsets = tall ? NSEdgeInsetsMake(11, 14, 11, 14) : NSEdgeInsetsMake(9, 14, 9, 14);
+  BOOL half = [row[@"halfPad"] boolValue];
+  CGFloat pad = half ? kCardPad / 2 : (tall ? 11 : 9);
+  line.edgeInsets = NSEdgeInsetsMake(pad, 14, pad, 14);
+  if (half && !tall) {
+    [line.heightAnchor constraintEqualToConstant:kCardPad + kCardLine].active = YES;
+  }
 
   NSTextField *key = [NSTextField labelWithString:row[@"text"] ?: @""];
   key.font = [NSFont systemFontOfSize:12];
   key.textColor = [NSColor secondaryLabelColor];
   [key.widthAnchor constraintEqualToConstant:kKeyWidth].active = YES;
+  if (half) hug(key);
   [line addArrangedSubview:key];
 
   // The value column: the value itself, a tertiary suffix on the same line, and
@@ -709,6 +719,7 @@ static NSColor *hex(uint32_t rgb) {
     v.lineBreakMode = NSLineBreakByTruncatingMiddle;
     [v setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
                                 forOrientation:NSLayoutConstraintOrientationHorizontal];
+    if (half) hug(v);
     [first addArrangedSubview:v];
   }
   NSString *faint = row[@"faint"];
@@ -817,11 +828,14 @@ static NSColor *hex(uint32_t rgb) {
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
   line.spacing = 8;
-  line.edgeInsets = NSEdgeInsetsMake(12, 14, 10, 12);
+  BOOL half = [row[@"halfPad"] boolValue];
+  CGFloat pad = half ? kCardPad / 2 : 12;
+  line.edgeInsets = NSEdgeInsetsMake(pad, 14, pad, 14);
 
   NSTextField *t = [NSTextField labelWithString:row[@"text"] ?: @""];
   t.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
   t.lineBreakMode = NSLineBreakByTruncatingTail;
+  if (half) hug(t);
   [line addArrangedSubview:t];
 
   NSView *spacer = [NSView new];
@@ -837,13 +851,23 @@ static NSColor *hex(uint32_t rgb) {
   NSStackView *line = [NSStackView new];
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
-  line.edgeInsets = NSEdgeInsetsMake(10, 14, 6, 12);
+  BOOL half = [row[@"halfPad"] boolValue];
+  CGFloat pad = half ? kCardPad / 2 : 10;
+  line.edgeInsets = NSEdgeInsetsMake(pad, 14, pad, 14);
 
   NSTextField *t = [NSTextField labelWithString:row[@"text"] ?: @""];
   t.font = [NSFont systemFontOfSize:11];
   t.textColor = [NSColor secondaryLabelColor];
+  if (half) hug(t);
   [line addArrangedSubview:t];
   return line;
+}
+
+// hug holds a label's box to the line its type draws, so the space between two
+// rows is the padding and nothing more.
+static void hug(NSTextField *t) {
+  CGFloat line = ceil(t.font.ascender - t.font.descender);
+  [t.heightAnchor constraintEqualToConstant:line].active = YES;
 }
 
 - (NSView *)rowFor:(NSDictionary *)row {
@@ -855,12 +879,15 @@ static NSColor *hex(uint32_t rgb) {
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
   line.spacing = 12;
-  line.edgeInsets = NSEdgeInsetsMake(10, 14, 10, 12);
+  BOOL half = [row[@"halfPad"] boolValue];
+  CGFloat pad = half ? kCardPad / 2 : 10;
+  line.edgeInsets = NSEdgeInsetsMake(pad, 14, pad, half ? 14 : 12);
 
   [line addArrangedSubview:[DotView dot:row[@"dot"] ?: @""]];
 
   NSTextField *name = [NSTextField labelWithString:row[@"text"] ?: @""];
   name.font = [NSFont systemFontOfSize:13];
+  if (half) hug(name);
   BOOL wide = [row[@"wide"] boolValue];
   if (wide) {
     // A certificate name can be longer than the column. It is what tells the
@@ -1055,12 +1082,37 @@ static NSColor *hex(uint32_t rgb) {
     NSString *kind = r[@"kind"];
     if ([kind isEqualToString:@"title"] || [kind isEqualToString:@"label"]) named = YES;
   }
+  if (named) inner.edgeInsets = NSEdgeInsetsMake(kCardPad / 2, 0, kCardPad / 2, 0);
+  NSView *previous = nil;
   for (NSUInteger i = 0; i < rows.count; i++) {
     if (i > 0) {
       BOOL rule = named ? [rows[i][@"kind"] isEqualToString:@"label"] : YES;
-      if (rule) [inner addArrangedSubview:[self hairline]];
+      if (rule) {
+        NSView *h = [self hairline];
+        [inner addArrangedSubview:h];
+        if (named) {
+          [NSLayoutConstraint activateConstraints:@[
+            [h.leadingAnchor constraintEqualToAnchor:inner.leadingAnchor constant:14],
+            [h.trailingAnchor constraintEqualToAnchor:inner.trailingAnchor constant:-14],
+          ]];
+          // A rule separates one part of a card from the next, so the boundary
+          // it marks takes a padding on each side of it, where a boundary with
+          // no rule takes one padding in all.
+          [inner setCustomSpacing:kCardPad / 2 afterView:previous];
+          [inner setCustomSpacing:kCardPad / 2 afterView:h];
+        }
+        previous = h;
+      }
     }
-    [inner addArrangedSubview:[self clickableRow:rows[i]]];
+    NSDictionary *r = rows[i];
+    if (named) {
+      NSMutableDictionary *m = [r mutableCopy];
+      m[@"halfPad"] = @YES;
+      r = m;
+    }
+    NSView *v = [self clickableRow:r];
+    [inner addArrangedSubview:v];
+    previous = v;
   }
 
   // A log section carries the tail of a container's output and a strip naming

@@ -5,6 +5,28 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Space a card's rows by one padding, measured on screen
+
+The peer card set a different space at every boundary. The rows measured 23, 32,
+27 and 24 points from one row's centre to the next, and the space between the
+address and the fingerprint was more than twice the space at the card's edge.
+
+A card that names its parts now states its padding once and derives the rest.
+Two rows with no rule between them are one padding apart, which is also the
+space at the card's edge. A rule marks where a part begins, so the boundary that
+carries one takes a padding on each side of it. Every row in such a card is held
+to one line of type plus the padding, because the stacks inside a key and value
+row reserve more height than the type needs and left that boundary wider than
+the others whatever the padding was set to.
+
+A card that is a plain list is unchanged. Every boundary there carries a rule,
+and the rows keep the padding they had.
+
+Verification: measured on screen. The window was opened, captured by its window
+identifier and the rows of pixels holding type were read off. Before: centres 23,
+32, 27, 24 apart. After: 24 apart at every boundary with no rule, and 35 across
+the one that carries a rule, which is one padding and the rule wider. `make
+check` passes.
 ### Draw a rule only where a card's part begins
 
 The window drew a rule between every pair of rows in a card. A card made of a
