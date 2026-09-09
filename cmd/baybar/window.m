@@ -817,7 +817,7 @@ static NSColor *hex(uint32_t rgb) {
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
   line.spacing = 8;
-  line.edgeInsets = NSEdgeInsetsMake(14, 14, 12, 14);
+  line.edgeInsets = NSEdgeInsetsMake(12, 14, 10, 12);
 
   NSTextField *t = [NSTextField labelWithString:row[@"text"] ?: @""];
   t.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
@@ -837,7 +837,7 @@ static NSColor *hex(uint32_t rgb) {
   NSStackView *line = [NSStackView new];
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
-  line.edgeInsets = NSEdgeInsetsMake(14, 14, 8, 14);
+  line.edgeInsets = NSEdgeInsetsMake(10, 14, 6, 12);
 
   NSTextField *t = [NSTextField labelWithString:row[@"text"] ?: @""];
   t.font = [NSFont systemFontOfSize:11];
@@ -855,7 +855,7 @@ static NSColor *hex(uint32_t rgb) {
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
   line.spacing = 12;
-  line.edgeInsets = NSEdgeInsetsMake(10, 14, 10, 14);
+  line.edgeInsets = NSEdgeInsetsMake(10, 14, 10, 12);
 
   [line addArrangedSubview:[DotView dot:row[@"dot"] ?: @""]];
 
@@ -1058,19 +1058,7 @@ static NSColor *hex(uint32_t rgb) {
   for (NSUInteger i = 0; i < rows.count; i++) {
     if (i > 0) {
       BOOL rule = named ? [rows[i][@"kind"] isEqualToString:@"label"] : YES;
-      if (rule) {
-        NSView *h = [self hairline];
-        [inner addArrangedSubview:h];
-        // Inside a card that names its parts the rule separates the parts, so
-        // it keeps to the same margin as the rows. A plain list is separated
-        // edge to edge, because there the rule is the list's own ruling.
-        if (named) {
-          [NSLayoutConstraint activateConstraints:@[
-            [h.leadingAnchor constraintEqualToAnchor:inner.leadingAnchor constant:14],
-            [h.trailingAnchor constraintEqualToAnchor:inner.trailingAnchor constant:-14],
-          ]];
-        }
-      }
+      if (rule) [inner addArrangedSubview:[self hairline]];
     }
     [inner addArrangedSubview:[self clickableRow:rows[i]]];
   }
