@@ -79,9 +79,10 @@ func TestShortPathLeavesForeignPaths(t *testing.T) {
 }
 
 // The peers screen states which domains this machine reaches and which machine
-// provides each one. The machines and the domains are separate sections: a
-// machine row is removed and a domain row is opened, and one flat list of both
-// gives no way to tell them apart when several machines are approved.
+// provides each one. One machine is one section and its domains are the rows of
+// that section, so the domains a machine provides are inside it. A list holding
+// both machines and domains states that only in a column, which is read as one
+// more attribute of the row rather than as which machine provides it.
 func TestThePeersScreenListsEachPeersDomains(t *testing.T) {
 	snap := stack.Snapshot{}
 	snap.Machine.Peering = true
@@ -96,29 +97,17 @@ func TestThePeersScreenListsEachPeersDomains(t *testing.T) {
 	p := &panel{}
 	peersView(p, snap, false, nil)
 
-	var machines, domains *section
-	for i := range p.Sections {
-		switch p.Sections[i].Header {
-		case "APPROVED":
-			machines = &p.Sections[i]
-		case "DOMAINS":
-			domains = &p.Sections[i]
-		}
-	}
-	if machines == nil || domains == nil {
-		t.Fatal("the peers screen does not list the machines and the domains separately")
-	}
-	// A machine row is removed and a domain row is opened, so the machines
-	// section holds one row per machine and nothing else.
-	if len(machines.Rows) != 2 {
-		t.Errorf("the machines section holds %d rows, want one per approved machine",
-			len(machines.Rows))
-	}
-
+	// One machine is one section, so a domain is inside the section of the
+	// machine that provides it and nowhere else.
 	links := map[string]string{}
-	for _, r := range domains.Rows {
-		if r.Link != "" {
-			links[r.Text] = r.Detail
+	for _, sec := range p.Sections {
+		if sec.Header != "max" && sec.Header != "lab" {
+			continue
+		}
+		for _, r := range sec.Rows {
+			if r.Link != "" {
+				links[r.Text] = sec.Header
+			}
 		}
 	}
 	for domain, peer := range map[string]string{

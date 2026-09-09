@@ -5,21 +5,26 @@ the day the change was made.
 
 ## 2026-09-09
 
-### List the reachable domains on the peers screen
+### Show each approved machine and its domains as one section
 
 The screen named each approved machine and did not state which domains that
 machine provides, although the command line prints them. With several approved
 machines the reader could not tell which machine provides which domain.
 
-The domains are a section of their own, below the machines. Each row states the
-domain and the machine that provides it, and opens the address. The two are
-separate sections because a machine row is removed and a domain row is opened.
-One list of both gives no way to tell a machine from a domain.
+One machine is one section. The header states the machine, its address and its
+fingerprint, and carries the remove action. The rows are the domains that
+machine provides, and each row opens its address. A machine that provides no
+domain states that.
+
+A list holding both machines and domains states the machine of a domain in a
+column, which is read as one more attribute of the row. The section states it
+instead. The remove action belongs to the machine and the open action belongs to
+the domain, and each is now on the thing it acts on.
 
 Verification: `go test ./cmd/baybar -run TestThePeersScreenListsEachPeersDomains`
-covers two approved machines with three domains between them, the machines
-section holding one row per machine and each domain naming the machine that
-provides it. `make check` passes.
+covers two approved machines with three domains between them and checks that
+each domain is inside the section of the machine that provides it. `make check`
+passes.
 ### Include peer domains when deciding whether a certificate is used
 
 This machine serves an approved peer's domain with a certificate it issued. The

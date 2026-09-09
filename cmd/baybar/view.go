@@ -329,40 +329,32 @@ func peersView(p *panel, snap stack.Snapshot, busy bool, found []stack.Beacon) {
 	}
 	p.Sections = append(p.Sections, link)
 
-	approved := section{Header: text.T("APPROVED")}
-	for _, peer := range snap.Machine.Peers {
-		approved.Rows = append(approved.Rows, row{
-			Text: peer.Name, Wide: true, Dot: "on",
-			LinkText: peer.Address,
-			Detail:   shortFingerprint(peer.Fingerprint),
-			Buttons: []button{
-				quiet("peer-remove:"+peer.Fingerprint, text.T("Remove"), busy),
-			},
+	// One machine is one section, and its domains are the rows of that section.
+	// The domains a machine provides belong to it, and the section is what
+	// states that: a list holding both machines and domains states it only in a
+	// column, which is read as one more attribute of the row.
+	if len(snap.Machine.Peers) == 0 {
+		p.Sections = append(p.Sections, section{
+			Header: text.T("APPROVED"),
+			Note:   text.T("No machine is approved. Its domains are reachable here once it is."),
 		})
 	}
-	if len(approved.Rows) == 0 {
-		approved.Note = text.T("No machine is approved. Its domains are reachable here once it is.")
-	}
-	p.Sections = append(p.Sections, approved)
-
-	// The domains are a section of their own. A machine row is removed and a
-	// domain row is opened, so the two are separate lists, and the machine that
-	// provides a domain is stated beside it.
-	domains := section{Header: text.T("DOMAINS")}
 	for _, peer := range snap.Machine.Peers {
+		machine := section{
+			Header:  peer.Name,
+			Detail:  peer.Address + "  " + shortFingerprint(peer.Fingerprint),
+			Buttons: []button{quiet("peer-remove:"+peer.Fingerprint, text.T("Remove"), busy)},
+		}
 		for _, d := range peer.Domains {
 			url := "https://" + d
-			domains.Rows = append(domains.Rows, row{
-				Text: d, Wide: true, Dot: "on",
-				Link: url, LinkText: url, Detail: peer.Name,
+			machine.Rows = append(machine.Rows, row{
+				Text: d, Wide: true, Dot: "on", Link: url, LinkText: url,
 			})
 		}
-	}
-	if len(snap.Machine.Peers) > 0 {
-		if len(domains.Rows) == 0 {
-			domains.Note = text.T("No approved machine provides a domain yet.")
+		if len(machine.Rows) == 0 {
+			machine.Note = text.T("This machine provides no domain.")
 		}
-		p.Sections = append(p.Sections, domains)
+		p.Sections = append(p.Sections, machine)
 	}
 
 	// A machine already approved is not offered again, and neither is this one.
