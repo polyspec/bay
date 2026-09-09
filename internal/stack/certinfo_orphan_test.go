@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// writeCerts creates empty certificate files, which is enough for the orphan
+// writeCerts creates empty certificate files, which is enough for the unused
 // test: it reads the file names, not their contents.
 func writeCerts(t *testing.T, names ...string) string {
 	t.Helper()
@@ -19,9 +19,9 @@ func writeCerts(t *testing.T, names ...string) string {
 	return dir
 }
 
-func orphans(t *testing.T, dir string, routed, declared []string) map[string]bool {
+func unused(t *testing.T, dir string, use CertUse) map[string]bool {
 	t.Helper()
-	list, err := Certificates(dir, routed, declared)
+	list, err := Certificates(dir, use)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,35 +32,48 @@ func orphans(t *testing.T, dir string, routed, declared []string) map[string]boo
 	return out
 }
 
-// A project that is stopped still declares its domains, and starting it needs
-// the certificate. Reporting it as unused offers to remove something the next
-// start requires.
-func TestAStoppedProjectsCertificateIsNotOrphaned(t *testing.T) {
+// A project that is stopped still asks for its domains, and starting it needs
+// their certificates. Only a name nothing asks for is unused, which is what a
+// project whose files are gone leaves behind.
+func TestOnlyANameNothingAsksForIsUnused(t *testing.T) {
 	dir := writeCerts(t, DefaultCertName, "web.test", "leftover.test")
-	got := orphans(t, dir, nil, []string{"web.test"})
+	got := unused(t, dir, CertUse{Declared: []string{"web.test"}})
 	if got["web.test"] {
-		t.Error("the certificate of a declared domain is reported as unused")
+		t.Error("the certificate of a declared domain is called unused")
 	}
 	if !got["leftover.test"] {
-		t.Error("a certificate no project declares is not reported as unused")
+		t.Error("a certificate no project asks for is not called unused")
 	}
 	if got[DefaultCertName] {
 		t.Error("the default certificate is machine state and is never unused")
 	}
 }
 
-// A domain being routed is enough on its own.
-func TestARoutedDomainsCertificateIsNotOrphaned(t *testing.T) {
+// A domain being served is enough on its own.
+func TestAServedDomainsCertificateIsNotUnused(t *testing.T) {
 	dir := writeCerts(t, "web.test")
-	if orphans(t, dir, []string{"web.test"}, nil)["web.test"] {
-		t.Error("the certificate of a routed domain is reported as unused")
+	if unused(t, dir, CertUse{Routed: []string{"web.test"}})["web.test"] {
+		t.Error("the certificate of a served domain is called unused")
 	}
 }
 
 // Names are compared without case, the way domains are.
-func TestOrphanTestIgnoresCase(t *testing.T) {
+func TestTheUnusedTestIgnoresCase(t *testing.T) {
 	dir := writeCerts(t, "web.test")
-	if orphans(t, dir, nil, []string{"WEB.TEST"})["web.test"] {
+	if unused(t, dir, CertUse{Declared: []string{"WEB.TEST"}})["web.test"] {
 		t.Error("a declared domain in another case is not recognised")
+	}
+}
+
+// A project whose file is there but could not be read still has its files. What
+// it asks for is not known, so nothing is called unused: the answer would be a
+// button offering to remove a certificate the project needs.
+func TestNothingIsUnusedWhileAProjectCannotBeRead(t *testing.T) {
+	dir := writeCerts(t, "web.test", "leftover.test")
+	got := unused(t, dir, CertUse{Unread: true})
+	for name, isUnused := range got {
+		if isUnused {
+			t.Errorf("%s is called unused while a project could not be read", name)
+		}
 	}
 }

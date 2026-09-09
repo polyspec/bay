@@ -7,15 +7,22 @@ the day the change was made.
 
 ### A certificate is unused only when nothing asks for its name
 
-A certificate was called unused when no route served its name. A stopped project
-serves nothing, so its certificates were all reported as unused and offered for
-removal, which is what the next start needs. A certificate is unused now only
-when neither a route nor a registered project asks for its name.
+A certificate was called unused when no route served its name. Whether a project
+runs is not what makes its certificate unused: a stopped project serves nothing,
+so all of its certificates were reported as unused and offered for removal,
+which is what its next start needs. A certificate is unused now only when
+neither a route nor a registered project asks for its name, which is what a
+project whose files are gone leaves behind.
 
-Verification: `make check`, including a test over a declared domain with no
-route, a routed domain, and case. On this machine, with every project stopped,
-the list called `api.platform3.test` unused before the change; it now names the
-project that declares it.
+A project whose file is still there but could not be read asks for something
+that is not known. Nothing is called unused while that is true, because the
+alternative is a button offering to remove a certificate the project needs.
+
+Verification: `make check`, including tests over a declared domain with no
+route, a served domain, case, and a project whose file is present but
+unreadable. On this machine, with every project stopped, the list called
+`api.platform3.test` unused before the change; it now names the project that
+declares it, and only the fourteen names no project asks for stay flagged.
 
 ### A long name in a list keeps what tells it apart
 

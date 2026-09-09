@@ -3,6 +3,7 @@ package stack
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 )
@@ -186,30 +187,40 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 	if err != nil {
 		return snap, err
 	}
-	// A stopped project still asks for its domains, and starting it needs their
-	// certificates, so what the projects declare is collected alongside what is
-	// routed right now.
-	var declared []string
+	// A stopped project still asks for its domains, so what the projects declare
+	// is collected alongside what is routed right now. A project whose file is
+	// still there but could not be read asks for something unknown.
+	use := CertUse{}
 	for _, g := range groups {
 		status := groupStatus(m, g, byContainer, routed)
 		snap.Groups = append(snap.Groups, status)
+		if status.Error != "" && fileExists(g.StackPath) {
+			use.Unread = true
+		}
 		for _, svc := range status.Services {
 			if svc.Domain != "" {
-				declared = append(declared, svc.Domain)
+				use.Declared = append(use.Declared, svc.Domain)
 			}
 		}
 	}
-
-	served := make([]string, 0, len(routes))
 	for _, r := range routes {
-		served = append(served, r.Domain)
+		use.Routed = append(use.Routed, r.Domain)
 	}
-	issued, err := Certificates(m.CertDir(), served, declared)
+
+	issued, err := Certificates(m.CertDir(), use)
 	if err != nil {
 		return snap, err
 	}
 	snap.Certificates = CertStatus{Authority: authority, Issued: issued}
 	return snap, nil
+}
+
+// fileExists reports whether a path is there to be read. A project whose file
+// is gone asks for nothing; one whose file is present but unreadable asks for
+// something that is not known.
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // domainStatuses returns, for each delegated domain, whether it is the default

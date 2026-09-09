@@ -26,7 +26,7 @@ func TestCertificatesReportUseAndExpiry(t *testing.T) {
 		}
 	}
 
-	list, err := Certificates(certDir, []string{"a.test"}, nil)
+	list, err := Certificates(certDir, CertUse{Routed: []string{"a.test"}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -63,7 +63,7 @@ func TestCertificatesReportsUnreadableFiles(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(certDir, "broken.crt"), []byte("not pem"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	list, err := Certificates(certDir, nil, nil)
+	list, err := Certificates(certDir, CertUse{})
 	if err != nil {
 		t.Fatal(err)
 	}

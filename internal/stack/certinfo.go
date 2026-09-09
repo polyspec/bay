@@ -58,12 +58,25 @@ func pluralDays(n int) string {
 	return "s"
 }
 
-// Certificates returns the leaf certificates in certDir. routed names the
-// domains the machine serves right now; declared names the domains the
-// registered projects ask for, whether or not they are running. A certificate
-// for any other name is reported as orphaned: a stopped project needs its
-// certificate the moment it starts again.
-func Certificates(certDir string, routed, declared []string) ([]CertInfo, error) {
+// CertUse is what asks for a certificate's name. Whether a project is running
+// is not part of it: a stopped project needs its certificate the moment it
+// starts again.
+type CertUse struct {
+	// Routed are the domains the proxy serves right now.
+	Routed []string
+	// Declared are the domains the registered projects ask for, read from their
+	// Compose files.
+	Declared []string
+	// Unread says a registered project's file is there but could not be read.
+	// What it asks for is not known, so no certificate is called unused: the
+	// alternative is offering to remove one the project needs.
+	Unread bool
+}
+
+// Certificates returns the leaf certificates in certDir. A certificate whose
+// name nothing in use asks for is reported as orphaned, which is what a project
+// whose files are gone leaves behind.
+func Certificates(certDir string, use CertUse) ([]CertInfo, error) {
 	entries, err := os.ReadDir(certDir)
 	if os.IsNotExist(err) {
 		return nil, nil
@@ -71,11 +84,8 @@ func Certificates(certDir string, routed, declared []string) ([]CertInfo, error)
 	if err != nil {
 		return nil, err
 	}
-	used := make(map[string]bool, len(routed)+len(declared))
-	for _, d := range routed {
-		used[strings.ToLower(d)] = true
-	}
-	for _, d := range declared {
+	used := make(map[string]bool, len(use.Routed)+len(use.Declared))
+	for _, d := range append(append([]string{}, use.Routed...), use.Declared...) {
 		used[strings.ToLower(d)] = true
 	}
 
@@ -89,7 +99,7 @@ func Certificates(certDir string, routed, declared []string) ([]CertInfo, error)
 		info := readCert(filepath.Join(certDir, name))
 		info.Name = base
 		// The default certificate is machine state and is never orphaned.
-		info.Orphaned = base != DefaultCertName && !used[strings.ToLower(base)]
+		info.Orphaned = !use.Unread && base != DefaultCertName && !used[strings.ToLower(base)]
 		out = append(out, info)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
