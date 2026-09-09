@@ -434,8 +434,10 @@ func (a *app) run(rt *stack.Runtime, parts []string) error {
 	if parts[0] == "proxy-restart" {
 		// The proxy is generated from the containers that are running, so
 		// removing it and syncing again re-publishes every route.
-		if err := stack.StopProxy(); err != nil {
-			return err
+		for _, engine := range stack.Engines() {
+			if err := stack.StopProxy(engine); err != nil {
+				return err
+			}
 		}
 		res, err := stack.SyncProxy(rt.Machine)
 		if err != nil {

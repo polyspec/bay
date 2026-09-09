@@ -5,6 +5,56 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Both engines, side by side
+
+A machine runs Apple `container` and Docker at the same time and serves both.
+Neither is preferred. `bay status` on a machine that has one engine's
+command and not the other's now runs, where before it could not start.
+
+Containers are read from every engine present and merged into one list, each
+carrying the engine that holds it. An engine that is absent, or whose socket
+does not answer, contributes nothing and is not an error.
+
+Each engine runs its own proxy, because a container is reachable on its own
+engine's network and on no other. The host reaches an Apple proxy at the
+proxy's own address and a Docker proxy at 80 and 443 published on 127.0.0.2,
+which is a loopback address of its own so it takes no port from anything else.
+A service's own port is still published on neither. `bayd` answers a
+name with the address of the proxy for that name's engine.
+
+A domain is still claimed once per machine. The claim is settled over every
+engine's containers before any proxy is configured, so a container cannot hold
+a name twice by running on both and does not lose one by running on either.
+
+The DNS server's per-service mode is removed. It answered a name with the
+container's own address, which only a network the host routes to can satisfy,
+so it could never serve a Docker container. Its `-proxy` and `-aliases` flags
+go with it, and the agent is registered without them.
+
+The peer link is not moved yet. It is one port and rule 8 puts it on a host
+process that reaches both engines. Until that exists, opening the link on a
+machine with two engines is refused rather than served from one of them and
+silently missing the other's domains.
+
+The document carries ten numbered rules and they are the standard the code is
+held to. Each is forced by the one above it and the first is a fact rather than
+a decision: a container is reachable on its own engine's network, and whether
+the host reaches that network is a property of the engine. `AGENTS.md` names
+where the code carries each rule and says which one it does not carry yet. A
+rule holds on a stated condition, so a rule whose condition changes is reviewed
+rather than assumed.
+
+Verification: `make check` passes and `go test -race ./internal/stack` passes in
+4.430 seconds. The unit tests cover decoding `docker inspect`, choosing one
+address for a container on several networks, an engine that does not answer, no
+engine present, and a domain claimed once across engines. Against a running
+Docker daemon, `stack.List` read this machine's five containers, each tagged
+with its engine, the three running ones carrying their bridge addresses and the
+two exited ones carrying none, and the field names `docker inspect` returns were
+compared against the decoder one by one. `bay status` reported the
+Docker engine's proxy on a machine that has no Apple `container` command, where
+before this change it could not start. Nothing was verified on Apple
+`container`: this machine does not have it.
 ### Two ways to find a machine, and one way to prove it
 
 A machine with the link open announces itself to the network every second and a

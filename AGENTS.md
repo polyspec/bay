@@ -57,9 +57,18 @@ the machine is using.
 
 ## Rules the code holds to
 
+The architecture's rules are numbered in
+[the specification](docs/spec/architecture.md). They are the standard: a change
+that cannot meet one is wrong, and a rule that is wrong is corrected there
+first. This table names where the code carries each one, and says so when the
+code does not carry it yet.
+
 | Rule | Where |
 | --- | --- |
-| One proxy per machine | `stack.ProxyName`, `stack.EnsureProxy` |
+| One proxy per engine | `stack.SyncProxy`, `stack.EnsureProxy` |
+| One list from every engine | `stack.List`, `stack.Engines` |
+| A name answers with its engine's proxy | `bayd`'s resolver index, `stack.ProxyHostAddr` |
+| The peer link on a host process | Not carried. `stack.SyncProxy` refuses the link when two engines are present |
 | Routes come from container labels | `stack.Routes`, `stack.Instances` |
 | Domains are machine state | `stack.Machine.Domains` |
 | Commands return after the proxy serves the new configuration | `stack.WaitForGeneration` |

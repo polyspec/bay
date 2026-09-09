@@ -90,7 +90,7 @@ volumes:
 		defer cancel()
 		// Unlike the production startup command, this explicit test read captures
 		// only fixture content, never a process environment or private config.
-		out, err := exec.CommandContext(ctx, containerBin(), "exec", s.ContainerName, "cat", "/data/persist").Output()
+		out, err := exec.CommandContext(ctx, engineBin(ServiceEngine()), "exec", s.ContainerName, "cat", "/data/persist").Output()
 		if err != nil || strings.TrimSpace(string(out)) != want {
 			t.Fatalf("persistent fixture data differs: %q %v", out, err)
 		}

@@ -233,13 +233,13 @@ func (r *Runtime) EnsureInstalled() error {
 	if pending := in.Pending(); len(pending) > 0 {
 		return fmt.Errorf("setup did not complete: %s", strings.Join(pending, "; "))
 	}
-	if DNSAgentLoaded() && DNSAgentServes(domains, r.Addr, ProxyName, r.DNSBin) {
+	if DNSAgentLoaded() && DNSAgentServes(domains, r.Addr, r.DNSBin) {
 		return nil
 	}
 	if r.DNSBin == "" {
 		return fmt.Errorf("no bayd binary configured for the launchd job")
 	}
-	_, err = InstallDNSAgent(r.DNSBin, strings.Join(domains, ","), r.Addr, ProxyName, r.Machine.LogDir())
+	_, err = InstallDNSAgent(r.DNSBin, strings.Join(domains, ","), r.Addr, r.Machine.LogDir())
 	return err
 }
 

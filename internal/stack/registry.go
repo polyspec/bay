@@ -27,6 +27,8 @@ type ServiceInstance struct {
 	// Started is when the runtime started the container, in RFC 3339. It is
 	// empty for a container that has never run.
 	Started string
+	// Engine names the engine holding this container.
+	Engine string
 }
 
 func (s ServiceInstance) Running() bool { return s.State == "running" }
@@ -76,6 +78,7 @@ func Instances() ([]ServiceInstance, error) {
 			State:     in.State,
 			IPv4:      in.IPv4,
 			Started:   in.Started,
+			Engine:    in.Engine,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -95,6 +98,16 @@ func Routes() ([]Route, []DomainConflict, error) {
 	if err != nil {
 		return nil, nil, err
 	}
+	routes, conflicts := routesFrom(instances)
+	return routes, conflicts, nil
+}
+
+// routesFrom settles the domain claims over every engine's containers. A domain
+// is claimed once per machine, so a container cannot hold a name twice by
+// running on both engines and does not lose one by running on either. Each
+// route carries the engine that holds its container, because only that engine's
+// proxy can serve it.
+func routesFrom(instances []ServiceInstance) ([]Route, []DomainConflict) {
 	var routes []Route
 	var conflicts []DomainConflict
 	claimed := map[string]ServiceInstance{}
@@ -114,12 +127,24 @@ func Routes() ([]Route, []DomainConflict, error) {
 			Address: in.Addr(),
 			Backend: in.Backend(),
 			Scheme:  in.Scheme,
+			Engine:  in.Engine,
 			ipv4:    in.IPv4,
 			started: in.Started,
 		})
 	}
 	sort.Slice(routes, func(i, j int) bool { return routes[i].Domain < routes[j].Domain })
-	return routes, conflicts, nil
+	return routes, conflicts
+}
+
+// RoutesOn returns the routes one engine's proxy can serve.
+func RoutesOn(routes []Route, engine string) []Route {
+	out := make([]Route, 0, len(routes))
+	for _, r := range routes {
+		if r.Engine == engine {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // DomainConflict reports two running containers claiming the same domain.
@@ -132,13 +157,15 @@ type DomainConflict struct {
 // NetworkGateway returns the container network's gateway, which is also the
 // runtime's DNS server. The runtime reports it per attachment, so it is read
 // from a running container.
-func NetworkGateway() (string, error) {
+func NetworkGateway(engine string) (string, error) {
 	list, err := List()
 	if err != nil {
 		return "", err
 	}
+	// The gateway is written into one engine's proxy as its resolver, so it has
+	// to come from a container on that same engine.
 	for _, in := range list {
-		if in.State == "running" && in.Gateway != "" {
+		if in.State == "running" && in.Gateway != "" && in.Engine == engine {
 			return in.Gateway, nil
 		}
 	}

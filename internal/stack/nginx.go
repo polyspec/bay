@@ -17,6 +17,9 @@ type Route struct {
 	// is how a container recreated without bay is found again.
 	Backend string
 	Scheme  string // http or https
+	// Engine names the engine holding the container this route sends to. Only
+	// that engine's proxy can serve it.
+	Engine  string
 	ipv4    string // current instance identity for the reload generation
 	started string
 }

@@ -18,7 +18,7 @@ const DNSAgentLabel = "dev.bay.dns"
 
 // InstallDNSAgent writes the launchd job, loads it, and returns the plist
 // path.
-func InstallDNSAgent(exe, domain, addr, proxy, logDir string) (string, error) {
+func InstallDNSAgent(exe, domain, addr, logDir string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -32,7 +32,7 @@ func InstallDNSAgent(exe, domain, addr, proxy, logDir string) (string, error) {
 	}
 	path := filepath.Join(dir, DNSAgentLabel+".plist")
 
-	args := dnsAgentArgs(exe, domain, addr, proxy)
+	args := dnsAgentArgs(exe, domain, addr)
 	plist := buildPlist(DNSAgentLabel, args,
 		filepath.Join(logDir, "bayd.log"),
 		filepath.Join(logDir, "bayd.err.log"))
@@ -84,17 +84,13 @@ func UninstallDNSAgent() error {
 
 // dnsAgentArgs returns the job's argument list. The installer and the drift
 // check both call it.
-func dnsAgentArgs(exe, domain, addr, proxy string) []string {
-	args := []string{exe, "-domain", domain, "-addr", addr}
-	if proxy != "" {
-		args = append(args, "-proxy", proxy)
-	}
-	return args
+func dnsAgentArgs(exe, domain, addr string) []string {
+	return []string{exe, "-domain", domain, "-addr", addr}
 }
 
 // DNSAgentServes reports whether the installed job runs with these settings. A
-// renamed domain or proxy leaves the job registered with the previous values.
-func DNSAgentServes(domains []string, addr, proxy, bin string) bool {
+// renamed domain leaves the job registered with the previous values.
+func DNSAgentServes(domains []string, addr, bin string) bool {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return false
@@ -108,7 +104,7 @@ func DNSAgentServes(domains []string, addr, proxy, bin string) bool {
 	if err := json.Unmarshal(out, &got); err != nil || len(got) == 0 {
 		return false
 	}
-	return agentIsCurrent(got, domains, addr, proxy, bin)
+	return agentIsCurrent(got, domains, addr, bin)
 }
 
 // agentIsCurrent reports whether the registered arguments are the ones this
@@ -118,14 +114,14 @@ func DNSAgentServes(domains []string, addr, proxy, bin string) bool {
 // removed stops at the next login, and one registered from another copy is not
 // the installation being used. bin is empty for a reader that has no
 // installation to name, and then the settings alone decide.
-func agentIsCurrent(got, domains []string, addr, proxy, bin string) bool {
+func agentIsCurrent(got, domains []string, addr, bin string) bool {
 	if len(got) == 0 {
 		return false
 	}
 	if bin != "" && got[0] != bin {
 		return false
 	}
-	want := dnsAgentArgs(got[0], strings.Join(domains, ","), addr, proxy)
+	want := dnsAgentArgs(got[0], strings.Join(domains, ","), addr)
 	if len(got) != len(want) {
 		return false
 	}

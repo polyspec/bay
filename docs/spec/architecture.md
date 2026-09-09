@@ -2,10 +2,14 @@
 
 [Korean](architecture.ko.md).
 
-Status: implemented.
+Status: implemented, except the peer link on a machine running both engines.
+Rule 8 puts that link on a host process, which is not built; a machine with two
+engines is refused when it opens the link rather than serving it from one of
+them.
 
-`bay` runs Compose projects on Apple `container` and serves each
-service over HTTPS at a local domain name. No host port is published.
+`bay` runs Compose projects on Apple `container` and on Docker, and
+serves each service over HTTPS at a local domain name. No service port is
+published.
 
 ## Components
 
@@ -13,21 +17,83 @@ service over HTTPS at a local domain name. No host port is published.
 | --- | --- | --- |
 | `bay` | Command line binary | Run on demand |
 | `bayd` | DNS server, started by a launchd user agent | One per machine |
-| `bay-edge` | nginx container that terminates TLS | One per machine |
+| `bay-edge` | nginx container that terminates TLS | One per engine in use |
 | `baybar` | Menu bar application and window | One per user session |
 
-Projects are Compose files. A project owns its service containers. The proxy,
-the DNS server, the certificate authority and the resolver entries are
-machine-level and shared by every project.
+Projects are Compose files. A project owns its service containers. The DNS
+server, the certificate authority and the resolver entries are machine-level
+and shared by every project. A proxy is shared by every project whose
+containers run on the engine that proxy serves.
+
+## Engines
+
+An engine runs containers. Two are supported and neither is preferred: Apple
+`container`, and Docker. A machine may have both, and one project's services
+may run on either. An engine is identified by the command that speaks to it, so
+anything answering the Docker socket is the Docker engine here.
+
+An engine that is absent, or present with nothing answering its socket,
+contributes no containers and is not an error. A machine with one engine
+behaves as it did before the other was supported.
+
+Routes, domain conflicts, certificates and peer state are read from every
+engine's containers merged into one list. A domain is therefore claimed once
+per machine, not once per engine, and two containers on different engines
+claiming one domain is the same conflict as two on one engine.
+
+## Rules
+
+A rule is not a truth. Each holds on a condition, and each after the first is
+forced by the one above it. A rule whose condition stops holding is reviewed
+here before any code is written against it.
+
+1. A container is reachable on its own engine's network. Whether the host can
+   reach that network is a property of the engine, not of the container.
+   Condition: on this machine Apple `container` puts containers on a subnet the
+   host routes to, and Docker puts them on a bridge the host does not route to.
+   An engine that gave the host a route would change this rule and every rule
+   below it.
+
+2. Nothing may depend on reaching a container from another engine. It is not
+   slow or unreliable there; it does not work.
+
+3. One proxy per engine. A proxy serves the containers of its own engine,
+   because by rule 2 it can serve no others.
+
+4. Every proxy is reachable from the host, which is where the answers point. An
+   Apple proxy already is. A Docker proxy publishes on a loopback address of its
+   own.
+
+5. A domain is claimed once per machine. Claims are settled over every engine's
+   containers before any proxy is configured, so a container cannot hold a name
+   twice by running on both, and does not lose one by running on either.
+
+6. A name resolves to the address of the proxy for the engine its container runs
+   on.
+
+7. The machine offers the network one port and it is the peer link. Everything
+   else is on loopback or on an engine's own network.
+
+8. The peer link serves every domain this machine serves. By rule 2 no engine
+   can do that, so the peer link is a host process that forwards to each
+   engine's proxy.
+
+9. Only `/etc/resolver` writes need administrator rights. The peer link binds
+   8443, which is unprivileged, so rule 8 does not change this.
+
+10. A name no container claims, and a peer's domain, belong to no engine. Every
+    proxy is configured to serve them, so whichever one an answer names is
+    correct, and the answer names the first engine present.
 
 ## Request path
 
 ```
 browser
   → /etc/resolver/<domain>            delegates the domain to 127.0.0.1:5354
-  → bayd                      returns the proxy container's address
+  → bayd                      returns the address of the proxy for the
+                                      engine that name's container runs on
   → bay-edge:443             selects a server block by Host header
-  → <container>.container.test        resolved by the runtime DNS at the gateway
+  → <container>.container.test        resolved by that engine's DNS
   → service container:<port>
 ```
 
@@ -36,11 +102,11 @@ Plain HTTP on port 80 returns 308 to the HTTPS address, except
 
 ## Routing state
 
-The proxy configuration is generated from labels on running containers, not
-from the Compose files. `bay` reads `container ls --format json`,
-selects containers labelled `bay.role=service`, and writes one nginx
-server block per container that carries a `bay.domain` label and is
-running.
+A proxy's configuration is generated from labels on running containers, not
+from the Compose files. `bay` lists the containers of every engine
+present, selects those labelled `bay.role=service`, and writes one
+nginx server block per container that carries a `bay.domain` label and
+is running, into the configuration of the proxy for that container's engine.
 
 Consequences:
 
@@ -50,12 +116,26 @@ Consequences:
 
 ## Container addressing
 
-Each container receives an address on the `192.168.64.0/24` vmnet subnet and is
-routable from the host. Addresses are assigned by DHCP and change on every
-start; a fixed MAC address does not hold an address.
+Each engine addresses its containers its own way, and the difference the rest
+of this document rests on is whether the host can reach them.
 
-The runtime's DNS answers with a container's previous address for about fifteen
-seconds after it is recreated. A route therefore sends the request to the
+Apple `container` gives a container an address on the `192.168.64.0/24` vmnet
+subnet, routable from the host. Docker gives a container an address on a
+user-defined bridge, routable only from that bridge. The host therefore reaches
+an Apple proxy at the proxy's own address and a Docker proxy at a published
+port, and `bayd` answers a name with whichever applies to that name's
+engine.
+
+A Docker proxy publishes 80 and 443 on the loopback address, which is the only
+way the host reaches it. Binding it to loopback keeps the property vmnet gives
+for free: what a service listens on is published on neither engine, and the one
+port either proxy offers the network is the peer link.
+
+Addresses are assigned by DHCP and change on every start; a fixed MAC address
+does not hold an address.
+
+Apple `container` answers DNS with a container's previous address for about
+fifteen seconds after it is recreated. A route therefore sends the request to the
 address the configuration was built from, taken from the runtime at that moment,
 and does not depend on DNS for a service that was just started.
 
@@ -83,8 +163,8 @@ It requires the image to be present, creates its own container and temporary
 certificates, and removes only the container whose ownership it verifies. It
 does not register routes, change the shared proxy or DNS, or pull or remove images.
 
-Reloading the shared proxy runs exactly one
-`container exec bay-edge nginx -s reload`. If that command fails,
+Reloading a proxy runs exactly one `exec bay-edge nginx -s reload` on
+the engine that proxy runs on. If that command fails,
 the caller receives its original error, including nginx stderr. A reload
 failure must not stop, start, delete or recreate the proxy. Other projects use
 the same proxy and must not be restarted as error recovery.

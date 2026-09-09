@@ -2,10 +2,8 @@ package stack
 
 import (
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"os"
 	"os/exec"
 	"path/filepath"
 	"strconv"
@@ -39,15 +37,15 @@ type Instance struct {
 	Created     string
 	Started     string
 	ImageDigest string
+	// Engine names the engine holding this container. A container is reached
+	// from its own engine's network and from no other.
+	Engine string
 }
 
-// List returns every container the runtime knows about.
+// List returns every container of every engine present, in one list. An engine
+// that is absent or not answering contributes nothing to it.
 func List() ([]Instance, error) {
-	out, err := run("ls", "--all", "--format", "json")
-	if err != nil {
-		return nil, err
-	}
-	return decodeInstances(out)
+	return listFrom(engineReaders())
 }
 
 func decodeInstances(out []byte) ([]Instance, error) {
@@ -83,6 +81,7 @@ func decodeInstances(out []byte) ([]Instance, error) {
 			Created:     c.Configuration.CreationDate,
 			Started:     c.Status.StartedDate,
 			ImageDigest: c.Configuration.Image.Descriptor.Digest,
+			Engine:      AppleEngine,
 		}
 		if len(c.Status.Networks) > 0 {
 			// ipv4Address carries a prefix length, e.g. "192.168.64.61/24".
@@ -92,6 +91,19 @@ func decodeInstances(out []byte) ([]Instance, error) {
 		list = append(list, in)
 	}
 	return list, nil
+}
+
+// engineOf returns the engine holding a container. A mutation sent to the wrong
+// engine does not fail safely: it acts on nothing while reporting success.
+func engineOf(name string) (string, error) {
+	in, found, err := Lookup(name)
+	if err != nil {
+		return "", err
+	}
+	if !found {
+		return "", fmt.Errorf("%s: no such container", name)
+	}
+	return in.Engine, nil
 }
 
 func Lookup(name string) (Instance, bool, error) {
@@ -109,7 +121,11 @@ func Lookup(name string) (Instance, bool, error) {
 
 // Remove deletes a container, ignoring the case where it does not exist.
 func Remove(name string) error {
-	if _, err := run("rm", "--force", name); err != nil {
+	engine, err := engineOf(name)
+	if err != nil {
+		return nil
+	}
+	if _, err := runEngine(engine, "rm", "--force", name); err != nil {
 		if strings.Contains(err.Error(), "not found") {
 			return nil
 		}
@@ -132,7 +148,7 @@ func serviceArguments(group string, s *Service, fingerprint string) []string {
 	// An internal service is started with an empty domain label, so the proxy
 	// and the DNS server do not route to it.
 	args := []string{"create", "--name", s.ContainerName,
-		"--network", s.Network,
+		"--network", serviceNetworkOn(ServiceEngine(), s.Network),
 		"--label", LabelRole + "=" + roleService,
 		"--label", LabelGroup + "=" + group,
 		"--label", LabelService + "=" + s.Name,
@@ -174,13 +190,13 @@ func serviceArguments(group string, s *Service, fingerprint string) []string {
 //
 // A proxy running against a different state directory is replaced, because it
 // serves that directory's configuration and ignores this one.
-func EnsureProxy(confDir, certDir, peerDir string) (created bool, err error) {
-	in, found, err := Lookup(ProxyName)
+func EnsureProxy(engine, confDir, certDir, peerDir string) (created bool, err error) {
+	in, found, err := lookupOn(engine, ProxyName)
 	if err != nil {
 		return false, err
 	}
 	if found && in.State == "running" {
-		conf, certs, peers, err := ProxyMounts()
+		conf, certs, peers, err := ProxyMounts(engine)
 		if err != nil {
 			return false, err
 		}
@@ -191,15 +207,27 @@ func EnsureProxy(confDir, certDir, peerDir string) (created bool, err error) {
 		}
 	}
 	if found {
-		if err := Remove(ProxyName); err != nil {
+		if _, err := runEngine(engine, "rm", "--force", ProxyName); err != nil {
 			return false, err
 		}
 	}
+	if err := ensureNetwork(engine); err != nil {
+		return false, err
+	}
 	args := []string{"run", "--detach", "--name", ProxyName,
-		"--network", ProxyNetwork,
+		"--network", proxyNetwork(engine),
 		"--label", LabelRole + "=" + roleProxy,
 		"--volume", confDir + ":/etc/nginx/conf.d:ro",
 		"--volume", certDir + ":/etc/nginx/certs:ro",
+	}
+	// The host reaches an Apple proxy on the engine's own subnet. It reaches a
+	// Docker proxy only through a published port, so that proxy takes a
+	// loopback address of its own and publishes there.
+	if engine == DockerEngine {
+		for _, port := range []int{80, 443} {
+			p := strconv.Itoa(port)
+			args = append(args, "--publish", DockerProxyAddr+":"+p+":"+p)
+		}
 	}
 	if peerDir != "" {
 		port := strconv.Itoa(PeerPort)
@@ -207,19 +235,52 @@ func EnsureProxy(confDir, certDir, peerDir string) (created bool, err error) {
 			"--volume", peerDir+":/etc/nginx/peers:ro",
 			"--publish", port+":"+port)
 	}
-	_, err = run(append(args, ProxyImage)...)
+	_, err = runEngine(engine, append(args, ProxyImage)...)
 	return err == nil, err
+}
+
+// lookupOn finds a container on one engine. The proxies share a name because
+// engines do not share a namespace, so the engine has to be named to tell them
+// apart.
+func lookupOn(engine, name string) (Instance, bool, error) {
+	list, err := List()
+	if err != nil {
+		return Instance{}, false, err
+	}
+	for _, in := range list {
+		if in.Name == name && in.Engine == engine {
+			return in, true, nil
+		}
+	}
+	return Instance{}, false, nil
+}
+
+// proxyNetwork returns the network the proxy joins. Docker resolves a container
+// name only on a user-defined network, and has no network called "default".
+func proxyNetwork(engine string) string {
+	if engine == DockerEngine {
+		return DockerNetwork
+	}
+	return ProxyNetwork
 }
 
 // StartContainer starts an existing stopped container.
 func StartContainer(name string) error {
-	_, err := run("start", name)
+	engine, err := engineOf(name)
+	if err != nil {
+		return err
+	}
+	_, err = runEngine(engine, "start", name)
 	return err
 }
 
 // StopContainer stops a running container and leaves it in place.
 func StopContainer(name string) error {
-	_, err := run("stop", name)
+	engine, err := engineOf(name)
+	if err != nil {
+		return err
+	}
+	_, err = runEngine(engine, "stop", name)
 	return err
 }
 
@@ -235,7 +296,11 @@ func Logs(name string, follow bool, tail int, w io.Writer) error {
 	}
 	args = append(args, name)
 
-	cmd := exec.Command(containerBin(), args...)
+	engine, err := engineOf(name)
+	if err != nil {
+		return err
+	}
+	cmd := exec.Command(engineBin(engine), args...)
 	cmd.Stdout = w
 	cmd.Stderr = w
 	return cmd.Run()
@@ -243,23 +308,16 @@ func Logs(name string, follow bool, tail int, w io.Writer) error {
 
 // ProxyMounts returns the configuration and certificate directories the running
 // proxy was started with.
-func ProxyMounts() (confDir, certDir, peerDir string, err error) {
-	out, err := run("inspect", ProxyName)
+func ProxyMounts(engine string) (confDir, certDir, peerDir string, err error) {
+	out, err := runEngine(engine, "inspect", ProxyName)
 	if err != nil {
 		return "", "", "", err
 	}
-	var raw []struct {
-		Configuration struct {
-			Mounts []struct {
-				Source      string `json:"source"`
-				Destination string `json:"destination"`
-			} `json:"mounts"`
-		} `json:"configuration"`
+	mounts, err := decodeMounts(engine, out)
+	if err != nil {
+		return "", "", "", err
 	}
-	if err := json.Unmarshal(out, &raw); err != nil || len(raw) == 0 {
-		return "", "", "", fmt.Errorf("reading the proxy's mounts: %w", err)
-	}
-	for _, m := range raw[0].Configuration.Mounts {
+	for _, m := range mounts {
 		switch m.Destination {
 		case "/etc/nginx/conf.d":
 			confDir = m.Source
@@ -270,6 +328,37 @@ func ProxyMounts() (confDir, certDir, peerDir string, err error) {
 		}
 	}
 	return confDir, certDir, peerDir, nil
+}
+
+// mount is one bind mount, read from whichever shape the engine reports.
+type mount struct{ Source, Destination string }
+
+func decodeMounts(engine string, out []byte) ([]mount, error) {
+	if engine == DockerEngine {
+		var raw []struct {
+			Mounts []mount `json:"Mounts"`
+		}
+		if err := json.Unmarshal(out, &raw); err != nil || len(raw) == 0 {
+			return nil, fmt.Errorf("reading the proxy's mounts: %w", err)
+		}
+		return raw[0].Mounts, nil
+	}
+	var raw []struct {
+		Configuration struct {
+			Mounts []struct {
+				Source      string `json:"source"`
+				Destination string `json:"destination"`
+			} `json:"mounts"`
+		} `json:"configuration"`
+	}
+	if err := json.Unmarshal(out, &raw); err != nil || len(raw) == 0 {
+		return nil, fmt.Errorf("reading the proxy's mounts: %w", err)
+	}
+	list := make([]mount, 0, len(raw[0].Configuration.Mounts))
+	for _, m := range raw[0].Configuration.Mounts {
+		list = append(list, mount{Source: m.Source, Destination: m.Destination})
+	}
+	return list, nil
 }
 
 // sameDir compares two paths after resolving symlinks. On macOS /tmp and
@@ -283,33 +372,29 @@ func sameDir(a, b string) bool {
 	return erra == nil && errb == nil && ra == rb
 }
 
-// StopProxy removes the proxy. Callers remove it when no route remains.
-func StopProxy() error { return Remove(ProxyName) }
-
-// ReloadProxy signals the running nginx to re-read its configuration and
-// returns a failed command's original error without restarting the proxy.
-func ReloadProxy() error {
-	_, err := run("exec", ProxyName, "nginx", "-s", "reload")
+// StopProxy removes one engine's proxy. Callers remove it when no route remains
+// on that engine.
+func StopProxy(engine string) error {
+	_, err := runEngine(engine, "rm", "--force", ProxyName)
+	if err != nil && strings.Contains(err.Error(), "not found") {
+		return nil
+	}
 	return err
 }
 
-func run(args ...string) ([]byte, error) {
-	cmd := exec.Command(containerBin(), args...)
-	out, err := cmd.Output()
-	var ee *exec.ExitError
-	if errors.As(err, &ee) {
-		msg := strings.TrimSpace(string(ee.Stderr))
-		if msg == "" {
-			msg = ee.String()
-		}
-		return nil, fmt.Errorf("container %s: %s", strings.Join(args, " "), msg)
-	}
-	return out, err
+// ReloadProxy signals the running nginx to re-read its configuration and
+// returns a failed command's original error without restarting the proxy.
+func ReloadProxy(engine string) error {
+	_, err := runEngine(engine, "exec", ProxyName, "nginx", "-s", "reload")
+	return err
 }
 
-func containerBin() string {
-	if bin := os.Getenv("CONTAINER_BIN"); bin != "" {
-		return bin
+// serviceNetworkOn returns the network a service joins. Docker has no network
+// called "default" and resolves a container name only on a user-defined one, so
+// a service that did not name a network joins the one this program creates.
+func serviceNetworkOn(engine, named string) string {
+	if engine == DockerEngine && named == ProxyNetwork {
+		return DockerNetwork
 	}
-	return "container"
+	return named
 }

@@ -31,11 +31,14 @@ func requireE2E(t *testing.T) {
 	if os.Getenv("BAY_E2E_FORCE") != "" {
 		return
 	}
-	if _, found, err := Lookup(ProxyName); err == nil && found {
-		conf, _, _, err := ProxyMounts()
+	for _, engine := range Engines() {
+		if _, found, err := lookupOn(engine, ProxyName); err != nil || !found {
+			continue
+		}
+		conf, _, _, err := ProxyMounts(engine)
 		if err == nil && !strings.HasPrefix(conf, os.TempDir()) {
-			t.Skipf("%s is running for %s; stop it, or set BAY_E2E_FORCE=1 to take it over",
-				ProxyName, filepath.Dir(conf))
+			t.Skipf("%s is running on %s for %s; stop it, or set BAY_E2E_FORCE=1 to take it over",
+				ProxyName, engine, filepath.Dir(conf))
 		}
 	}
 }
@@ -65,7 +68,7 @@ func TestTwoGroupsShareOneProxy(t *testing.T) {
 	t.Cleanup(func() {
 		Remove(alpha.ContainerName)
 		Remove(beta.ContainerName)
-		StopProxy()
+		stopEveryProxy()
 	})
 
 	mustRegister(t, m, GroupRef{Name: "e2ealpha", Domains: []string{"alpha.test"}})
@@ -154,7 +157,7 @@ func TestServiceRestartKeepsRoute(t *testing.T) {
 		Name: "web", ContainerName: "e2ekeep-web", Image: e2eImage,
 		Command: e2eServer("before"), Domain: "web.keep.test", Port: 80, Network: ProxyNetwork,
 	}
-	t.Cleanup(func() { Remove(svc.ContainerName); StopProxy() })
+	t.Cleanup(func() { Remove(svc.ContainerName); stopEveryProxy() })
 
 	mustRegister(t, m, GroupRef{Name: "e2ekeep", Domains: []string{"keep.test"}})
 	if err := StartService("e2ekeep", svc); err != nil {
@@ -318,7 +321,7 @@ func TestStoppingOneServiceWithdrawsOnlyItsRoute(t *testing.T) {
 		Name: "two", ContainerName: "e2esvc-two", Image: e2eImage,
 		Command: e2eServer("two"), Domain: "two.svc.test", Port: 80, Network: ProxyNetwork,
 	}
-	t.Cleanup(func() { Remove(one.ContainerName); Remove(two.ContainerName); StopProxy() })
+	t.Cleanup(func() { Remove(one.ContainerName); Remove(two.ContainerName); stopEveryProxy() })
 
 	mustRegister(t, m, GroupRef{Name: "e2esvc", Domains: []string{"svc.test"}})
 	for _, s := range []*Service{one, two} {
@@ -434,7 +437,7 @@ services:
 		for _, s := range cfg.Sorted() {
 			Remove(s.ContainerName)
 		}
-		StopProxy()
+		stopEveryProxy()
 	})
 	mustRegister(t, m, cfg.Ref())
 
@@ -454,11 +457,8 @@ services:
 	if err != nil {
 		t.Fatal(err)
 	}
-	if snap.Machine.Proxy.State != "running" || snap.Machine.Proxy.Routes < 1 {
-		t.Errorf("proxy status = %+v", snap.Machine.Proxy)
-	}
-	if snap.Machine.Proxy.Generation == "" {
-		t.Error("proxy generation is empty; the health endpoint was not reachable")
+	if !snap.Machine.ProxiesServing() || snap.Machine.ServingRoutes() < 1 {
+		t.Errorf("proxy status = %+v", snap.Machine.Proxies)
 	}
 	var g GroupStatus
 	for _, candidate := range snap.Groups {
@@ -507,7 +507,7 @@ func TestUpRefusesADomainAnotherProjectServes(t *testing.T) {
 		Name: "web", ContainerName: "e2ehold-web", Image: e2eImage,
 		Command: e2eServer("holder"), Domain: "web.hold.test", Port: 80, Network: ProxyNetwork,
 	}
-	t.Cleanup(func() { Remove(holder.ContainerName); StopProxy() })
+	t.Cleanup(func() { Remove(holder.ContainerName); stopEveryProxy() })
 
 	mustRegister(t, m, GroupRef{Name: "e2ehold", Domains: []string{"hold.test"}})
 	if err := StartService("e2ehold", holder); err != nil {
@@ -577,7 +577,7 @@ func TestStartingIsDistinctFromRunning(t *testing.T) {
 			"setTimeout(()=>require('http').createServer((q,s)=>s.end('late')).listen(80),20000)"},
 		Domain: "late.start.test", Port: 80, Network: ProxyNetwork,
 	}
-	t.Cleanup(func() { Remove(svc.ContainerName); StopProxy() })
+	t.Cleanup(func() { Remove(svc.ContainerName); stopEveryProxy() })
 
 	mustRegister(t, m, GroupRef{Name: "e2elate", Domains: []string{"start.test"}})
 	if err := StartService("e2elate", svc); err != nil {
@@ -644,5 +644,13 @@ func TestStartingIsDistinctFromRunning(t *testing.T) {
 		t.Fatal(err)
 	} else if len(pending) != 0 {
 		t.Fatalf("still not ready after the process listens: %v", pending)
+	}
+}
+
+// stopEveryProxy removes the proxy of every engine present. A test that took
+// the machine's proxies over gives back a machine with none running.
+func stopEveryProxy() {
+	for _, engine := range Engines() {
+		StopProxy(engine)
 	}
 }

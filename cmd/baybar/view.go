@@ -114,11 +114,11 @@ func machineLine(snap stack.Snapshot) (string, bool) {
 	if proxyDown(snap) {
 		return text.T("Nothing is reachable - the proxy is not answering"), false
 	}
-	p := snap.Machine.Proxy
-	if p.State != "running" {
+	if !snap.Machine.ProxiesServing() {
 		return text.T("Nothing is running"), false
 	}
-	return text.P("Serving %d domain", "Serving %d domains", p.Routes, p.Routes), false
+	n := snap.Machine.ServingRoutes()
+	return text.P("Serving %d domain", "Serving %d domains", n, n), false
 }
 
 // proxyDown reports that containers are up but the proxy is not serving their
@@ -127,11 +127,10 @@ func proxyDown(snap stack.Snapshot) bool {
 	if liveServices(snap) == 0 {
 		return false
 	}
-	p := snap.Machine.Proxy
-	if p.Routes == 0 {
+	if snap.Machine.ServingRoutes() == 0 {
 		return false
 	}
-	return p.State != "running" || p.Generation == ""
+	return !snap.Machine.ProxiesServing()
 }
 
 func liveServices(snap stack.Snapshot) int {
@@ -152,7 +151,7 @@ func iconFor(snap stack.Snapshot) fill {
 	if proxyDown(snap) {
 		return fillNone
 	}
-	if snap.Machine.Proxy.State != "running" {
+	if !snap.Machine.ProxiesServing() {
 		return fillNone
 	}
 	if len(snap.Machine.Pending) > 0 {
@@ -313,7 +312,7 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 		total += len(g.Services)
 	}
 	live := liveServices(snap)
-	ip := snap.Machine.Proxy.IPv4
+	ip := strings.Join(snap.Machine.ProxyAddrs(), ", ")
 
 	switch {
 	case down:
@@ -323,7 +322,7 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 			sub = text.T("%s on %s", sub, ip)
 		}
 		p.Verdict = &verdict{Dot: "bad", Headline: text.T("Nothing is reachable"), Subline: sub}
-		routes := snap.Machine.Proxy.Routes
+		routes := snap.Machine.ServingRoutes()
 		p.Banner = &banner{
 			Kind:  "bad",
 			Title: text.T("The proxy is not running"),
@@ -353,7 +352,7 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 		if ip != "" {
 			parts = append(parts, text.T("proxy %s", ip))
 		}
-		routes := snap.Machine.Proxy.Routes
+		routes := snap.Machine.ServingRoutes()
 		p.Verdict = &verdict{
 			Dot:      dotFor(!needsSetup),
 			Headline: text.P("Serving %d domain", "Serving %d domains", routes, routes),

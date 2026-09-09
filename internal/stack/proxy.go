@@ -47,65 +47,89 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 	peerRoutes := peerRoutesFor(m, peers, own)
 	res.Peers = peers
 
-	if len(routes) == 0 && len(peerRoutes) == 0 {
-		if err := StopProxy(); err != nil {
-			return res, err
-		}
-		res.Action = "stopped"
-		return res, nil
-	}
-
-	if err := issueCertificates(m, routes); err != nil {
-		return res, err
-	}
-	gateway, err := NetworkGateway()
-	if err != nil {
-		return res, err
-	}
-	conf := NginxConfig{
-		Routes:      routes,
-		Resolver:    gateway,
-		DefaultCert: DefaultCertName,
-		PeerRoutes:  peerRoutes,
-	}
 	settings, err := m.Settings()
 	if err != nil {
 		return res, err
 	}
-	peerDir := ""
-	// The link is open before there is any peer: a machine has to answer the
-	// document another machine approves it from.
-	if settings.Peering || len(peers) > 0 {
-		if err := preparePeerLink(m, peers, routes); err != nil {
-			return res, err
-		}
-		peerDir = PeerDir(m.Dir)
-		conf.PeerPort = PeerPort
-		if len(peers) > 0 {
-			conf.PeerAuthorities = "/etc/nginx/peers/" + PeerAuthoritiesName
-		}
-		conf.ClientCert = "/etc/nginx/peers/" + ClientCertName + ".crt"
-		conf.ClientKey = "/etc/nginx/peers/" + ClientCertName + ".key"
-	}
-	conf.Generation = configGeneration(conf)
-	generation := conf.Generation
-	if err := RenderNginxConfig(m.ConfDir(), conf); err != nil {
-		return res, err
+	engines := Engines()
+	if len(engines) == 0 {
+		return res, fmt.Errorf("no container engine found: install Apple %s or %s",
+			AppleEngine, DockerEngine)
 	}
 
-	created, err := EnsureProxy(m.ConfDir(), m.CertDir(), peerDir)
-	if err != nil {
-		return res, err
+	// The link is open before there is any peer: a machine has to answer the
+	// document another machine approves it from.
+	linkEngine := ""
+	if settings.Peering || len(peers) > 0 {
+		if len(engines) > 1 {
+			return res, fmt.Errorf(
+				"the peer link is one port and this machine runs %d engines; "+
+					"it belongs to a host process that reaches both, which is not built",
+				len(engines))
+		}
+		linkEngine = engines[0]
+		if err := preparePeerLink(m, peers, routes, linkEngine); err != nil {
+			return res, err
+		}
 	}
-	res.Action = "reloaded"
-	if created {
-		res.Action = "started"
-	} else if err := ReloadProxy(); err != nil {
-		return res, err
+
+	stopped := 0
+	for _, engine := range engines {
+		// A peer's domain is backed by no container, so every proxy serves it.
+		own := RoutesOn(routes, engine)
+		if len(own) == 0 && len(peerRoutes) == 0 {
+			if err := StopProxy(engine); err != nil {
+				return res, err
+			}
+			stopped++
+			continue
+		}
+		if err := issueCertificates(m, own); err != nil {
+			return res, err
+		}
+		conf := NginxConfig{
+			Routes:      own,
+			DefaultCert: DefaultCertName,
+			PeerRoutes:  peerRoutes,
+		}
+		if len(own) > 0 {
+			gateway, err := NetworkGateway(engine)
+			if err != nil {
+				return res, err
+			}
+			conf.Resolver = gateway
+		}
+		peerDir := ""
+		if engine == linkEngine {
+			peerDir = PeerDir(m.Dir)
+			conf.PeerPort = PeerPort
+			if len(peers) > 0 {
+				conf.PeerAuthorities = "/etc/nginx/peers/" + PeerAuthoritiesName
+			}
+			conf.ClientCert = "/etc/nginx/peers/" + ClientCertName + ".crt"
+			conf.ClientKey = "/etc/nginx/peers/" + ClientCertName + ".key"
+		}
+		conf.Generation = configGeneration(conf)
+		if err := RenderNginxConfig(m.ConfDir(engine), conf); err != nil {
+			return res, err
+		}
+		created, err := EnsureProxy(engine, m.ConfDir(engine), m.CertDir(), peerDir)
+		if err != nil {
+			return res, err
+		}
+		res.Action = "reloaded"
+		if created {
+			res.Action = "started"
+		} else if err := ReloadProxy(engine); err != nil {
+			return res, err
+		}
+		// Return only after the proxy serves the new configuration.
+		if err := WaitForGeneration(engine, conf.Generation, 60*time.Second); err != nil {
+			return res, err
+		}
 	}
-	// Return only after the proxy serves the new configuration.
-	if err := WaitForGeneration(generation, 60*time.Second); err != nil {
-		return res, err
+	if stopped == len(engines) {
+		res.Action = "stopped"
 	}
 	return res, nil
 }
@@ -135,7 +159,7 @@ func peerRoutesFor(m *Machine, peers []Peer, own []string) []PeerRoute {
 // preparePeerLink writes what the proxy reads to run the link: this machine's
 // client certificate, the approved authorities, the certificates for the
 // domains peers serve, and the document a machine is approved from.
-func preparePeerLink(m *Machine, peers []Peer, routes []Route) error {
+func preparePeerLink(m *Machine, peers []Peer, routes []Route, engine string) error {
 	ca, err := LoadOrCreateCA(m.Dir)
 	if err != nil {
 		return err
@@ -161,7 +185,7 @@ func preparePeerLink(m *Machine, peers []Peer, routes []Route) error {
 	if err != nil {
 		return err
 	}
-	return WritePeerDocument(m.ConfDir(), PeerDocument{
+	return WritePeerDocument(m.ConfDir(engine), PeerDocument{
 		Name:    MachineName(),
 		Address: PeerLinkAddress(LANAddress()),
 		Domains: own,
@@ -195,20 +219,20 @@ func routeGeneration(routes []Route) string {
 
 // WaitForGeneration polls the proxy's health endpoint until it reports the
 // configuration identified by generation, or the timeout expires.
-func WaitForGeneration(generation string, timeout time.Duration) error {
-	return waitForGeneration(generation, timeout, &http.Client{Timeout: 2 * time.Second})
+func WaitForGeneration(engine, generation string, timeout time.Duration) error {
+	return waitForGeneration(engine, generation, timeout, &http.Client{Timeout: 2 * time.Second})
 }
 
-func waitForGeneration(generation string, timeout time.Duration, client *http.Client) error {
+func waitForGeneration(engine, generation string, timeout time.Duration, client *http.Client) error {
 	deadline := time.Now().Add(timeout)
 	var last string
 	for {
-		in, found, err := Lookup(ProxyName)
+		in, found, err := lookupOn(engine, ProxyName)
 		if err != nil {
 			return err
 		}
-		if found && in.State == "running" && in.IPv4 != "" {
-			got, err := fetchGeneration(client, in.IPv4)
+		if addr := ProxyHostAddr(engine, in); found && in.State == "running" && addr != "" {
+			got, err := fetchGeneration(client, addr)
 			if err == nil && got == generation {
 				return nil
 			}

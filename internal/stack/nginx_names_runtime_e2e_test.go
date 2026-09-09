@@ -22,7 +22,7 @@ func TestRenderNginxLongNamesActualRuntime(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, containerBin(), "image", "inspect", ProxyImage).Output()
+	out, err := exec.CommandContext(ctx, engineBin(ServiceEngine()), "image", "inspect", ProxyImage).Output()
 	if err != nil {
 		t.Fatalf("ProxyImage %s must already exist; this test does not pull images: %v", ProxyImage, err)
 	}
@@ -102,7 +102,7 @@ func checkNginxName(t *testing.T, domain, digest string) {
 			t.Error("refusing cleanup of a container whose test ownership or identity changed")
 			return
 		}
-		if _, err := exec.CommandContext(cleanup, containerBin(), "rm", "--force", svc.ContainerName).CombinedOutput(); err != nil {
+		if _, err := exec.CommandContext(cleanup, engineBin(ServiceEngine()), "rm", "--force", svc.ContainerName).CombinedOutput(); err != nil {
 			t.Errorf("removing the owned nginx test container: %v", err)
 		}
 	})
@@ -113,7 +113,7 @@ func checkNginxName(t *testing.T, domain, digest string) {
 		"--volume", confDir + ":/etc/nginx/conf.d:ro",
 		"--volume", certDir + ":/etc/nginx/certs:ro",
 		"--entrypoint", "nginx", ProxyImage, "-t"}
-	if output, err := exec.CommandContext(ctx, containerBin(), args...).CombinedOutput(); err != nil {
+	if output, err := exec.CommandContext(ctx, engineBin(ServiceEngine()), args...).CombinedOutput(); err != nil {
 		t.Fatalf("creating the isolated nginx checker: %v\n%s", err, nginxCheckOutput(output))
 	}
 	var found bool
@@ -121,7 +121,7 @@ func checkNginxName(t *testing.T, domain, digest string) {
 	if err != nil || !found || owns(group, svc, created) != nil || created.ImageDigest != digest || created.Created == "" || created.State != "stopped" {
 		t.Fatal("nginx checker identity differs; its process was not started")
 	}
-	output, err := exec.CommandContext(ctx, containerBin(), "start", "--attach", svc.ContainerName).CombinedOutput()
+	output, err := exec.CommandContext(ctx, engineBin(ServiceEngine()), "start", "--attach", svc.ContainerName).CombinedOutput()
 	if err != nil {
 		t.Fatalf("actual nginx rejected generated configuration for a %d-byte domain: %v\n%s", len(domain), err, nginxCheckOutput(output))
 	}

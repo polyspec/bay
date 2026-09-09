@@ -7,12 +7,12 @@ import "testing"
 // from another copy is not the installation being used, so neither is current.
 func TestTheAgentIsNotCurrentWhenItRunsAnotherProgram(t *testing.T) {
 	args := []string{"/opt/homebrew/bin/bayd", "-domain", "test",
-		"-addr", "127.0.0.1:5354", "-proxy", ProxyName}
-	if !agentIsCurrent(args, []string{"test"}, "127.0.0.1:5354", ProxyName,
+		"-addr", "127.0.0.1:5354"}
+	if !agentIsCurrent(args, []string{"test"}, "127.0.0.1:5354",
 		"/opt/homebrew/bin/bayd") {
 		t.Error("the agent of the installation being used is not current")
 	}
-	if agentIsCurrent(args, []string{"test"}, "127.0.0.1:5354", ProxyName,
+	if agentIsCurrent(args, []string{"test"}, "127.0.0.1:5354",
 		"/Applications/baybar.app/Contents/MacOS/bayd") {
 		t.Error("an agent running another copy is current")
 	}
@@ -22,8 +22,8 @@ func TestTheAgentIsNotCurrentWhenItRunsAnotherProgram(t *testing.T) {
 // agent that is not current.
 func TestTheAgentIsNotCurrentForOtherDomains(t *testing.T) {
 	args := []string{"/opt/homebrew/bin/bayd", "-domain", "test",
-		"-addr", "127.0.0.1:5354", "-proxy", ProxyName}
-	if agentIsCurrent(args, []string{"test", "devel"}, "127.0.0.1:5354", ProxyName,
+		"-addr", "127.0.0.1:5354"}
+	if agentIsCurrent(args, []string{"test", "devel"}, "127.0.0.1:5354",
 		"/opt/homebrew/bin/bayd") {
 		t.Error("an agent serving fewer domains is current")
 	}
@@ -34,8 +34,8 @@ func TestTheAgentIsNotCurrentForOtherDomains(t *testing.T) {
 // still check.
 func TestWithoutABinaryTheSettingsDecide(t *testing.T) {
 	args := []string{"/anywhere/bayd", "-domain", "test",
-		"-addr", "127.0.0.1:5354", "-proxy", ProxyName}
-	if !agentIsCurrent(args, []string{"test"}, "127.0.0.1:5354", ProxyName, "") {
+		"-addr", "127.0.0.1:5354"}
+	if !agentIsCurrent(args, []string{"test"}, "127.0.0.1:5354", "") {
 		t.Error("the settings match but the agent is not current")
 	}
 }

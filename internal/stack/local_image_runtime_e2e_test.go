@@ -79,7 +79,7 @@ func TestLocalImageTagActualRuntime(t *testing.T) {
 	if err != nil || !found || in.ImageDigest != digest || in.State != "stopped" || !e.completed(in, serviceFingerprint(group, svc, digest)) {
 		t.Fatalf("local-tag completion lacks exact image identity: %+v, %v", in, err)
 	}
-	logs, err := exec.CommandContext(ctx, containerBin(), "logs", svc.ContainerName).Output()
+	logs, err := exec.CommandContext(ctx, engineBin(ServiceEngine()), "logs", svc.ContainerName).Output()
 	if err != nil || !strings.Contains(string(logs), "fixture-public-marker") {
 		t.Fatalf("native logs did not retain the public process marker: %v", err)
 	}

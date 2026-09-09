@@ -13,9 +13,17 @@ import (
 // Machine-level names. One proxy and one DNS server run per machine, and
 // projects register routes with them.
 const (
-	ProxyName        = "bay-edge"
-	ProxyImage       = "nginx:1.29-alpine"
-	ProxyNetwork     = "default"
+	ProxyName    = "bay-edge"
+	ProxyImage   = "nginx:1.29-alpine"
+	ProxyNetwork = "default"
+	// DockerNetwork is created for the proxy and its services: Docker resolves
+	// a container name only on a user-defined network.
+	DockerNetwork = "bay"
+	// DockerProxyAddr is the loopback address the Docker proxy publishes on.
+	// The host cannot route to a Docker container, so this is the only way it
+	// is reached, and it is not 127.0.0.1 so that it takes no port from
+	// anything else on the machine.
+	DockerProxyAddr  = "127.0.0.2"
 	BackendDomain    = "container.test"
 	DefaultDNSAddr   = "127.0.0.1:5354"
 	groupsFileName   = "groups.json"
@@ -43,8 +51,13 @@ type Machine struct {
 
 func NewMachine(dir string) *Machine { return &Machine{Dir: dir} }
 
-func (m *Machine) CertDir() string      { return filepath.Join(m.Dir, "certs") }
-func (m *Machine) ConfDir() string      { return filepath.Join(m.Dir, "conf.d") }
+func (m *Machine) CertDir() string { return filepath.Join(m.Dir, "certs") }
+
+// ConfDir is where one engine's proxy configuration is written. Each engine has
+// its own proxy, so each has its own directory.
+func (m *Machine) ConfDir(engine string) string {
+	return filepath.Join(m.Dir, "conf.d", engine)
+}
 func (m *Machine) LogDir() string       { return filepath.Join(m.Dir, "logs") }
 func (m *Machine) groupsPath() string   { return filepath.Join(m.Dir, groupsFileName) }
 func (m *Machine) settingsPath() string { return filepath.Join(m.Dir, settingsFileName) }

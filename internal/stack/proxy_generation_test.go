@@ -36,7 +36,7 @@ func TestBackendRestartWaitsForCurrentProxyGeneration(t *testing.T) {
 				}
 				return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body + "\n")), Header: http.Header{}}, nil
 			})}
-			if err := waitForGeneration(generation, time.Second, client); err != nil {
+			if err := waitForGeneration(AppleEngine, generation, time.Second, client); err != nil {
 				t.Fatal(err)
 			}
 			if requests != 2 {
@@ -73,6 +73,9 @@ cat "$BAY_GENERATION_INSTANCES"
 		t.Fatal(err)
 	}
 	t.Setenv("CONTAINER_BIN", binary)
+	// The fixture is the only engine this test has: naming a command that does
+	// not run leaves the other contributing nothing.
+	t.Setenv("DOCKER_BIN", filepath.Join(directory, "no-docker"))
 	t.Setenv("BAY_GENERATION_INSTANCES", state)
 	return func(address, started string) []Route {
 		t.Helper()

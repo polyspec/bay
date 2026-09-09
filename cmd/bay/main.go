@@ -607,12 +607,13 @@ func status(m *stack.Machine, args []string) error {
 }
 
 func printSnapshot(snap stack.Snapshot) {
-	p := snap.Machine.Proxy
-	where := p.State
-	if p.IPv4 != "" {
-		where += " at " + p.IPv4
+	for _, p := range snap.Machine.Proxies {
+		where := p.State
+		if p.IPv4 != "" {
+			where += " at " + p.IPv4
+		}
+		fmt.Printf("proxy  %-22s %s, %s, %d route(s)\n", p.Name, p.Engine, where, p.Routes)
 	}
-	fmt.Printf("proxy  %-22s %s, %d route(s)\n", p.Name, where, p.Routes)
 
 	d := snap.Machine.DNS
 	dnsState := "not loaded"
@@ -682,7 +683,7 @@ func doctor(m *stack.Machine) error {
 	agent := "not loaded"
 	switch {
 	case !stack.DNSAgentLoaded():
-	case stack.DNSAgentServes(domains, *addr, stack.ProxyName, dnsBinary()):
+	case stack.DNSAgentServes(domains, *addr, dnsBinary()):
 		agent = "loaded and current"
 	default:
 		agent = "loaded but out of date"

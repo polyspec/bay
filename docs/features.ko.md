@@ -10,6 +10,7 @@
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
+| Docker와 Apple `container`를 동등한 엔진으로 지원 | 두 엔진을 함께 실행하는 기계의 피어 링크를 제외하고 구현됨 | `go test ./internal/stack`이 `docker inspect` 판독, 네트워크가 여럿인 컨테이너의 주소를 매번 같게 고르는 것, 응답하지 않는 엔진이 아무것도 내놓지 않는 것, 엔진이 하나도 없을 때 보고하는 것, 도메인이 엔진을 넘어 한 번만 점유되는 것을 검사한다. `make check` 통과. Docker 명령은 있고 Apple 명령은 없는 이 기계에서 `bin/bay status`가 `proxy bay-edge docker, absent, 0 route(s)`를 보고한다. 이 변경 전에는 실행 자체가 되지 않았다. 실행 중인 Docker 데몬에 대해 `stack.List`가 이 기계의 컨테이너 다섯 개를 각각 엔진 표시와 함께 읽었고, 실행 중인 셋은 브리지 주소를 지녔으며 종료된 둘은 주소가 없었다. `docker inspect`가 내는 필드 이름을 판독기와 하나씩 대조했다. 엔진이 둘인 상태로 피어 링크를 열면 거부한다. 규칙 8이 그 링크를 아직 만들지 않은 호스트 프로세스에 두기 때문이다 | 빌드됨, 설치 안 함 |
 | 현재 백엔드 인스턴스를 확인한 후 재시작 완료 | 구현됨 | `TestBackendRestartWaitsForCurrentProxyGeneration`이 이전 인스턴스에서 대기가 종료되는 문제를 0.949초에 재현한다. 수정한 Routes·generation·대기 통합과 reload 회귀는 race 3.223초, 전체 stack race는 3.085초에 통과하며 `make check`도 통과한다. 실제 소비자 브라우저 검증은 대기 중이다 | 빌드됨; 미설치 |
 | 긴 라우트 이름을 위한 nginx server-name bucket 명시 | 구현됨 | 실제 `nginx -t`가 `TestRenderNginxLongNamesActualRuntime`의 61바이트 이름에서 `server_names_hash_bucket_size: 64` 오류를 재현(패키지 1.317초). Bucket 512로 수정 후 동일 테스트·이미지 통과(패키지 1.309초). `make check`와 전체 stack race 검사 통과(2.200초). 인증서 저장은 여전히 253바이트 도메인을 지원하지 않음 | 설치: `9823d0e` |
 | 공유 서비스를 재시작하지 않고 프록시 reload의 원래 오류 반환 | 구현됨 | `make check`와 `go test -race ./internal/stack -count=1` 통과. `TestReloadProxyOnlyExecutesReload`가 가짜 CLI로 성공·실패 모두 정확히 한 번의 exec, 원래 nginx stderr 반환, stop·start·교체 미호출을 검증 | 설치: `7df8a40` |

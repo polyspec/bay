@@ -37,9 +37,11 @@ type MachineStatus struct {
 	StateDir   string         `json:"stateDir"`
 	Domains    []string       `json:"domains"`
 	DomainList []DomainStatus `json:"domainList"`
-	Proxy      ProxyStatus    `json:"proxy"`
-	DNS        DNSStatus      `json:"dns"`
-	CAPath     string         `json:"caPath"`
+	// Proxies holds one entry per engine present, because each engine runs its
+	// own proxy and serves only its own containers.
+	Proxies []ProxyStatus `json:"proxies"`
+	DNS     DNSStatus     `json:"dns"`
+	CAPath  string        `json:"caPath"`
 	// CATrusted says whether the CA verifies against the system trust store.
 	CATrusted bool `json:"caTrusted"`
 	// Pending lists the setup steps that still need root. It is empty on a
@@ -49,6 +51,8 @@ type MachineStatus struct {
 
 type ProxyStatus struct {
 	Name string `json:"name"`
+	// Engine names the engine this proxy runs on.
+	Engine string `json:"engine"`
 	// State is the runtime's word for it, or "absent" when no such container
 	// exists - which is the normal state when nothing is up.
 	State  string `json:"state"`
@@ -157,7 +161,7 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 			Label:   DNSAgentLabel,
 			Addr:    addr,
 			Loaded:  DNSAgentLoaded(),
-			Current: DNSAgentServes(domains, addr, ProxyName, ""),
+			Current: DNSAgentServes(domains, addr, ""),
 		},
 	}
 
@@ -174,7 +178,7 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 		routed[r.Domain] = true
 	}
 
-	snap.Machine.Proxy, err = proxyStatus(len(routes))
+	snap.Machine.Proxies, err = proxyStatuses(routes)
 	if err != nil {
 		return snap, err
 	}
@@ -252,22 +256,71 @@ func domainStatuses(m *Machine, domains []string) ([]DomainStatus, error) {
 	return out, nil
 }
 
-func proxyStatus(routes int) (ProxyStatus, error) {
-	st := ProxyStatus{Name: ProxyName, State: "absent", Routes: routes}
-	in, found, err := Lookup(ProxyName)
-	if err != nil {
-		return st, err
+// proxyStatuses describes the proxy of every engine present. Routes are counted
+// per engine because a proxy serves only its own engine's containers.
+func proxyStatuses(routes []Route) ([]ProxyStatus, error) {
+	var out []ProxyStatus
+	for _, engine := range Engines() {
+		st := ProxyStatus{
+			Name:   ProxyName,
+			Engine: engine,
+			State:  "absent",
+			Routes: len(RoutesOn(routes, engine)),
+		}
+		in, found, err := lookupOn(engine, ProxyName)
+		if err != nil {
+			return nil, err
+		}
+		if found {
+			st.State = in.State
+			st.IPv4 = ProxyHostAddr(engine, in)
+			if in.State == "running" && st.IPv4 != "" {
+				if gen, err := fetchGeneration(
+					&http.Client{Timeout: 2 * time.Second}, st.IPv4); err == nil {
+					st.Generation = gen
+				}
+			}
+		}
+		out = append(out, st)
 	}
-	if !found {
-		return st, nil
+	return out, nil
+}
+
+// ServingRoutes totals the routes every engine's proxy serves.
+func (m MachineStatus) ServingRoutes() int {
+	n := 0
+	for _, p := range m.Proxies {
+		n += p.Routes
 	}
-	st.State, st.IPv4 = in.State, in.IPv4
-	if in.State == "running" && in.IPv4 != "" {
-		if gen, err := fetchGeneration(&http.Client{Timeout: 2 * time.Second}, in.IPv4); err == nil {
-			st.Generation = gen
+	return n
+}
+
+// ProxiesServing reports that every proxy with routes to serve is running and
+// answering. One engine's proxy being down leaves its domains unreachable, so
+// this is false unless all of them are up.
+func (m MachineStatus) ProxiesServing() bool {
+	serving := false
+	for _, p := range m.Proxies {
+		if p.Routes == 0 {
+			continue
+		}
+		if p.State != "running" || p.Generation == "" {
+			return false
+		}
+		serving = true
+	}
+	return serving
+}
+
+// ProxyAddrs lists the addresses the running proxies are reached at.
+func (m MachineStatus) ProxyAddrs() []string {
+	var out []string
+	for _, p := range m.Proxies {
+		if p.State == "running" && p.IPv4 != "" {
+			out = append(out, p.IPv4)
 		}
 	}
-	return st, nil
+	return out
 }
 
 // groupStatus describes one project from its Compose file, so services that are

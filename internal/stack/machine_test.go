@@ -136,12 +136,19 @@ func TestRegisterReplacesSameName(t *testing.T) {
 func TestMachinePaths(t *testing.T) {
 	m := NewMachine("/tmp/state")
 	for name, got := range map[string]string{
-		"certs":  m.CertDir(),
-		"conf.d": m.ConfDir(),
-		"logs":   m.LogDir(),
+		"certs": m.CertDir(),
+		"logs":  m.LogDir(),
 	} {
 		if want := filepath.Join("/tmp/state", name); got != want {
 			t.Errorf("%s dir = %q, want %q", name, got, want)
+		}
+	}
+	// Each engine's proxy reads its own configuration, so each has its own
+	// directory under conf.d.
+	for _, engine := range []string{AppleEngine, DockerEngine} {
+		got := m.ConfDir(engine)
+		if want := filepath.Join("/tmp/state", "conf.d", engine); got != want {
+			t.Errorf("conf.d dir for %s = %q, want %q", engine, got, want)
 		}
 	}
 }

@@ -20,14 +20,28 @@ type serviceEngine struct {
 	command func(context.Context, ...string) ([]byte, error)
 	dir     string
 	timeout time.Duration
+	// engine is where this project's containers are created. A container is
+	// reachable on its own engine's network only, so a project's services all
+	// belong to one engine.
+	engine string
 }
 
 func newServiceEngine(dir string) *serviceEngine {
-	return &serviceEngine{command: serviceCommand, dir: dir, timeout: 10 * time.Minute}
+	engine := ServiceEngine()
+	// The network a service joins has to exist before the first one is created.
+	_ = ensureNetwork(engine)
+	return &serviceEngine{
+		command: func(ctx context.Context, args ...string) ([]byte, error) {
+			return serviceCommand(ctx, engine, args...)
+		},
+		dir:     dir,
+		timeout: 10 * time.Minute,
+		engine:  engine,
+	}
 }
 
-func serviceCommand(ctx context.Context, args ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, containerBin(), args...)
+func serviceCommand(ctx context.Context, engine string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, engineBin(engine), args...)
 	if args[0] == "create" {
 		var diagnostic creationDiagnostic
 		cmd.Stdout, cmd.Stderr = io.Discard, &diagnostic

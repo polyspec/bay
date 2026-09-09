@@ -14,7 +14,6 @@ package main
 import (
 	"context"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -47,9 +46,7 @@ const (
 var (
 	domain    = flag.String("domain", "test", "comma-separated local domains to serve, e.g. `test,lab.internal`")
 	addr      = flag.String("addr", stack.DefaultDNSAddr, "UDP/TCP address to listen on")
-	aliasFile = flag.String("aliases", "", "optional JSON file mapping hostname label -> container name")
 	ttl       = flag.Uint("ttl", 5, "TTL in seconds advertised for answers")
-	proxy     = flag.String("proxy", stack.ProxyName, "resolve every name under -domain to this container, which routes by Host header; empty to answer per service")
 	install   = flag.Bool("install", false, "write /etc/resolver/<domain> and exit; acquires root itself")
 	privApply = flag.Bool("privileged-apply", false, "internal: apply the privileged setup steps")
 	state     = flag.String("state", defaultState(), "bay state directory, read to announce this machine and follow its peers")
@@ -89,7 +86,7 @@ func main() {
 		return
 	}
 
-	r := &resolver{domains: doms, proxy: strings.ToLower(*proxy), aliases: loadAliases(*aliasFile)}
+	r := &resolver{domains: doms}
 
 	pc, err := net.ListenPacket("udp", *addr)
 	if err != nil {
@@ -101,11 +98,7 @@ func main() {
 	}
 
 	served := "*." + strings.Join(doms, ", *.")
-	if r.proxy != "" {
-		log.Printf("serving %s on %s -> proxy %q", served, *addr, r.proxy)
-	} else {
-		log.Printf("serving %s on %s (aliases: %d)", served, *addr, len(r.aliases))
-	}
+	log.Printf("serving %s on %s -> the proxy of each name's engine", served, *addr)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	time.AfterFunc(peerPollDelay, func() { servePeers(ctx, *state) })
@@ -118,18 +111,20 @@ func main() {
 
 type resolver struct {
 	domains []string
-	proxy   string
-	aliases map[string]string
 
 	mu     sync.Mutex
 	cache  *index
 	cached time.Time
 }
 
-// index maps container names and label domains to addresses.
+// index maps a served domain to the address of the proxy for the engine its
+// container runs on. A container is reachable on its own engine's network and
+// on no other, so only that engine's proxy can serve its domain.
 type index struct {
-	byName   map[string]string
 	byDomain map[string]string
+	// unclaimed answers a name no container holds. Every proxy serves such a
+	// name, so any of them is a correct answer and the first engine is used.
+	unclaimed string
 }
 
 // lookup returns the IPv4 address for a fully qualified name. The second result
@@ -144,26 +139,15 @@ func (r *resolver) lookup(name string) (string, bool) {
 	}
 	idx, err := r.index()
 	if err != nil {
-		log.Printf("container ls: %v", err)
+		log.Printf("listing containers: %v", err)
 		return "", true
 	}
-	// In proxy mode every name under the domain resolves to the proxy, which
-	// routes by Host header. A name with no route receives 404 from the proxy
-	// instead of a DNS failure.
-	if r.proxy != "" {
-		ip := idx.byName[r.proxy]
-		return ip, ip == ""
+	if addr, ok := idx.byDomain[name]; ok {
+		return addr, false
 	}
-	if ip, ok := idx.byDomain[name]; ok {
-		return ip, false
-	}
-	if target, ok := r.aliases[host]; ok {
-		host = target
-	}
-	if strings.Contains(host, ".") {
-		return "", false
-	}
-	return idx.byName[host], false
+	// A name no container holds is answered by a proxy all the same, so the
+	// caller receives 404 from it rather than a DNS failure it would cache.
+	return idx.unclaimed, idx.unclaimed == ""
 }
 
 // strip removes the local domain suffix and reports whether the name is served
@@ -188,43 +172,36 @@ func (r *resolver) index() (*index, error) {
 	if err != nil {
 		return nil, err
 	}
-	idx := &index{
-		byName:   make(map[string]string, len(list)),
-		byDomain: make(map[string]string, len(list)),
-	}
+	// The address the host reaches a proxy at differs by engine, so it is read
+	// from the proxy container of each one.
+	proxies := map[string]string{}
 	for _, in := range list {
-		if in.State != "running" || in.IPv4 == "" {
+		if in.Name == stack.ProxyName && in.State == "running" {
+			proxies[in.Engine] = stack.ProxyHostAddr(in.Engine, in)
+		}
+	}
+	idx := &index{byDomain: make(map[string]string, len(list))}
+	for _, in := range list {
+		if in.State != "running" {
 			continue
 		}
-		idx.byName[strings.ToLower(in.Name)] = in.IPv4
-		if d := strings.ToLower(in.Labels[stack.LabelDomain]); d != "" {
-			idx.byDomain[d] = in.IPv4
+		d := strings.ToLower(in.Labels[stack.LabelDomain])
+		if d == "" {
+			continue
+		}
+		if addr := proxies[in.Engine]; addr != "" {
+			idx.byDomain[d] = addr
+		}
+	}
+	for _, engine := range stack.Engines() {
+		if addr := proxies[engine]; addr != "" {
+			idx.unclaimed = addr
+			break
 		}
 	}
 	r.cache, r.cached = idx, time.Now()
 	return idx, nil
 }
-
-func loadAliases(path string) map[string]string {
-	if path == "" {
-		return nil
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		log.Fatalf("aliases: %v", err)
-	}
-	var m map[string]string
-	if err := json.Unmarshal(b, &m); err != nil {
-		log.Fatalf("aliases: %v", err)
-	}
-	lower := make(map[string]string, len(m))
-	for k, v := range m {
-		lower[strings.ToLower(k)] = strings.ToLower(v)
-	}
-	return lower
-}
-
-// --- servers ------------------------------------------------------------
 
 func serveUDP(pc net.PacketConn, r *resolver) {
 	buf := make([]byte, 512)
