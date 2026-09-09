@@ -822,9 +822,23 @@ static NSColor *hex(uint32_t rgb) {
 
   NSTextField *name = [NSTextField labelWithString:row[@"text"] ?: @""];
   name.font = [NSFont systemFontOfSize:13];
-  name.lineBreakMode = NSLineBreakByTruncatingTail;
-  CGFloat width = [row[@"wide"] boolValue] ? kNameWideWidth : kNameWidth;
-  [name.widthAnchor constraintEqualToConstant:width].active = YES;
+  BOOL wide = [row[@"wide"] boolValue];
+  if (wide) {
+    // A certificate name can be longer than the column. It is what tells the
+    // rows apart, so it takes the width the row does not otherwise need, and
+    // what does not fit is dropped from the middle: the beginning and the end
+    // both distinguish one name from another.
+    name.lineBreakMode = NSLineBreakByTruncatingMiddle;
+    [name.widthAnchor constraintGreaterThanOrEqualToConstant:kNameWideWidth].active = YES;
+    [name setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
+    // The name takes the width the row does not need. What the row does need is
+    // the short phrase beside it, so the name is what gives way first.
+    [name setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+                                   forOrientation:NSLayoutConstraintOrientationHorizontal];
+  } else {
+    name.lineBreakMode = NSLineBreakByTruncatingTail;
+    [name.widthAnchor constraintEqualToConstant:kNameWidth].active = YES;
+  }
   [line addArrangedSubview:name];
 
   NSString *chip = row[@"chip"];
@@ -862,8 +876,12 @@ static NSColor *hex(uint32_t rgb) {
     t.lineBreakMode = NSLineBreakByTruncatingHead;
     reach = t;
   }
-  [reach setContentHuggingPriority:1 forOrientation:NSLayoutConstraintOrientationHorizontal];
-  [reach setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow
+  // On a row whose name takes the free width, the address column keeps to its
+  // own text instead of absorbing it.
+  [reach setContentHuggingPriority:wide ? NSLayoutPriorityDefaultLow : 1
+                    forOrientation:NSLayoutConstraintOrientationHorizontal];
+  [reach setContentCompressionResistancePriority:wide ? NSLayoutPriorityDefaultHigh
+                                                      : NSLayoutPriorityDefaultLow
                                   forOrientation:NSLayoutConstraintOrientationHorizontal];
   [line addArrangedSubview:reach];
 

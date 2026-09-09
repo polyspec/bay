@@ -3,6 +3,21 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-09-09
+
+### A long name in a list keeps what tells it apart
+
+The certificate list gives each name a fixed column. Names that share a prefix
+and differ in a hash all read the same in it: twenty-four certificates, fourteen
+of them shown as `console.platform-nat…`. A name is what tells one row from
+another, so it now takes the width the row does not otherwise need, and what
+does not fit is dropped from the middle rather than the end. The short phrase
+beside it keeps its own width instead of being squeezed out.
+
+Verification: the list was read on screen at a window width where the names
+still do not fit whole. Each row reads `console.plat…605595.test`, and every row
+carries `사용하는 경로 없음` in full.
+
 ## 2026-09-08
 
 ### bay sync
