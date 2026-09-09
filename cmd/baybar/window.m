@@ -667,7 +667,7 @@ static NSColor *hex(uint32_t rgb) {
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = tall ? NSLayoutAttributeTop : NSLayoutAttributeCenterY;
   line.spacing = 0;
-  line.edgeInsets = tall ? NSEdgeInsetsMake(7, 14, 7, 14) : NSEdgeInsetsMake(5, 14, 5, 14);
+  line.edgeInsets = tall ? NSEdgeInsetsMake(11, 14, 11, 14) : NSEdgeInsetsMake(9, 14, 9, 14);
 
   NSTextField *key = [NSTextField labelWithString:row[@"text"] ?: @""];
   key.font = [NSFont systemFontOfSize:12];
@@ -817,7 +817,7 @@ static NSColor *hex(uint32_t rgb) {
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
   line.spacing = 8;
-  line.edgeInsets = NSEdgeInsetsMake(5, 14, 5, 14);
+  line.edgeInsets = NSEdgeInsetsMake(9, 14, 9, 14);
 
   NSTextField *t = [NSTextField labelWithString:row[@"text"] ?: @""];
   t.font = [NSFont systemFontOfSize:15 weight:NSFontWeightSemibold];
@@ -837,7 +837,7 @@ static NSColor *hex(uint32_t rgb) {
   NSStackView *line = [NSStackView new];
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
-  line.edgeInsets = NSEdgeInsetsMake(5, 14, 5, 14);
+  line.edgeInsets = NSEdgeInsetsMake(9, 14, 9, 14);
 
   NSTextField *t = [NSTextField labelWithString:row[@"text"] ?: @""];
   t.font = [NSFont systemFontOfSize:11];
@@ -855,7 +855,7 @@ static NSColor *hex(uint32_t rgb) {
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
   line.alignment = NSLayoutAttributeCenterY;
   line.spacing = 12;
-  line.edgeInsets = NSEdgeInsetsMake(5, 14, 5, 14);
+  line.edgeInsets = NSEdgeInsetsMake(9, 14, 9, 14);
 
   [line addArrangedSubview:[DotView dot:row[@"dot"] ?: @""]];
 
@@ -1032,9 +1032,6 @@ static NSColor *hex(uint32_t rgb) {
   inner.orientation = NSUserInterfaceLayoutOrientationVertical;
   inner.alignment = NSLayoutAttributeLeading;
   inner.spacing = 0;
-  // A row carries half the gap, so the card carries the other half and its edge
-  // reads the same as the space between two rows.
-  inner.edgeInsets = NSEdgeInsetsMake(4, 0, 4, 0);
   inner.translatesAutoresizingMaskIntoConstraints = NO;
 
   NSArray *rows = section[@"rows"];
