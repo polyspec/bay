@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // DNSAgentLabel identifies the launchd job that runs bayd. It is a user
@@ -40,13 +41,30 @@ func InstallDNSAgent(exe, domain, addr, proxy, logDir string) (string, error) {
 	}
 
 	target := "gui/" + strconv.Itoa(os.Getuid())
-	// Boot out first so an edited plist is read. A missing job is not an
-	// error.
+	// Boot out first so an edited plist is read. A missing job is not an error.
 	exec.Command("launchctl", "bootout", target+"/"+DNSAgentLabel).Run()
+	// Booting out returns before the job is gone, and bootstrapping one that is
+	// still there fails. Wait for it to go.
+	waitForAgentGone(target)
 	if out, err := exec.Command("launchctl", "bootstrap", target, path).CombinedOutput(); err != nil {
 		return "", fmt.Errorf("launchctl bootstrap: %s", strings.TrimSpace(string(out)))
 	}
 	return path, nil
+}
+
+// waitForAgentGone returns once launchd no longer knows the job, or after the
+// deadline, which leaves bootstrapping to report what it finds.
+func waitForAgentGone(target string) {
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		if exec.Command("launchctl", "print", target+"/"+DNSAgentLabel).Run() != nil {
+			return
+		}
+		if time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // UninstallDNSAgent stops the job and removes its plist.
@@ -76,7 +94,7 @@ func dnsAgentArgs(exe, domain, addr, proxy string) []string {
 
 // DNSAgentServes reports whether the installed job runs with these settings. A
 // renamed domain or proxy leaves the job registered with the previous values.
-func DNSAgentServes(domains []string, addr, proxy string) bool {
+func DNSAgentServes(domains []string, addr, proxy, bin string) bool {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return false
@@ -90,7 +108,23 @@ func DNSAgentServes(domains []string, addr, proxy string) bool {
 	if err := json.Unmarshal(out, &got); err != nil || len(got) == 0 {
 		return false
 	}
-	// Compare the settings only. The executable path is set by the installer.
+	return agentIsCurrent(got, domains, addr, proxy, bin)
+}
+
+// agentIsCurrent reports whether the registered arguments are the ones this
+// installation would register.
+//
+// The program is part of it. An agent registered from a copy that was moved or
+// removed stops at the next login, and one registered from another copy is not
+// the installation being used. bin is empty for a reader that has no
+// installation to name, and then the settings alone decide.
+func agentIsCurrent(got, domains []string, addr, proxy, bin string) bool {
+	if len(got) == 0 {
+		return false
+	}
+	if bin != "" && got[0] != bin {
+		return false
+	}
 	want := dnsAgentArgs(got[0], strings.Join(domains, ","), addr, proxy)
 	if len(got) != len(want) {
 		return false

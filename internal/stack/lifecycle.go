@@ -233,7 +233,7 @@ func (r *Runtime) EnsureInstalled() error {
 	if pending := in.Pending(); len(pending) > 0 {
 		return fmt.Errorf("setup did not complete: %s", strings.Join(pending, "; "))
 	}
-	if DNSAgentLoaded() && DNSAgentServes(domains, r.Addr, ProxyName) {
+	if DNSAgentLoaded() && DNSAgentServes(domains, r.Addr, ProxyName, r.DNSBin) {
 		return nil
 	}
 	if r.DNSBin == "" {

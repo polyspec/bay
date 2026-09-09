@@ -5,6 +5,38 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Two ways to find a machine, and one way to prove it
+
+A machine with the link open announces itself to the network every second and a
+half; `bay peer find` lists what it hears and `peer add <name>` approves
+one by the name it announced. An address given by hand is the other way, and it
+is what works across subnets and where a network filters broadcast. Neither
+replaces the other. What is announced is only where to look: the authority is
+read from the machine itself, so a machine is still proved by its certificate
+and by nothing else.
+
+The announcement is a broadcast rather than a multicast, because access points
+commonly prune multicast between clients while still flooding broadcast to the
+subnet.
+
+The resident agent follows a peer that comes back at another address, which is
+what happens when the network hands out a different one. The announcement is
+matched by the peer's authority fingerprint and only the address is taken from
+it.
+
+Two faults were found on the way. The agent registered with launchd was reported
+current whatever program it ran, so one registered from a copy that had been
+moved kept being accepted; the program is part of it now, and re-registering
+waits for the job launchd is still holding to go before it registers the new
+one. Both were reached on this machine: the agent had been running from a
+scratch build for a day.
+
+Verification: `make check`, including tests over hearing an announcement, a
+closed link announcing nothing, a machine ageing out, and one announcing twice.
+On this machine `peer find` listed its own announcement and `peer add max`
+approved it by name; the link then served a name to an approved certificate,
+200, and `peer remove` and `peer close` left the machine's own sites answering.
+
 ### bay peer
 
 Two machines on one network, each running bay, reach each other's

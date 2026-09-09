@@ -25,6 +25,9 @@
 | bay 없이 재생성된 컨테이너에서 복구 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestRecreatedBehindBayRecoversActualRuntime`가 bay을 거치지 않고 컨테이너를 재생성한 뒤 경로가 이름으로 2초 만에 복구되고, 어떤 요청도 2.024초를 넘지 않음을 확인 | 예 |
 | 컨테이너를 건드리지 않고 프록시 설정 다시 쓰기 | 구현됨 | `bay sync`가 이 머신의 경로 5개를 다시 쓰고 프록시를 리로드했고, 이후 모든 도메인이 45ms 안에 200으로 응답하며 `x-bay-route: address`를 반환. 설정을 다시 쓰는 다른 모든 명령은 컨테이너를 시작하거나 정지시킴 | 예 |
 | 창에서 같은 다시 쓰기 | 구현됨 | 설정 화면 유지 관리에 있음. 눌렀을 때 `~/.bay/conf.d/stack.conf`가 다시 쓰였음을 파일 수정 시각으로 확인했고, 창과 로그 모두 `프록시 설정을 다시 썼습니다 · 경로 5개`를 보고함 | 예 |
+| 기계를 찾는 두 가지 길 | 구현됨 | `bay peer find`가 이 기계의 알림에서 이름·주소·지문을 나열했고 `peer add max`가 알린 이름으로 승인했다. 주소 직접 입력도 그대로 되고 서브넷을 넘을 때 쓰인다. `go test ./internal/stack -run 'TestAnAnnouncementIsHeard\|TestNothingIsAnnouncedWhileTheLinkIsClosed\|TestAMachineUnheardLeavesTheList\|TestAnnouncingAgainUpdatesTheSameMachine'`가 수신·침묵·만료·같은 기계의 재알림을 검사 | 예 |
+| 에이전트가 옮겨간 피어를 따라감 | 구현됨 | 상주 에이전트가 알림을 피어의 지문으로 대조해 저장된 주소를 교체하므로, 네트워크가 다른 주소를 내준 피어에도 계속 닿는다. 이 기계의 `peer find`가 들은 것이 그 에이전트의 알림이다 | 예 |
+| 등록된 에이전트는 설치된 것이어야 함 | 구현됨 | `go test ./internal/stack -run TestTheAgent`가 다른 복사본에서 등록된 잡, 다른 도메인을 제공하는 잡, 설치 위치를 모르는 판독자를 검사. 이 기계의 에이전트가 임시 빌드에서 돌면서 current로 보고되고 있었고, 이제 `/opt/homebrew/bin/bayd`로 재등록됐다 | 예 |
 | 알던 주소가 다른 인증기관으로 답하면 알림 | 구현됨 | `go test ./internal/stack -run 'TestAnApprovedAddressCarryingAnotherAuthorityIsReported\|TestTheSameAuthorityAtAKnownAddressIsNotReported'`가 둘 다 검사. `peer add`가 묻기 전에 알린다 | 예 |
 | nginx가 피어 설정을 받아들임 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestPeerConfigurationIsAcceptedByNginxActualRuntime`가 링크, 클라이언트 인증서 검사, 피어 도메인이 든 설정을 쓰고 nginx가 읽게 한다 | 예 |
 | 다른 기계의 도메인에 닿기 | 창을 제외하고 구현됨 | `bay peer open`이 링크를 공개하고 이 기계의 이름·주소·도메인·인증기관을 담은 문서를 답했다. `peer add`가 기계가 제시한 인증서를 그 기계가 말한 인증기관으로 검증하고 지문을 출력한 뒤 승인했다. 이후 제공 중인 이름이 클라이언트 인증서 없이는 400으로 거부되고 승인된 인증기관의 인증서로는 200으로 제공됐다. `peer remove`와 `peer close`가 포트를 풀었고 이 기계의 사이트는 계속 답했다 | 예 |

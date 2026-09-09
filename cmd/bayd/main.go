@@ -12,6 +12,7 @@
 package main
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/json"
 	"errors"
@@ -20,12 +21,22 @@ import (
 	"log"
 	"net"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/polyspec/bay/internal/stack"
 )
+
+// defaultState is where the machine keeps what it was set up with.
+func defaultState() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".bay"
+	}
+	return filepath.Join(home, ".bay")
+}
 
 const (
 	typeA    = 1
@@ -41,6 +52,7 @@ var (
 	proxy     = flag.String("proxy", stack.ProxyName, "resolve every name under -domain to this container, which routes by Host header; empty to answer per service")
 	install   = flag.Bool("install", false, "write /etc/resolver/<domain> and exit; acquires root itself")
 	privApply = flag.Bool("privileged-apply", false, "internal: apply the privileged setup steps")
+	state     = flag.String("state", defaultState(), "bay state directory, read to announce this machine and follow its peers")
 )
 
 func main() {
@@ -94,6 +106,10 @@ func main() {
 	} else {
 		log.Printf("serving %s on %s (aliases: %d)", served, *addr, len(r.aliases))
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	time.AfterFunc(peerPollDelay, func() { servePeers(ctx, *state) })
+
 	go serveTCP(ln, r)
 	serveUDP(pc, r)
 }

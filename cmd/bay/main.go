@@ -9,6 +9,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/polyspec/bay/internal/contract"
 	"github.com/polyspec/bay/internal/stack"
@@ -326,10 +328,12 @@ func peer(m *stack.Machine, args []string) error {
 		}
 		return syncAfterPeerChange(m,
 			fmt.Sprintf("the link is open at %s", stack.PeerLinkAddress(stack.LANAddress())))
+	case "find":
+		return findPeers()
 	case "add":
 		if len(args) < 2 {
 			return fmt.Errorf("peer add needs the address of the other machine, " +
-				"for example 192.168.0.42:8443")
+				"for example 192.168.0.42:8443, or the name of one that peer find lists")
 		}
 		return addPeer(m, args[1])
 	case "remove":
@@ -338,7 +342,7 @@ func peer(m *stack.Machine, args []string) error {
 		}
 		return removePeer(m, args[1])
 	default:
-		return fmt.Errorf("unknown peer action %q; use open, close, add or remove", args[0])
+		return fmt.Errorf("unknown peer action %q; use open, close, find, add or remove", args[0])
 	}
 }
 
@@ -369,10 +373,63 @@ func listPeers(m *stack.Machine) error {
 	return nil
 }
 
+// findPeers lists the machines announcing themselves on this network. A machine
+// whose announcement does not reach here is reached by its address instead.
+func findPeers() error {
+	fmt.Printf("listening for %s\n", discoverFor)
+	found, err := stack.Discover(context.Background(), 0, discoverFor)
+	if err != nil {
+		return err
+	}
+	if len(found) == 0 {
+		fmt.Println("nothing announced. Give the address instead: bay peer add <host:port>")
+		return nil
+	}
+	for _, b := range found {
+		fmt.Printf("%-16s %-22s %s\n", b.Name, b.Address, short(b.ID))
+	}
+	return nil
+}
+
+// discoverFor is long enough to hear a machine announcing itself twice.
+const discoverFor = 4 * time.Second
+
+// resolveAddress turns what was given into an address. A name is looked for
+// among the machines announcing themselves; anything holding a colon is already
+// an address.
+func resolveAddress(given string) (string, error) {
+	if strings.Contains(given, ":") {
+		return given, nil
+	}
+	found, err := stack.Discover(context.Background(), 0, discoverFor)
+	if err != nil {
+		return "", err
+	}
+	var matches []stack.Beacon
+	for _, b := range found {
+		if b.Name == given {
+			matches = append(matches, b)
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0].Address, nil
+	case 0:
+		return "", fmt.Errorf("no machine announcing itself as %q; give its address instead", given)
+	default:
+		return "", fmt.Errorf("%d machines announce themselves as %q; give the address of the one you mean",
+			len(matches), given)
+	}
+}
+
 // addPeer reads what the machine at the address says about itself and asks
 // before approving it. The fingerprint is printed so it can be compared with
 // what the other machine reports.
-func addPeer(m *stack.Machine, address string) error {
+func addPeer(m *stack.Machine, given string) error {
+	address, err := resolveAddress(given)
+	if err != nil {
+		return err
+	}
 	doc, err := stack.FetchPeer(address)
 	if err != nil {
 		return err
@@ -625,7 +682,7 @@ func doctor(m *stack.Machine) error {
 	agent := "not loaded"
 	switch {
 	case !stack.DNSAgentLoaded():
-	case stack.DNSAgentServes(domains, *addr, stack.ProxyName):
+	case stack.DNSAgentServes(domains, *addr, stack.ProxyName, dnsBinary()):
 		agent = "loaded and current"
 	default:
 		agent = "loaded but out of date"
@@ -651,6 +708,16 @@ func doctor(m *stack.Machine) error {
 		fmt.Println("  - re-register " + stack.DNSAgentLabel)
 	}
 	return nil
+}
+
+// dnsBinary returns the bayd this installation would register, or an
+// empty string when it cannot be found, which leaves the settings to decide.
+func dnsBinary() string {
+	bin, err := resolveDNSBinary()
+	if err != nil {
+		return ""
+	}
+	return bin
 }
 
 // sameDomains reports whether two domain lists contain the same names.

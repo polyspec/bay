@@ -45,11 +45,30 @@ on it.
 The peer endpoint has to answer before there is any approval, so it cannot ask
 for one.
 
+## Two ways to find a machine
+
+A machine with the link open announces itself to the network every second and a
+half. `bay peer find` lists what it hears, and a machine that stops
+announcing leaves the list, so one that was shut down is not offered.
+
+The announcement is a broadcast rather than a multicast: access points commonly
+prune multicast between clients while still flooding broadcast to the subnet, so
+this reaches machines where a multicast would not.
+
+An address given by hand is the other way, and it is the one that works across
+subnets and where a network filters broadcast. Neither replaces the other, and
+what is announced is only where to look: the authority is read from the machine
+itself.
+
+The address a peer announces is also followed. A peer that comes back at another
+address, which is what happens when the network hands out a different one, is
+matched by its authority's fingerprint and its stored address is replaced.
+
 ## Opening the link
 
-The link is closed until it is opened. `bay peer open` answers it and
-prints the address to give the other machine; `bay peer close` stops
-answering.
+The link is closed until it is opened. `bay peer open` answers it,
+announces this machine, and prints the address to give the other machine;
+`bay peer close` stops both.
 
 With the link open and no peer approved, only the document below answers. This
 machine's own domains appear on the link when there is an authority to check a
@@ -140,3 +159,5 @@ the domain on one side ends it.
 | Is a served name offered on the link without a certificate? | No. 400 |
 | Is it offered with one from an approved authority? | Yes. 200 |
 | Does closing the link release the port? | Yes. Nothing listened on it afterwards, and the machine's own sites still answered |
+| Does a machine hear another announcing itself? | Yes. `peer find` listed the machine's name, address and fingerprint |
+| Can a machine be approved by the name it announced? | Yes. `peer add max` found the address, read the document and approved |

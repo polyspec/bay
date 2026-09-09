@@ -157,7 +157,7 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 			Label:   DNSAgentLabel,
 			Addr:    addr,
 			Loaded:  DNSAgentLoaded(),
-			Current: DNSAgentServes(domains, addr, ProxyName),
+			Current: DNSAgentServes(domains, addr, ProxyName, ""),
 		},
 	}
 

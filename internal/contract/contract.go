@@ -85,14 +85,16 @@ func Commands() []Command {
 			Example: "bay doctor",
 		},
 		{
-			Name: "peer", Args: "[open|close|add|remove] [address|fingerprint]",
+			Name: "peer", Args: "[open|close|find|add|remove] [address|name|fingerprint]",
 			Summary: "List the machines whose domains this one reaches, or change them.",
 			Effect: "With no argument it lists them and says whether the link is open. " +
-				"\"open\" answers the link, which another machine reads to approve this " +
-				"one; \"close\" stops answering it. \"add\" reads what the machine at the " +
-				"address says about itself, checks that it holds the authority it names, " +
-				"prints the fingerprint and asks before approving. \"remove\" withdraws " +
-				"an approval. Every change rewrites the proxy configuration. Nothing is " +
+				"\"open\" answers the link and announces this machine to the network, " +
+				"which another machine reads to approve this one; \"close\" stops both. " +
+				"\"find\" lists the machines announcing themselves. \"add\" takes an " +
+				"address, or the name of a machine that announced itself, reads what it " +
+				"says about itself, checks that it holds the authority it names, prints " +
+				"the fingerprint and asks before approving. \"remove\" withdraws an " +
+				"approval. Every change rewrites the proxy configuration. Nothing is " +
 				"added to the keychain.",
 			Example: "bay peer add 192.168.0.42:8443",
 		},
