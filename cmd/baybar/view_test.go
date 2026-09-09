@@ -78,10 +78,10 @@ func TestShortPathLeavesForeignPaths(t *testing.T) {
 	}
 }
 
-// The peers screen states which domains this machine reaches through each
-// approved machine. Without them the screen names a machine and does not say
-// what it provides, and with several approved machines the reader cannot tell
-// which machine provides which domain.
+// The peers screen states which domains this machine reaches and which machine
+// provides each one. The machines and the domains are separate sections: a
+// machine row is removed and a domain row is opened, and one flat list of both
+// gives no way to tell them apart when several machines are approved.
 func TestThePeersScreenListsEachPeersDomains(t *testing.T) {
 	snap := stack.Snapshot{}
 	snap.Machine.Peering = true
@@ -96,18 +96,27 @@ func TestThePeersScreenListsEachPeersDomains(t *testing.T) {
 	p := &panel{}
 	peersView(p, snap, false, nil)
 
-	var approved *section
+	var machines, domains *section
 	for i := range p.Sections {
-		if p.Sections[i].Header == "APPROVED" {
-			approved = &p.Sections[i]
+		switch p.Sections[i].Header {
+		case "APPROVED":
+			machines = &p.Sections[i]
+		case "DOMAINS":
+			domains = &p.Sections[i]
 		}
 	}
-	if approved == nil {
-		t.Fatal("the peers screen has no approved section")
+	if machines == nil || domains == nil {
+		t.Fatal("the peers screen does not list the machines and the domains separately")
+	}
+	// A machine row is removed and a domain row is opened, so the machines
+	// section holds one row per machine and nothing else.
+	if len(machines.Rows) != 2 {
+		t.Errorf("the machines section holds %d rows, want one per approved machine",
+			len(machines.Rows))
 	}
 
 	links := map[string]string{}
-	for _, r := range approved.Rows {
+	for _, r := range domains.Rows {
 		if r.Link != "" {
 			links[r.Text] = r.Detail
 		}

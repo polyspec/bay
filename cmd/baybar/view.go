@@ -339,26 +339,31 @@ func peersView(p *panel, snap stack.Snapshot, busy bool, found []stack.Beacon) {
 				quiet("peer-remove:"+peer.Fingerprint, text.T("Remove"), busy),
 			},
 		})
-		// The domains follow the machine that provides them, so a screen with
-		// several approved machines states which machine provides which domain.
-		for _, d := range peer.Domains {
-			url := "https://" + d
-			approved.Rows = append(approved.Rows, row{
-				Text: d, Wide: true, Dot: "on",
-				Link: url, LinkText: url, Detail: peer.Name,
-			})
-		}
-		if len(peer.Domains) == 0 {
-			approved.Rows = append(approved.Rows, row{
-				Text: text.T("no domain"), Wide: true,
-				Detail: peer.Name,
-			})
-		}
 	}
 	if len(approved.Rows) == 0 {
 		approved.Note = text.T("No machine is approved. Its domains are reachable here once it is.")
 	}
 	p.Sections = append(p.Sections, approved)
+
+	// The domains are a section of their own. A machine row is removed and a
+	// domain row is opened, so the two are separate lists, and the machine that
+	// provides a domain is stated beside it.
+	domains := section{Header: text.T("DOMAINS")}
+	for _, peer := range snap.Machine.Peers {
+		for _, d := range peer.Domains {
+			url := "https://" + d
+			domains.Rows = append(domains.Rows, row{
+				Text: d, Wide: true, Dot: "on",
+				Link: url, LinkText: url, Detail: peer.Name,
+			})
+		}
+	}
+	if len(snap.Machine.Peers) > 0 {
+		if len(domains.Rows) == 0 {
+			domains.Note = text.T("No approved machine provides a domain yet.")
+		}
+		p.Sections = append(p.Sections, domains)
+	}
 
 	// A machine already approved is not offered again, and neither is this one.
 	known := map[string]bool{}
