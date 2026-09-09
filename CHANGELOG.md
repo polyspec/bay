@@ -5,6 +5,20 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Draw a rule only where a card's part begins
+
+The window drew a rule between every pair of rows in a card. A card made of a
+title, two values and a list read as one undifferentiated list.
+
+A card whose rows name its parts draws a rule only where a part begins, which is
+a label row. A card that is a plain list still draws one between every row,
+because there the rows are the items.
+
+The line under a peer's fingerprint explaining what a fingerprint is has been
+removed. It described the design rather than the machine.
+
+Verification: `make check` passes. The window was not seen: it is a menu bar
+application and does not come forward from a script.
 ### A proxy that went away is started, not reported as a reload failure
 
 `bay peer add` stored an approval and then failed with `container exec
