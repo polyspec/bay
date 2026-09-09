@@ -1047,9 +1047,20 @@ static NSColor *hex(uint32_t rgb) {
     [wrap addArrangedSubview:n];
     [inner addArrangedSubview:wrap];
   }
+  // A card whose rows name its parts draws a rule only where a part begins,
+  // which is a label row. A card that is a plain list draws one between every
+  // row, because there the rows are the items.
+  BOOL named = NO;
+  for (NSDictionary *r in rows) {
+    NSString *kind = r[@"kind"];
+    if ([kind isEqualToString:@"title"] || [kind isEqualToString:@"label"]) named = YES;
+  }
   for (NSUInteger i = 0; i < rows.count; i++) {
+    if (i > 0) {
+      BOOL rule = named ? [rows[i][@"kind"] isEqualToString:@"label"] : YES;
+      if (rule) [inner addArrangedSubview:[self hairline]];
+    }
     [inner addArrangedSubview:[self clickableRow:rows[i]]];
-    if (i + 1 < rows.count) [inner addArrangedSubview:[self hairline]];
   }
 
   // A log section carries the tail of a container's output and a strip naming

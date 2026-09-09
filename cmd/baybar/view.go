@@ -346,8 +346,7 @@ func peersView(p *panel, snap stack.Snapshot, busy bool, found []stack.Beacon) {
 			}},
 			{Text: text.T("Address"), Kind: "kv", Detail: peer.Address, Mono: true},
 			{Text: text.T("Fingerprint"), Kind: "kv",
-				Detail: shortFingerprint(peer.Fingerprint), Mono: true,
-				Hint: text.T("what this machine is, not where it is")},
+				Detail: shortFingerprint(peer.Fingerprint), Mono: true},
 		}}
 		if n := len(peer.Domains); n > 0 {
 			machine.Rows = append(machine.Rows, row{Kind: "label",
