@@ -339,6 +339,21 @@ func peersView(p *panel, snap stack.Snapshot, busy bool, found []stack.Beacon) {
 				quiet("peer-remove:"+peer.Fingerprint, text.T("Remove"), busy),
 			},
 		})
+		// The domains follow the machine that provides them, so a screen with
+		// several approved machines states which machine provides which domain.
+		for _, d := range peer.Domains {
+			url := "https://" + d
+			approved.Rows = append(approved.Rows, row{
+				Text: d, Wide: true, Dot: "on",
+				Link: url, LinkText: url, Detail: peer.Name,
+			})
+		}
+		if len(peer.Domains) == 0 {
+			approved.Rows = append(approved.Rows, row{
+				Text: text.T("no domain"), Wide: true,
+				Detail: peer.Name,
+			})
+		}
 	}
 	if len(approved.Rows) == 0 {
 		approved.Note = text.T("No machine is approved. Its domains are reachable here once it is.")

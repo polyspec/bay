@@ -138,6 +138,7 @@ var korean = map[string]string{
 	"Reissue all":              "전체 재발급",
 	"Replace authority…":       "인증기관 교체…",
 	"AUTHORITY":                "인증기관",
+	"no domain":                "도메인 없음",
 	"trusted in your keychain": "키체인에서 신뢰됨",
 	"not trusted":              "신뢰되지 않음",
 	"Trust it":                 "신뢰 설정",

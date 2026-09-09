@@ -5,6 +5,18 @@ the day the change was made.
 
 ## 2026-09-09
 
+### List each peer's domains on the peers screen
+
+The screen named each approved machine and did not state which domains that
+machine provides, although the command line prints them. With several approved
+machines the reader could not tell which machine provides which domain.
+
+Each approved machine is followed by its domains. A domain row opens the
+address. A machine that provides no domain is stated as such.
+
+Verification: `go test ./cmd/baybar -run TestThePeersScreenListsEachPeersDomains`
+covers two approved machines with three domains between them, each domain listed
+under the machine that provides it. `make check` passes.
 ### Include peer domains when deciding whether a certificate is used
 
 This machine serves an approved peer's domain with a certificate it issued. The

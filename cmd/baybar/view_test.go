@@ -77,3 +77,53 @@ func TestShortPathLeavesForeignPaths(t *testing.T) {
 		t.Errorf("shortPath = %q", got)
 	}
 }
+
+// The peers screen states which domains this machine reaches through each
+// approved machine. Without them the screen names a machine and does not say
+// what it provides, and with several approved machines the reader cannot tell
+// which machine provides which domain.
+func TestThePeersScreenListsEachPeersDomains(t *testing.T) {
+	snap := stack.Snapshot{}
+	snap.Machine.Peering = true
+	snap.Machine.Link = "192.168.0.10:8443"
+	snap.Machine.Peers = []stack.Peer{
+		{Name: "max", Address: "192.168.0.57:8443", Fingerprint: "aaaa1111",
+			Domains: []string{"polyspec.test", "registry.soksak.test"}},
+		{Name: "lab", Address: "192.168.0.90:8443", Fingerprint: "bbbb2222",
+			Domains: []string{"build.test"}},
+	}
+
+	p := &panel{}
+	peersView(p, snap, false, nil)
+
+	var approved *section
+	for i := range p.Sections {
+		if p.Sections[i].Header == "APPROVED" {
+			approved = &p.Sections[i]
+		}
+	}
+	if approved == nil {
+		t.Fatal("the peers screen has no approved section")
+	}
+
+	links := map[string]string{}
+	for _, r := range approved.Rows {
+		if r.Link != "" {
+			links[r.Text] = r.Detail
+		}
+	}
+	for domain, peer := range map[string]string{
+		"polyspec.test":        "max",
+		"registry.soksak.test": "max",
+		"build.test":           "lab",
+	} {
+		got, ok := links[domain]
+		if !ok {
+			t.Errorf("%s is not listed, so the screen does not say it is reachable", domain)
+			continue
+		}
+		if got != peer {
+			t.Errorf("%s is listed under %q, want %q", domain, got, peer)
+		}
+	}
+}
