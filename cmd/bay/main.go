@@ -381,6 +381,20 @@ func addPeer(m *stack.Machine, address string) error {
 	if err != nil {
 		return err
 	}
+	peers, err := stack.Peers(m.Dir)
+	if err != nil {
+		return err
+	}
+	// An address that used to carry another authority is another machine. Say
+	// so before the fingerprint, so it is read before the question.
+	if known, err := stack.PeerAtAddress(peers, doc.Address, doc.CA); err != nil {
+		return err
+	} else if known != nil {
+		fmt.Printf("%s already carried the authority %s, approved as %q.\n",
+			doc.Address, short(known.Fingerprint), known.Name)
+		fmt.Printf("It now answers with another one. This is a different machine.\n\n")
+	}
+
 	fmt.Printf("machine     %s\n", doc.Name)
 	fmt.Printf("address     %s\n", doc.Address)
 	fmt.Printf("fingerprint %s\n", short(fingerprint))

@@ -144,3 +144,44 @@ func TestTwoPeersOfferingOneNameAreOrdered(t *testing.T) {
 		t.Errorf("shared.test answered from %q, want the first in order", got.Name)
 	}
 }
+
+// An address that already carries an approved authority, now carrying another
+// one, is not the same machine. Approving it silently would put two entries
+// under one address and give the new one everything the old one had.
+func TestAnApprovedAddressCarryingAnotherAuthorityIsReported(t *testing.T) {
+	dir := t.TempDir()
+	first := Peer{Name: "alpha", Address: "192.168.0.10:8443", CA: testCA(t)}
+	if err := ApprovePeer(dir, first); err != nil {
+		t.Fatal(err)
+	}
+	peers, _ := Peers(dir)
+
+	other := Peer{Name: "alpha", Address: "192.168.0.10:8443", CA: testCA(t)}
+	known, err := PeerAtAddress(peers, other.Address, other.CA)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if known == nil {
+		t.Fatal("the address is not reported as one that already carries an authority")
+	}
+	if known.Fingerprint != peers[0].Fingerprint {
+		t.Errorf("reported %s, want the authority already approved", known.Fingerprint)
+	}
+}
+
+// The same machine answering again at the same address is not a change.
+func TestTheSameAuthorityAtAKnownAddressIsNotReported(t *testing.T) {
+	dir := t.TempDir()
+	ca := testCA(t)
+	if err := ApprovePeer(dir, Peer{Name: "alpha", Address: "192.168.0.10:8443", CA: ca}); err != nil {
+		t.Fatal(err)
+	}
+	peers, _ := Peers(dir)
+	known, err := PeerAtAddress(peers, "192.168.0.10:8443", ca)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if known != nil {
+		t.Error("a machine answering with the authority it was approved under is reported as changed")
+	}
+}

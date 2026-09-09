@@ -70,6 +70,10 @@ verified against when this machine connects to it.
 Nothing is written to the keychain. The peer's authority is a file the proxy
 reads, not a trust setting on the machine.
 
+An address that already carries an approved authority, now answering with
+another one, is a different machine. That is said before the question, because
+approving it silently would put two machines under one address.
+
 ## Certificates
 
 Each machine keeps one authority, which its own system already trusts.

@@ -121,6 +121,29 @@ func writePeers(dir string, change func(map[string]Peer)) error {
 	return os.WriteFile(peersFile(dir), append(out, '\n'), 0o644)
 }
 
+// PeerAtAddress returns the peer already approved at an address when the
+// authority answering there is a different one. A machine is its authority, so
+// this is a different machine at an address that used to hold another, which is
+// worth saying before anything is approved.
+//
+// It returns nothing when the address is new, or when the authority is the one
+// already approved for it.
+func PeerAtAddress(peers []Peer, address, caPEM string) (*Peer, error) {
+	if address == "" {
+		return nil, nil
+	}
+	fingerprint, err := Fingerprint(caPEM)
+	if err != nil {
+		return nil, err
+	}
+	for i, p := range peers {
+		if p.Address == address && p.Fingerprint != fingerprint {
+			return &peers[i], nil
+		}
+	}
+	return nil, nil
+}
+
 // PeerDomains returns every domain the approved peers serve, without the ones
 // this machine serves itself: a name this machine serves is always this
 // machine's.
