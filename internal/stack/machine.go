@@ -19,11 +19,15 @@ const (
 	// DockerNetwork is created for the proxy and its services: Docker resolves
 	// a container name only on a user-defined network.
 	DockerNetwork = "bay"
-	// DockerProxyAddr is the loopback address the Docker proxy publishes on.
-	// The host cannot route to a Docker container, so this is the only way it
-	// is reached, and it is not 127.0.0.1 so that it takes no port from
-	// anything else on the machine.
-	DockerProxyAddr  = "127.0.0.2"
+	// DockerProxyAddr is the address the Docker proxy publishes on. The host
+	// cannot route to a Docker container, so this is the only way it is
+	// reached. macOS assigns this one address to lo0 and no other, so any
+	// other loopback address needs an alias added as root, and root is for
+	// /etc/resolver alone.
+	DockerProxyAddr = "127.0.0.1"
+	// DockerResolver is where Docker answers a container name. It is not the
+	// network gateway, which answers nothing.
+	DockerResolver   = "127.0.0.11"
 	BackendDomain    = "container.test"
 	DefaultDNSAddr   = "127.0.0.1:5354"
 	groupsFileName   = "groups.json"

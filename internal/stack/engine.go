@@ -221,3 +221,13 @@ func ensureNetwork(engine string) error {
 	_, err := runEngine(engine, "network", "create", DockerNetwork)
 	return err
 }
+
+// engineResolver returns the address the proxy resolves a container name at.
+// Apple `container` answers at the network gateway; Docker answers at its own
+// address, and its gateway answers nothing.
+func engineResolver(engine, gateway string) string {
+	if engine == DockerEngine {
+		return DockerResolver
+	}
+	return gateway
+}

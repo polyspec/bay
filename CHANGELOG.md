@@ -5,6 +5,28 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Start the Docker proxy on an address the machine has
+
+The Docker proxy published on 127.0.0.2, which macOS does not assign to lo0, so
+Docker refused to create it and opening the peer link failed. Adding that
+address needs an alias written as root, and root is for `/etc/resolver` alone.
+It publishes on 127.0.0.1.
+
+Two more faults stopped the same command. A configuration with no route of its
+own wrote an empty resolver directive, which nginx refuses to start on, and a
+machine with the link open but nothing served stopped its proxy instead of
+running it, so the document a machine is approved from had nothing to answer it.
+The resolver is written only when there is one, and the proxy carrying the link
+runs with no routes.
+
+A Docker proxy is given Docker's own resolver rather than the network gateway,
+which answers nothing.
+
+Verification: the published address is asked to bind in a test, which is what
+would have caught the first fault. `bay peer open` reports the link
+open at 192.168.0.10:8443 and the proxy running with 80 and 443 on 127.0.0.1 and
+8443 on the network; the document answers over the network address with this
+machine's name, address and authority. `make check` passes.
 ### Opening the peer link no longer writes a setting it cannot serve
 
 The proxy configuration refuses the peer link on a machine running both

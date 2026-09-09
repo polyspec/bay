@@ -61,8 +61,9 @@ here before any code is written against it.
    because by rule 2 it can serve no others.
 
 4. Every proxy is reachable from the host, which is where the answers point. An
-   Apple proxy already is. A Docker proxy publishes on a loopback address of its
-   own.
+   Apple proxy already is. A Docker proxy publishes on 127.0.0.1, which is the
+   only address macOS assigns to lo0: any other loopback address needs an alias
+   added as root, and rule 9 leaves root to `/etc/resolver`.
 
 5. A domain is claimed once per machine. Claims are settled over every engine's
    containers before any proxy is configured, so a container cannot hold a name
@@ -126,10 +127,10 @@ an Apple proxy at the proxy's own address and a Docker proxy at a published
 port, and `bayd` answers a name with whichever applies to that name's
 engine.
 
-A Docker proxy publishes 80 and 443 on the loopback address, which is the only
-way the host reaches it. Binding it to loopback keeps the property vmnet gives
-for free: what a service listens on is published on neither engine, and the one
-port either proxy offers the network is the peer link.
+A Docker proxy publishes 80 and 443 on 127.0.0.1, which is the only way the
+host reaches it. Binding it to the loopback keeps the property vmnet gives for
+free: what a service listens on is published on neither engine, and the one port
+either proxy offers the network is the peer link.
 
 Addresses are assigned by DHCP and change on every start; a fixed MAC address
 does not hold an address.

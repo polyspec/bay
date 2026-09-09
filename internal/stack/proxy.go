@@ -73,8 +73,10 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 	stopped := 0
 	for _, engine := range engines {
 		// A peer's domain is backed by no container, so every proxy serves it.
+		// The proxy carrying the link runs with neither, because the document a
+		// machine is approved from is what it answers first.
 		own := RoutesOn(routes, engine)
-		if len(own) == 0 && len(peerRoutes) == 0 {
+		if len(own) == 0 && len(peerRoutes) == 0 && engine != linkEngine {
 			if err := StopProxy(engine); err != nil {
 				return res, err
 			}
@@ -89,12 +91,15 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 			DefaultCert: DefaultCertName,
 			PeerRoutes:  peerRoutes,
 		}
+		// The resolver is only read by a route's name fallback, so a
+		// configuration with no route of its own needs none, and nginx refuses
+		// to start on one written empty.
 		if len(own) > 0 {
 			gateway, err := NetworkGateway(engine)
 			if err != nil {
 				return res, err
 			}
-			conf.Resolver = gateway
+			conf.Resolver = engineResolver(engine, gateway)
 		}
 		peerDir := ""
 		if engine == linkEngine {

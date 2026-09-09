@@ -214,15 +214,26 @@ func EnsureProxy(engine, confDir, certDir, peerDir string) (created bool, err er
 	if err := ensureNetwork(engine); err != nil {
 		return false, err
 	}
+	_, err = runEngine(engine, append(proxyRunArgs(engine, confDir, certDir, peerDir), ProxyImage)...)
+	return err == nil, err
+}
+
+// proxyRunArgs returns the arguments that create one engine's proxy.
+//
+// The host routes to an Apple container, so that proxy publishes nothing and is
+// reached at its own address. It routes to no Docker container, so that proxy
+// is reached only through a published port. The port is published on the
+// loopback address rather than on every interface, because the one port this
+// machine offers the network is the peer link. It is 127.0.0.1 because that is
+// the only address macOS assigns to lo0: any other needs an alias added as
+// root, and root is for /etc/resolver alone.
+func proxyRunArgs(engine, confDir, certDir, peerDir string) []string {
 	args := []string{"run", "--detach", "--name", ProxyName,
 		"--network", proxyNetwork(engine),
 		"--label", LabelRole + "=" + roleProxy,
 		"--volume", confDir + ":/etc/nginx/conf.d:ro",
 		"--volume", certDir + ":/etc/nginx/certs:ro",
 	}
-	// The host reaches an Apple proxy on the engine's own subnet. It reaches a
-	// Docker proxy only through a published port, so that proxy takes a
-	// loopback address of its own and publishes there.
 	if engine == DockerEngine {
 		for _, port := range []int{80, 443} {
 			p := strconv.Itoa(port)
@@ -235,8 +246,7 @@ func EnsureProxy(engine, confDir, certDir, peerDir string) (created bool, err er
 			"--volume", peerDir+":/etc/nginx/peers:ro",
 			"--publish", port+":"+port)
 	}
-	_, err = runEngine(engine, append(args, ProxyImage)...)
-	return err == nil, err
+	return args
 }
 
 // lookupOn finds a container on one engine. The proxies share a name because
