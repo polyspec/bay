@@ -125,3 +125,50 @@ func TestThePeersScreenListsEachPeersDomains(t *testing.T) {
 		}
 	}
 }
+
+// The address and the fingerprint state which machine a section belongs to, so
+// they are placed in rows the renderer draws. A section field the renderer does
+// not read is dropped without any error, and the screen then names a machine and
+// states nothing else about it.
+func TestAPeerSectionStatesItsAddressAndFingerprint(t *testing.T) {
+	snap := stack.Snapshot{}
+	snap.Machine.Peering = true
+	snap.Machine.Peers = []stack.Peer{
+		{Name: "max", Address: "192.168.0.57:8443", Fingerprint: "aaaa1111bbbb2222",
+			Domains: []string{"polyspec.test"}},
+	}
+
+	p := &panel{}
+	peersView(p, snap, false, nil)
+
+	var found *section
+	for i := range p.Sections {
+		if p.Sections[i].Header == "max" {
+			found = &p.Sections[i]
+		}
+	}
+	if found == nil {
+		t.Fatal("the peers screen has no section for the approved machine")
+	}
+	var address, fingerprint bool
+	for _, r := range found.Rows {
+		if r.Kind != "kv" {
+			continue
+		}
+		if r.Detail == "192.168.0.57:8443" {
+			address = true
+		}
+		if r.Detail == shortFingerprint("aaaa1111bbbb2222") {
+			fingerprint = true
+		}
+	}
+	if !address {
+		t.Error("the section does not state the machine's address in a row")
+	}
+	if !fingerprint {
+		t.Error("the section does not state the machine's fingerprint in a row")
+	}
+	if len(found.Buttons) == 0 {
+		t.Error("the section carries no remove action")
+	}
+}

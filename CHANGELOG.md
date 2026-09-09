@@ -11,8 +11,8 @@ The screen named each approved machine and did not state which domains that
 machine provides, although the command line prints them. With several approved
 machines the reader could not tell which machine provides which domain.
 
-One machine is one section. The header states the machine, its address and its
-fingerprint, and carries the remove action. The rows are the domains that
+One machine is one section. The header states the machine and carries the remove
+action, and the first rows state the address and the fingerprint. The rows are the domains that
 machine provides, and each row opens its address. A machine that provides no
 domain states that.
 
@@ -21,10 +21,15 @@ column, which is read as one more attribute of the row. The section states it
 instead. The remove action belongs to the machine and the open action belongs to
 the domain, and each is now on the thing it acts on.
 
-Verification: `go test ./cmd/baybar -run TestThePeersScreenListsEachPeersDomains`
-covers two approved machines with three domains between them and checks that
-each domain is inside the section of the machine that provides it. `make check`
-passes.
+The address and the fingerprint were first placed in the section's `detail`
+field, which the window does not read, so both were dropped and the screen named
+the machine and stated nothing else about it. The field was read nowhere and is
+removed.
+
+Verification: `go test ./cmd/baybar -run 'TestThePeersScreen|TestAPeerSection'`
+covers two approved machines with three domains between them, checks that each
+domain is inside the section of the machine that provides it, and checks that the
+address and the fingerprint are in rows the window draws. `make check` passes.
 ### Include peer domains when deciding whether a certificate is used
 
 This machine serves an approved peer's domain with a certificate it issued. The

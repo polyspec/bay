@@ -342,8 +342,13 @@ func peersView(p *panel, snap stack.Snapshot, busy bool, found []stack.Beacon) {
 	for _, peer := range snap.Machine.Peers {
 		machine := section{
 			Header:  peer.Name,
-			Detail:  peer.Address + "  " + shortFingerprint(peer.Fingerprint),
 			Buttons: []button{quiet("peer-remove:"+peer.Fingerprint, text.T("Remove"), busy)},
+			Rows: []row{
+				{Text: text.T("Address"), Kind: "kv", Detail: peer.Address, Mono: true},
+				{Text: text.T("Fingerprint"), Kind: "kv",
+					Detail: shortFingerprint(peer.Fingerprint), Mono: true,
+					Faint: text.T("what this machine is, not where it is")},
+			},
 		}
 		for _, d := range peer.Domains {
 			url := "https://" + d
@@ -351,7 +356,7 @@ func peersView(p *panel, snap stack.Snapshot, busy bool, found []stack.Beacon) {
 				Text: d, Wide: true, Dot: "on", Link: url, LinkText: url,
 			})
 		}
-		if len(machine.Rows) == 0 {
+		if len(peer.Domains) == 0 {
 			machine.Note = text.T("This machine provides no domain.")
 		}
 		p.Sections = append(p.Sections, machine)

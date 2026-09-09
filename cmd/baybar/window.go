@@ -73,7 +73,6 @@ type banner struct {
 
 type section struct {
 	Header  string   `json:"header"`
-	Detail  string   `json:"detail,omitempty"`
 	Note    string   `json:"note,omitempty"`
 	Buttons []button `json:"buttons,omitempty"`
 	Rows    []row    `json:"rows,omitempty"`
