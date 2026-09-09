@@ -5,6 +5,20 @@ the day the change was made.
 
 ## 2026-09-09
 
+### Keep the tool that measures the window
+
+The window's spacing was measured with a program written for one session and
+left in a temporary directory, which is removed when the session ends. The next
+change to the layout would have been judged by eye again.
+
+`tools/window.swift` captures the window by its identifier, so the window does
+not have to be in front, and reports each run of pixels holding type with the
+distance from one run's centre to the next. `make window` runs it and `AGENTS.md`
+states how.
+
+Verification: `make window OUT=/tmp/w.png REGION="262 895 205 390"` captured the
+running window and reported the peer card's rows 23.0, 24.5, 24.0 and 24.0
+apart, and 35.0 across the boundary that carries a rule. `make check` passes.
 ### Space a card's rows by one padding, measured on screen
 
 The peer card set a different space at every boundary. The rows measured 23, 32,

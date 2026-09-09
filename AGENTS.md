@@ -27,6 +27,7 @@ make uninstall  # remove them
 | `cmd/docsgen` | Writes the generated sections of the specification documents |
 | `cmd/docscheck` | Verifies links, Korean documents and feature rows |
 | `design/` | Design canvas sources; not part of the build |
+| `tools/` | Development tools; not part of the build |
 
 ## Documentation rules
 
@@ -51,6 +52,19 @@ After changing a declaration in `internal/contract`, run:
 ```sh
 make docs-generate
 ```
+
+## Measuring the window
+
+A change to the window's layout is measured, not judged by eye. Start the
+application with `-show`, then:
+
+```sh
+make window OUT=/tmp/w.png REGION="262 895 205 390"
+```
+
+It captures the window by its identifier, so the window does not have to be in
+front, and reports each run of pixels holding type with the distance from one
+run's centre to the next. Equal distances are what a reader sees as one rhythm.
 
 ## Tests that start containers
 

@@ -7,7 +7,10 @@ GO  ?= go
 PREFIX  ?= /usr/local
 APPDIR  ?= /Applications
 
-.PHONY: all check clean test e2e docs-check docs-generate install uninstall
+OUT ?= /tmp/baybar.png
+REGION ?=
+
+.PHONY: all check clean test e2e docs-check docs-generate install uninstall window
 all: $(BIN)/bay $(BIN)/bayd $(APP)
 
 $(BIN)/bay: $(shell find cmd/bay internal -name '*.go')
@@ -75,6 +78,12 @@ uninstall:
 	rm -f "$(PREFIX)/bin/bay" "$(PREFIX)/bin/bayd"
 	rm -rf "$(APPDIR)/baybar.app"
 	@echo "removed the installed files; run \"bay uninstall\" first to undo the machine setup"
+
+# window captures the running window and reports where its rows of type sit, so
+# a change to the layout is measured rather than judged by eye. REGION is the
+# left, right, top and bottom of the area to measure.
+window:
+	swift tools/window.swift $(OUT) $(REGION)
 
 clean:
 	rm -rf $(BIN)
