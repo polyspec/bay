@@ -5,6 +5,19 @@ the day the change was made.
 
 ## 2026-09-10
 
+### Name every field in the link record with its unit
+
+The record set a count of bytes beside a number of seconds and named neither, so
+`sent=3893` and `response=0.055` could not be told apart by what they measure.
+Every field now carries its unit in its name: `sent_bytes`, `declared_bytes`,
+`framed_bytes`, `wire_bytes`, `connect_s`, `header_s`, `response_s`.
+
+Verification: a request over the link recorded `link sent_bytes=3893
+declared_bytes=- framed_bytes=3905 wire_bytes=4130 connect_s=0.036
+header_s=0.055 response_s=0.055`. `BAY_E2E=1 go test ./internal/stack
+-run 'TestAPeerRoute.*ActualRuntime'` and `make check` pass.
+
+
 ### Run the runtime tests on the engine the machine has
 
 Four runtime tests named `container` directly, so on a machine that runs Docker

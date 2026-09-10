@@ -140,21 +140,26 @@ func RenderNginxConfig(confDir string, c NginxConfig) error {
 	// proxy writes for that request is the only signal: nginx reports the
 	// request itself as complete either way, so that is not recorded.
 	//
-	// framed and wire are counted on other bases and are not the same measure as
-	// sent: framed counts the bytes read from the upstream with the chunked
-	// framing still on them, and wire counts those plus the response headers.
-	// They differ from sent on every whole response, so they are named for what
-	// they count rather than set beside it.
+	// Every field carries its unit in its name, because a reader cannot tell a
+	// count of bytes from a number of seconds otherwise.
+	//
+	// framed_bytes and wire_bytes are counted on other bases and are not the
+	// same measure as sent_bytes: framed_bytes counts the bytes read from the
+	// upstream with the chunked framing still on them, and wire_bytes counts
+	// those plus the response headers. They differ from sent_bytes on every
+	// whole response, so they are named for what they count rather than set
+	// beside it.
 	//
 	// It is written only when the machine asks for it, because it is a line for
 	// every such request.
 	if c.LinkLog {
 		b.WriteString("log_format bay_link " +
-			"'link sent=$body_bytes_sent declared=$upstream_http_content_length " +
+			"'link sent_bytes=$body_bytes_sent " +
+			"declared_bytes=$upstream_http_content_length " +
 			"status=$status upstream_status=$upstream_status upstream=$upstream_addr " +
-			"framed=$upstream_response_length wire=$upstream_bytes_received " +
-			"connect=$upstream_connect_time header=$upstream_header_time " +
-			"response=$upstream_response_time host=$host uri=$request_uri';\n\n")
+			"framed_bytes=$upstream_response_length wire_bytes=$upstream_bytes_received " +
+			"connect_s=$upstream_connect_time header_s=$upstream_header_time " +
+			"response_s=$upstream_response_time host=$host uri=$request_uri';\n\n")
 	}
 
 	// Plain HTTP redirects to HTTPS. The health endpoint answers on HTTP so no

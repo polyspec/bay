@@ -220,7 +220,7 @@ func TestAPeerRouteDeliversTheWholeBodyActualRuntime(t *testing.T) {
 		}
 	}
 	whole := strconv.Itoa(len(body))
-	if !strings.Contains(found, "declared="+whole) || !strings.Contains(found, "sent="+whole) {
+	if !strings.Contains(found, "declared_bytes="+whole) || !strings.Contains(found, "sent_bytes="+whole) {
 		t.Fatalf("a whole response was not recorded as whole:\n%s", found)
 	}
 }
@@ -251,10 +251,10 @@ func TestAPeerRouteRecordsAResponseCutShortActualRuntime(t *testing.T) {
 	if found == "" {
 		t.Fatalf("the request was not recorded:\n%s", l.records())
 	}
-	if !strings.Contains(found, "declared="+strconv.Itoa(declared)) {
+	if !strings.Contains(found, "declared_bytes="+strconv.Itoa(declared)) {
 		t.Errorf("the record does not state the length the far end declared: %s", found)
 	}
-	if !strings.Contains(found, "sent="+strconv.Itoa(sent)) {
+	if !strings.Contains(found, "sent_bytes="+strconv.Itoa(sent)) {
 		t.Errorf("the record does not state what reached the client: %s", found)
 	}
 	// The proxy answered 200, so the error it wrote for this request is what
