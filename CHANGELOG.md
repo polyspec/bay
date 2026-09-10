@@ -5,6 +5,35 @@ the day the change was made.
 
 ## 2026-09-10
 
+### Judge a lost body by two counts on the same basis
+
+The record set the length read from the far end beside the length sent to the
+client and those two differ on every whole response, because the first counts
+the chunked framing and the second does not. A whole response therefore read as
+a loss.
+
+It now records the length the far end declared, which is counted in body bytes
+as the length sent is, so the two differ exactly when bytes were lost. When the
+far end declares no length the declared length is empty and the error the proxy
+writes for that request is the only signal. The request's own completion is no
+longer recorded: nginx reports a response cut short as a complete request, so it
+said the opposite of what happened.
+
+Two runtime tests stand up both ends of a link, each running this program's own
+configuration. One asks for a body larger than the proxy's buffers and checks
+that the declared length and the length that arrived are the same number. The
+other stands up a far end that declares 100000 bytes and sends 5 every time, and
+checks that the record carries both numbers and that the proxy writes an error
+for the request. Neither depends on when anything is stopped.
+
+Verification: `BAY_E2E=1 go test ./internal/stack -run
+'TestAPeerRoute.*ActualRuntime'` passes. Against the machine's own peer, which
+declares no length, a whole response recorded `sent=3893 declared=-`. In the
+test that cuts a response short the record read `sent=5 declared=100000` beside
+`upstream prematurely closed connection` for the same request. `make check`
+passes.
+
+
 ### Say when the proxy did not take the link record
 
 The switch wrote the setting, drew itself on, and applied the configuration

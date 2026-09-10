@@ -8,9 +8,13 @@ is not built.
 
 A response that crosses the link is answered 200 whether or not the other
 machine finished sending it, so a body shorter than its own length arrives as a
-success. Settings holds a switch that records one line per such request with the
-length the other machine sent and the length that reached the client. It is off
-until it is turned on, because it writes a line for every request over the link.
+success. Settings holds a switch that records one line per such request. Two
+things in it report a loss. When the other machine declares a length, that
+length and the length that reached the client are both counted in body bytes and
+differ exactly when bytes were lost. When it declares none, the declared length
+is empty and the error the proxy writes for that request is the only signal:
+nginx reports the request itself as complete either way. The switch is off until
+it is turned on, because it writes a line for every request over the link.
 
 Two machines on one network, each running bay, reach each other's
 domains. Neither machine's network configuration changes: no router setting, no

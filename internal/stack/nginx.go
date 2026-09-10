@@ -132,17 +132,29 @@ func RenderNginxConfig(confDir string, c NginxConfig) error {
 	// body is complete and return status 200 with a truncated body.
 	b.WriteString("map $http_upgrade $connection_upgrade {\n    default upgrade;\n    ''      \"\";\n}\n\n")
 
-	// A request that crosses a peer's link is written to the proxy's output with
-	// the length the upstream sent and the length that reached the client. An
-	// upstream that ends a response early is still answered 200, so those two
-	// numbers are what reports the loss. It is written only when the machine
-	// asks for it, because it is a line for every such request.
+	// A request that crosses a peer's link is written to the proxy's output. An
+	// upstream that ends a response early is still answered 200, so the status
+	// does not report it. Two things do. When the far end declares a length,
+	// declared and sent are both counted in body bytes and differ exactly when
+	// bytes were lost. When it does not, declared is empty and the error the
+	// proxy writes for that request is the only signal: nginx reports the
+	// request itself as complete either way, so that is not recorded.
+	//
+	// framed and wire are counted on other bases and are not the same measure as
+	// sent: framed counts the bytes read from the upstream with the chunked
+	// framing still on them, and wire counts those plus the response headers.
+	// They differ from sent on every whole response, so they are named for what
+	// they count rather than set beside it.
+	//
+	// It is written only when the machine asks for it, because it is a line for
+	// every such request.
 	if c.LinkLog {
 		b.WriteString("log_format bay_link " +
-			"'link $status host=$host uri=$request_uri upstream=$upstream_addr " +
-			"declared=$upstream_response_length received=$upstream_bytes_received " +
-			"sent=$body_bytes_sent connect=$upstream_connect_time " +
-			"header=$upstream_header_time response=$upstream_response_time';\n\n")
+			"'link sent=$body_bytes_sent declared=$upstream_http_content_length " +
+			"status=$status upstream_status=$upstream_status upstream=$upstream_addr " +
+			"framed=$upstream_response_length wire=$upstream_bytes_received " +
+			"connect=$upstream_connect_time header=$upstream_header_time " +
+			"response=$upstream_response_time host=$host uri=$request_uri';\n\n")
 	}
 
 	// Plain HTTP redirects to HTTPS. The health endpoint answers on HTTP so no
