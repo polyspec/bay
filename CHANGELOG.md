@@ -5,6 +5,29 @@ the day the change was made.
 
 ## 2026-09-10
 
+### Report a missing proxy on a machine that only answers a peer's domains
+
+The screen reported a proxy that had gone only when this machine's own
+containers were running and holding routes. A machine with an approved peer and
+no container of its own answers that peer's domains through the same proxy, and
+when the proxy went it said nothing at all: the dashboard read "Nothing is
+running" while two names went unanswered.
+
+What a machine answers is now counted as its own routed domains plus the domains
+its approved peers hold. A proxy that is not running or not answering while
+there is anything to answer is reported, with the action that starts it again.
+
+The banner said the containers were up and named what could not be reached
+routes. Neither held on a machine serving only a peer's domains, where no
+container of its own is running and the names belong to the peer. It states how
+many names cannot be reached and that nothing else is changed.
+
+Verification: the proxy was removed and the window showed the fault: a red
+verdict reading `연결 불가 · 서비스 0개 실행 중 · 프록시가 응답하지 않음` over a
+banner offering `진단 실행` and `프록시 다시 시작`. Before the change the same
+machine showed no fault. `make check` passes.
+
+
 ### Give every value in the link record its unit
 
 The record set a count of bytes beside a number of seconds and marked neither,

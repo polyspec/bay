@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -187,4 +188,62 @@ func sectionTitle(sec section) string {
 		}
 	}
 	return ""
+}
+
+// A machine with an approved peer answers that peer's domains through its
+// proxy, with or without a container of its own. When the proxy is gone those
+// domains are unreachable, so the screen reports it and offers to start the
+// proxy again. Counting only the machine's own routes left that machine
+// reporting nothing at all.
+func TestAMissingProxyIsReportedWhenOnlyAPeersDomainsAreServed(t *testing.T) {
+	snap := stack.Snapshot{}
+	snap.Machine.Peering = true
+	snap.Machine.Peers = []stack.Peer{{
+		Name: "max", Address: "192.168.0.59:8443", Fingerprint: "aaaa1111",
+		Domains: []string{"polyspec.test", "registry.soksak.test"},
+	}}
+	snap.Machine.Proxies = []stack.ProxyStatus{{
+		Name: "bay-edge", Engine: "docker", State: "absent",
+	}}
+
+	if !proxyDown(snap) {
+		t.Fatal("a machine whose proxy is gone reports nothing while a peer's domains go unanswered")
+	}
+	p := &panel{}
+	dashboardView(p, snap, false)
+	if p.Banner == nil {
+		t.Fatal("no banner reports the missing proxy")
+	}
+	var restart bool
+	for _, b := range p.Banner.Buttons {
+		if b.ID == "proxy-restart" {
+			restart = true
+		}
+	}
+	if !restart {
+		t.Errorf("the banner offers no way to start the proxy again: %+v", p.Banner.Buttons)
+	}
+	// No container of this machine is running, so the banner does not say any
+	// are, and what cannot be reached is a name rather than a route: these are
+	// a peer's domains.
+	if strings.Contains(p.Banner.Text, "containers are up") {
+		t.Errorf("the banner says containers are running while none are: %s", p.Banner.Text)
+	}
+	if !strings.Contains(p.Banner.Text, "2 names") {
+		t.Errorf("the banner does not state how many names cannot be reached: %s", p.Banner.Text)
+	}
+}
+
+// A proxy that is running and answering is not reported as a fault, even with
+// no route of its own, because it is what answers the peer's domains.
+func TestARunningProxyWithNoRouteIsNotAFault(t *testing.T) {
+	snap := stack.Snapshot{}
+	snap.Machine.Peers = []stack.Peer{{Name: "max", Domains: []string{"polyspec.test"}}}
+	snap.Machine.Proxies = []stack.ProxyStatus{{
+		Name: "bay-edge", Engine: "docker", State: "running",
+		Generation: "1a1f4ef39c48b311",
+	}}
+	if proxyDown(snap) {
+		t.Error("a running proxy with no route of its own is reported as a fault")
+	}
 }

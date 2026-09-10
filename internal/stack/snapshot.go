@@ -329,20 +329,27 @@ func (m MachineStatus) ServingRoutes() int {
 	return n
 }
 
-// ProxiesServing reports whether every proxy that has routes is running and
-// responding. It returns false when any such proxy is not running.
+// ProxiesServing reports whether every engine's proxy is running and answering.
+// A proxy with no route of its own still answers the domains approved peers
+// hold, so having no route is not a reason to leave it out.
 func (m MachineStatus) ProxiesServing() bool {
-	serving := false
 	for _, p := range m.Proxies {
-		if p.Routes == 0 {
-			continue
-		}
 		if p.State != "running" || p.Generation == "" {
 			return false
 		}
-		serving = true
 	}
-	return serving
+	return len(m.Proxies) > 0
+}
+
+// Serves is the number of names this machine answers: the domains its own
+// containers hold and the domains approved peers hold. A machine that answers
+// none of them needs no proxy.
+func (m MachineStatus) Serves() int {
+	n := m.ServingRoutes()
+	for _, p := range m.Peers {
+		n += len(p.Domains)
+	}
+	return n
 }
 
 // ProxyAddrs returns the addresses of the running proxies.

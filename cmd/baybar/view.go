@@ -118,17 +118,17 @@ func machineLine(snap stack.Snapshot) (string, bool) {
 	if !snap.Machine.ProxiesServing() {
 		return text.T("Nothing is running"), false
 	}
-	n := snap.Machine.ServingRoutes()
+	n := snap.Machine.Serves()
 	return text.P("Serving %d domain", "Serving %d domains", n, n), false
 }
 
 // proxyDown reports that containers are up but the proxy is not serving their
 // routes, so every address answers with nothing.
 func proxyDown(snap stack.Snapshot) bool {
-	if liveServices(snap) == 0 {
-		return false
-	}
-	if snap.Machine.ServingRoutes() == 0 {
+	// A machine with an approved peer answers that peer's domains through its
+	// proxy even with no container of its own, so what it answers is counted
+	// rather than what it runs.
+	if snap.Machine.Serves() == 0 {
 		return false
 	}
 	return !snap.Machine.ProxiesServing()
@@ -434,14 +434,14 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 			sub = text.T("%s on %s", sub, ip)
 		}
 		p.Verdict = &verdict{Dot: "bad", Headline: text.T("Nothing is reachable"), Subline: sub}
-		routes := snap.Machine.ServingRoutes()
+		routes := snap.Machine.Serves()
 		p.Banner = &banner{
 			Kind:  "bad",
 			Title: text.T("The proxy is not running"),
-			Text: text.P("The containers are up, so no work is lost. The proxy is created by "+
-				"any command that produces routes; restarting it re-publishes all %d route.",
-				"The containers are up, so no work is lost. The proxy is created by "+
-					"any command that produces routes; restarting it re-publishes all %d routes.",
+			Text: text.P("The %d name this machine answers cannot be reached until the "+
+				"proxy runs again. Nothing else is changed.",
+				"The %d names this machine answers cannot be reached until the "+
+					"proxy runs again. Nothing else is changed.",
 				routes, routes),
 			Buttons: []button{
 				quiet("doctor", text.T("Run doctor"), busy),
@@ -464,7 +464,7 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 		if ip != "" {
 			parts = append(parts, text.T("proxy %s", ip))
 		}
-		routes := snap.Machine.ServingRoutes()
+		routes := snap.Machine.Serves()
 		p.Verdict = &verdict{
 			Dot:      dotFor(!needsSetup),
 			Headline: text.P("Serving %d domain", "Serving %d domains", routes, routes),
