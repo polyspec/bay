@@ -206,3 +206,26 @@ func TestTheLinkRecordIsWrittenOnlyWhenAskedFor(t *testing.T) {
 		}
 	}
 }
+
+// The health endpoint answers on one port and every name is served on another,
+// so a proxy that answers the first says nothing about the second. Asking the
+// port that serves names is what reports a machine whose proxy is running and
+// unreachable. With no proxy at all it names that rather than failing to dial.
+func TestReachabilityIsAskedOfThePortThatServesNames(t *testing.T) {
+	dir := t.TempDir()
+	fixture := filepath.Join(dir, "container")
+	// An engine that reports no container at all.
+	if err := os.WriteFile(fixture, []byte("#!/bin/sh\nprintf '[]'\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("CONTAINER_BIN", fixture)
+	t.Setenv("DOCKER_BIN", filepath.Join(dir, "no-docker"))
+
+	err := proxyReachable(AppleEngine)
+	if err == nil {
+		t.Fatal("a proxy that is not running was reported as reachable")
+	}
+	if !strings.Contains(err.Error(), ProxyName) {
+		t.Errorf("the error does not name the proxy: %v", err)
+	}
+}

@@ -5,6 +5,28 @@ the day the change was made.
 
 ## 2026-09-10
 
+### Confirm the proxy answers on the port that serves names
+
+A command that produced routes returned once the proxy answered its health
+endpoint, which is on port 80. Every name is served on 443, and after the proxy
+container was replaced the engine's forwarding for 443 was left reset on
+connection while 80 and the peer link answered. The command reported success and
+no name could be reached.
+
+The port that serves names is opened from where the host reaches the proxy, and
+the handshake is completed. When the container is running and that port does not
+answer, the container is started again, which is what rebuilds the engine's
+forwarding, and the port is asked again. A command returns only after a name can
+be reached.
+
+Verification: the proxy container was removed and `bay sync` run.
+Before the change the same sequence left `https://127.0.0.1/` resetting the
+connection while `http://127.0.0.1/__bay/health` and the peer link on
+8443 both answered, and only `docker restart` recovered it. After the change the
+site answered 200 with 11250 bytes immediately after the command returned.
+`make check` passes.
+
+
 ### Report a missing proxy on a machine that only answers a peer's domains
 
 The screen reported a proxy that had gone only when this machine's own

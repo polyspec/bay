@@ -2,6 +2,7 @@ package stack
 
 import (
 	"crypto/sha256"
+	"crypto/tls"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -122,6 +123,9 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 		res.Action = action
 		// Return only after the proxy serves the new configuration.
 		if err := WaitForGeneration(engine, conf.Generation, 60*time.Second); err != nil {
+			return res, err
+		}
+		if err := waitReachable(engine, 30*time.Second); err != nil {
 			return res, err
 		}
 	}
@@ -285,6 +289,52 @@ func routeGeneration(routes []Route) string {
 		fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s\n", r.Domain, r.Scheme, r.Backend, r.ipv4, r.started)
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
+}
+
+// waitReachable confirms the port the proxy serves names on answers at the
+// address the host reaches it by. The health endpoint answers on another port,
+// so it says nothing about this one: a machine has been left with the proxy
+// running and answering there while the port serving every name was reset on
+// connection. When the container answers and the published port does not, the
+// container is started again, which is what rebuilds the engine's forwarding.
+func waitReachable(engine string, timeout time.Duration) error {
+	err := proxyReachable(engine)
+	if err == nil {
+		return nil
+	}
+	if _, restartErr := runEngine(engine, "restart", ProxyName); restartErr != nil {
+		return fmt.Errorf("%s serves no name at its published port and did not restart: %w", ProxyName, err)
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		if err = proxyReachable(engine); err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("%s serves no name at its published port after a restart: %w", ProxyName, err)
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
+// proxyReachable opens the port the proxy serves names on, from where the host
+// reaches it, and completes the handshake. The certificate is not checked: what
+// is being asked is whether the port answers at all.
+func proxyReachable(engine string) error {
+	in, found, err := lookupOn(engine, ProxyName)
+	if err != nil {
+		return err
+	}
+	addr := ProxyHostAddr(engine, in)
+	if !found || in.State != "running" || addr == "" {
+		return fmt.Errorf("%s is not running", ProxyName)
+	}
+	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 3 * time.Second}, "tcp",
+		net.JoinHostPort(addr, "443"), &tls.Config{InsecureSkipVerify: true})
+	if err != nil {
+		return err
+	}
+	return conn.Close()
 }
 
 // WaitForGeneration polls the proxy's health endpoint until it reports the
