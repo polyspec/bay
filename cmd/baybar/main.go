@@ -444,6 +444,24 @@ func (a *app) run(rt *stack.Runtime, parts []string) error {
 	if parts[0] == "setup" {
 		return rt.EnsureInstalled()
 	}
+	if parts[0] == "toggle-link-log" {
+		settings, err := rt.Machine.Settings()
+		if err != nil {
+			return err
+		}
+		if err := rt.Machine.SetLinkLog(!settings.LinkLog); err != nil {
+			return err
+		}
+		if _, err := stack.SyncProxy(rt.Machine); err != nil {
+			return err
+		}
+		if settings.LinkLog {
+			rt.Progress(text.T("the link record is off"))
+		} else {
+			rt.Progress(text.T("the link record is on"))
+		}
+		return nil
+	}
 	if parts[0] == "peer-open" || parts[0] == "peer-close" {
 		if err := rt.Machine.SetPeering(parts[0] == "peer-open"); err != nil {
 			return err

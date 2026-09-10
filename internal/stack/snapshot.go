@@ -48,7 +48,9 @@ type MachineStatus struct {
 	// machine that is ready.
 	Pending []string `json:"pending"`
 	// Peering says the link is open, and Link is where it answers.
-	Peering bool   `json:"peering"`
+	Peering bool `json:"peering"`
+	// LinkLog says the proxy records what crosses a peer's link.
+	LinkLog bool   `json:"linkLog"`
 	Link    string `json:"link,omitempty"`
 	// Peers are the machines whose domains this one reaches.
 	Peers []Peer `json:"peers,omitempty"`
@@ -170,6 +172,7 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 	snap.Machine = MachineStatus{
 		StateDir:   m.Dir,
 		Peering:    settings.Peering,
+		LinkLog:    settings.LinkLog,
 		Link:       link,
 		Peers:      peers,
 		Domains:    domains,

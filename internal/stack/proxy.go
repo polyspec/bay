@@ -90,6 +90,7 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 			Routes:      own,
 			DefaultCert: DefaultCertName,
 			PeerRoutes:  peerRoutes,
+			LinkLog:     settings.LinkLog,
 		}
 		// The resolver is used only by a route's name fallback, so a
 		// configuration with no route needs none.

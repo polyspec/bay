@@ -43,6 +43,9 @@ const PeerPath = "/__bay/peer"
 // NginxConfig is everything the proxy configuration is written from.
 type NginxConfig struct {
 	Routes []Route
+	// LinkLog records one line per request that crosses a peer's link, with the
+	// length the upstream sent and the length that reached the client.
+	LinkLog bool
 	// Resolver is the container network's DNS address, used by the fallback
 	// that reaches a backend by name.
 	Resolver string
@@ -129,6 +132,19 @@ func RenderNginxConfig(confDir string, c NginxConfig) error {
 	// body is complete and return status 200 with a truncated body.
 	b.WriteString("map $http_upgrade $connection_upgrade {\n    default upgrade;\n    ''      \"\";\n}\n\n")
 
+	// A request that crosses a peer's link is written to the proxy's output with
+	// the length the upstream sent and the length that reached the client. An
+	// upstream that ends a response early is still answered 200, so those two
+	// numbers are what reports the loss. It is written only when the machine
+	// asks for it, because it is a line for every such request.
+	if c.LinkLog {
+		b.WriteString("log_format bay_link " +
+			"'link $status host=$host uri=$request_uri upstream=$upstream_addr " +
+			"declared=$upstream_response_length received=$upstream_bytes_received " +
+			"sent=$body_bytes_sent connect=$upstream_connect_time " +
+			"header=$upstream_header_time response=$upstream_response_time';\n\n")
+	}
+
 	// Plain HTTP redirects to HTTPS. The health endpoint answers on HTTP so no
 	// certificate is required.
 	fmt.Fprintf(&b, "server {\n    listen 80 default_server;\n")
@@ -208,6 +224,9 @@ func writePeerLink(b *strings.Builder, c NginxConfig) {
 		fmt.Fprintf(b, "    ssl_client_certificate %s;\n", c.PeerAuthorities)
 		b.WriteString("    ssl_verify_client on;\n")
 		b.WriteString("    client_max_body_size 0;\n")
+		if c.LinkLog {
+			b.WriteString("    access_log /dev/stdout bay_link;\n")
+		}
 		b.WriteString("    location / {\n")
 		fmt.Fprintf(b, "        set $backend \"%s://%s\";\n", r.Scheme, addressOrName(r))
 		b.WriteString(proxyPass("$backend", addressPath(r)))
@@ -225,6 +244,9 @@ func writePeerRoutes(b *strings.Builder, c NginxConfig) {
 		fmt.Fprintf(b, "    ssl_certificate     /etc/nginx/certs/%s.crt;\n", r.Domain)
 		fmt.Fprintf(b, "    ssl_certificate_key /etc/nginx/certs/%s.key;\n", r.Domain)
 		b.WriteString("    client_max_body_size 0;\n")
+		if c.LinkLog {
+			b.WriteString("    access_log /dev/stdout bay_link;\n")
+		}
 		b.WriteString("    location / {\n")
 		fmt.Fprintf(b, "        add_header %s peer always;\n", RouteHeader)
 		fmt.Fprintf(b, "        proxy_pass https://%s;\n", r.Address)

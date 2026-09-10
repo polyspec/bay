@@ -828,6 +828,10 @@ func settingsView(p *panel, snap stack.Snapshot, busy bool) {
 				Selected: i18n.IndexOf(languageChoice())}},
 			{Text: text.T("Window"), Kind: "kv", Detail: text.T("Show the window at launch"),
 				Toggle: "toggle-show-at-launch", On: showAtLaunch()},
+			{Text: text.T("Link record"), Kind: "kv",
+				Detail: text.T("Record what crosses a peer's link"),
+				Hint:   text.T("one line per request, with what the other machine sent and what arrived"),
+				Toggle: "toggle-link-log", On: snap.Machine.LinkLog},
 		},
 	})
 

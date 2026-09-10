@@ -6,6 +6,12 @@ approval. On a machine running both engines the link is refused, because rule 8
 of the architecture puts it on a host process that reaches both and that process
 is not built.
 
+A response that crosses the link is answered 200 whether or not the other
+machine finished sending it, so a body shorter than its own length arrives as a
+success. Settings holds a switch that records one line per such request with the
+length the other machine sent and the length that reached the client. It is off
+until it is turned on, because it writes a line for every request over the link.
+
 Two machines on one network, each running bay, reach each other's
 domains. Neither machine's network configuration changes: no router setting, no
 DNS server on the network, no hosts file, no privileged port.

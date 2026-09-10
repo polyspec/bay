@@ -5,6 +5,33 @@ the day the change was made.
 
 ## 2026-09-10
 
+### Record what crosses a peer's link, when the machine asks
+
+A response cut short by the other machine is answered 200, so nothing in the
+proxy's output says how much of it reached the client. The cause of one such
+response could not be established: the same request arrived whole 60 times in a
+row after a change and short 1 time in 20 before it, and the rate moved between
+measurements, so the change is not proven to be the cause.
+
+Settings holds a switch that records one line per request over the link with the
+length the other machine sent, the number of bytes received from it, the length
+that reached the client, and the time to connect, to the first header and to the
+end of the response. A short send is then a number in the record rather than a
+report that something felt wrong. It is off until it is turned on, because it
+writes a line for every request over the link.
+
+`internal/stack/peer_body_runtime_e2e_test.go` stands up both ends of a link,
+each running this program's own configuration, and asks for a body larger than
+the proxy's buffers five times. It does not reproduce the fault, so it guards
+the behaviour and does not explain it.
+
+Verification: with the switch on, a request over the link recorded
+`link 200 host=polyspec.test declared=327568 received=327800 sent=327197`, where
+the difference between what was declared and what was sent is the chunk framing
+of a whole response. `make check` passes and the runtime test passes with
+`BAY_E2E=1`.
+
+
 ### Do not reuse a TLS session on a route to a peer
 
 A route to a peer presents a client certificate. Reusing a TLS session on such a

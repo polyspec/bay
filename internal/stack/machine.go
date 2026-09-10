@@ -79,6 +79,12 @@ type Settings struct {
 	// turned on, because the link is what another machine on the network
 	// reaches this one through.
 	Peering bool `json:"peering,omitempty"`
+	// LinkLog says the proxy records one line per request that crosses a peer's
+	// link, with the length the upstream sent and the length that reached the
+	// client. A response cut short is answered 200, so those two numbers are
+	// what reports it. It is off until it is turned on, because it writes a
+	// line for every such request.
+	LinkLog bool `json:"linkLog,omitempty"`
 }
 
 // DefaultDomain is the domain a project uses when none is set. RFC 6761
@@ -184,6 +190,16 @@ func (m *Machine) RemoveDomain(domain string) error {
 // reason, and a setting written first would leave the machine unable to write
 // any configuration at all. Turning it off is never refused, so a machine that
 // acquired a second engine while the link was open can still close it.
+// SetLinkLog turns the record of what crosses a peer's link on or off.
+func (m *Machine) SetLinkLog(on bool) error {
+	s, err := m.Settings()
+	if err != nil {
+		return err
+	}
+	s.LinkLog = on
+	return m.SaveSettings(s)
+}
+
 func (m *Machine) SetPeering(on bool) error {
 	if on {
 		if err := peerLinkServable(); err != nil {

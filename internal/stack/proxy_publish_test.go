@@ -166,3 +166,43 @@ func TestAPeerRouteDoesNotReuseItsTLSSession(t *testing.T) {
 		t.Errorf("a peer route reuses its TLS session, which truncates a response:\n%s", body)
 	}
 }
+
+// A response cut short is answered 200, so the record of what crossed a peer's
+// link is what reports it: the length the upstream sent beside the length that
+// reached the client. It is written only when the machine asks for it.
+func TestTheLinkRecordIsWrittenOnlyWhenAskedFor(t *testing.T) {
+	conf := NginxConfig{
+		DefaultCert: DefaultCertName,
+		Generation:  "g",
+		PeerRoutes: []PeerRoute{{
+			Domain: "peer.test", Address: "192.168.0.59:8443", Authority: "/etc/nginx/peers/ca.crt",
+		}},
+		ClientCert: "/etc/nginx/peers/client.crt",
+		ClientKey:  "/etc/nginx/peers/client.key",
+	}
+
+	off := t.TempDir()
+	if err := RenderNginxConfig(off, conf); err != nil {
+		t.Fatal(err)
+	}
+	if body := readConf(t, off); strings.Contains(body, "bay_link") {
+		t.Error("the link record is written when the machine did not ask for it")
+	}
+
+	conf.LinkLog = true
+	on := t.TempDir()
+	if err := RenderNginxConfig(on, conf); err != nil {
+		t.Fatal(err)
+	}
+	body := readConf(t, on)
+	for _, want := range []string{
+		"log_format bay_link",
+		"$upstream_response_length",
+		"$body_bytes_sent",
+		"access_log /dev/stdout bay_link;",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the link record does not carry %s:\n%s", want, body)
+		}
+	}
+}
