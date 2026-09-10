@@ -4,15 +4,14 @@
 
 ## 2026-09-10
 
-### 링크 기록의 모든 항목 이름에 단위를 넣는다
+### 링크 기록의 모든 값에 단위를 붙인다
 
 기록이 바이트 수와 초를 나란히 두고 어느 쪽도 단위를 밝히지 않았다. 그래서
-`sent=3893`과 `response=0.055`를 무엇을 재는 값인지로 구분할 수 없었다. 이제 모든
-항목이 이름에 단위를 지닌다. `sent_bytes`, `declared_bytes`, `framed_bytes`,
-`wire_bytes`, `connect_s`, `header_s`, `response_s`이다.
+`sent=3893`과 `response=0.055`를 무엇을 재는 값인지로 구분할 수 없었다. 이제 각
+값이 단위를 지닌다. 바이트 수 뒤에는 `bytes`가 붙고 초는 `s`로 끝난다.
 
-검증: 링크를 지난 요청이 `link sent_bytes=3893 declared_bytes=- framed_bytes=3905
-wire_bytes=4130 connect_s=0.036 header_s=0.055 response_s=0.055`를 기록했다.
+검증: 링크를 지난 요청이 `link sent=11250 bytes declared=- bytes framed=11270 bytes
+wire=11502 bytes connect=0.023s header=0.040s response=0.040s`를 기록했다.
 `BAY_E2E=1 go test ./internal/stack -run 'TestAPeerRoute.*ActualRuntime'`와
 `make check` 통과.
 

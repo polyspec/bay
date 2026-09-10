@@ -140,8 +140,9 @@ func RenderNginxConfig(confDir string, c NginxConfig) error {
 	// proxy writes for that request is the only signal: nginx reports the
 	// request itself as complete either way, so that is not recorded.
 	//
-	// Every field carries its unit in its name, because a reader cannot tell a
-	// count of bytes from a number of seconds otherwise.
+	// Every value carries its unit, because a reader cannot tell a count of
+	// bytes from a number of seconds otherwise. A far end that declares no
+	// length leaves declared empty, which nginx writes as a dash.
 	//
 	// framed_bytes and wire_bytes are counted on other bases and are not the
 	// same measure as sent_bytes: framed_bytes counts the bytes read from the
@@ -154,12 +155,13 @@ func RenderNginxConfig(confDir string, c NginxConfig) error {
 	// every such request.
 	if c.LinkLog {
 		b.WriteString("log_format bay_link " +
-			"'link sent_bytes=$body_bytes_sent " +
-			"declared_bytes=$upstream_http_content_length " +
+			"'link sent=$body_bytes_sent bytes " +
+			"declared=$upstream_http_content_length bytes " +
 			"status=$status upstream_status=$upstream_status upstream=$upstream_addr " +
-			"framed_bytes=$upstream_response_length wire_bytes=$upstream_bytes_received " +
-			"connect_s=$upstream_connect_time header_s=$upstream_header_time " +
-			"response_s=$upstream_response_time host=$host uri=$request_uri';\n\n")
+			"framed=$upstream_response_length bytes " +
+			"wire=$upstream_bytes_received bytes " +
+			"connect=${upstream_connect_time}s header=${upstream_header_time}s " +
+			"response=${upstream_response_time}s host=$host uri=$request_uri';\n\n")
 	}
 
 	// Plain HTTP redirects to HTTPS. The health endpoint answers on HTTP so no

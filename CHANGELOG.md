@@ -5,16 +5,16 @@ the day the change was made.
 
 ## 2026-09-10
 
-### Name every field in the link record with its unit
+### Give every value in the link record its unit
 
-The record set a count of bytes beside a number of seconds and named neither, so
-`sent=3893` and `response=0.055` could not be told apart by what they measure.
-Every field now carries its unit in its name: `sent_bytes`, `declared_bytes`,
-`framed_bytes`, `wire_bytes`, `connect_s`, `header_s`, `response_s`.
+The record set a count of bytes beside a number of seconds and marked neither,
+so `sent=3893` and `response=0.055` could not be told apart by what they
+measure. Each value now carries its unit: a count of bytes is followed by
+`bytes` and a number of seconds ends in `s`.
 
-Verification: a request over the link recorded `link sent_bytes=3893
-declared_bytes=- framed_bytes=3905 wire_bytes=4130 connect_s=0.036
-header_s=0.055 response_s=0.055`. `BAY_E2E=1 go test ./internal/stack
+Verification: a request over the link recorded `link sent=11250 bytes
+declared=- bytes framed=11270 bytes wire=11502 bytes connect=0.023s
+header=0.040s response=0.040s`. `BAY_E2E=1 go test ./internal/stack
 -run 'TestAPeerRoute.*ActualRuntime'` and `make check` pass.
 
 
