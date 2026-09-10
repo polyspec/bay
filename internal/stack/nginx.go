@@ -233,6 +233,10 @@ func writePeerRoutes(b *strings.Builder, c NginxConfig) {
 		fmt.Fprintf(b, "        proxy_ssl_certificate_key       %s;\n", c.ClientKey)
 		fmt.Fprintf(b, "        proxy_ssl_trusted_certificate   %s;\n", r.Authority)
 		b.WriteString("        proxy_ssl_verify        on;\n")
+		// A connection that presents a client certificate is not resumed. The
+		// peer ends the response before the body is complete when the session
+		// is reused, and answers 200 with what it sent.
+		b.WriteString("        proxy_ssl_session_reuse off;\n")
 		b.WriteString("        proxy_ssl_server_name   on;\n")
 		fmt.Fprintf(b, "        proxy_ssl_name          %s;\n", r.Domain)
 		b.WriteString("        proxy_http_version 1.1;\n")

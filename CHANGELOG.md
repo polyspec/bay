@@ -3,7 +3,25 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
-## 2026-09-09
+## 2026-09-10
+
+### Do not reuse a TLS session on a route to a peer
+
+A route to a peer presents a client certificate. Reusing a TLS session on such a
+connection made the peer end the response before the body was complete, and the
+proxy answered 200 with what it had received. A page loaded its markup and none
+of its scripts.
+
+An earlier change removed `Connection: close` from the same request and the
+truncation stopped for as long as it was measured. It returned. That header was
+sent in error and its removal stands, but it was not the cause.
+
+Verification: measured against the peer's link. With the session reused the same
+327197-byte file arrived as 163431, 179799 and 163447 bytes on successive tries,
+answered 200 each time, while a request made directly to the peer arrived whole
+on every try. With the session not reused it arrived whole five times in a row
+and the proxy logged no upstream error. `make check` passes.
+
 
 ### Keep the tool that measures the window
 

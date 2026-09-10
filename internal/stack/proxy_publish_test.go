@@ -139,3 +139,30 @@ func TestAnOrdinaryRequestCarriesNoConnectionClose(t *testing.T) {
 		t.Error("an upgrade request no longer carries Connection: upgrade")
 	}
 }
+
+// A route to a peer presents a client certificate. Reusing a TLS session on
+// such a connection made the peer end the response before the body was
+// complete: the same 327197-byte file arrived whole on every try with the
+// session reused off and truncated at 163431, 179799 and 163447 bytes with it
+// on, answered 200 each time.
+func TestAPeerRouteDoesNotReuseItsTLSSession(t *testing.T) {
+	dir := t.TempDir()
+	conf := NginxConfig{
+		Routes:      []Route{{Domain: "a.test", Address: "10.0.0.2:80", Backend: "c.container.test:80", Scheme: "http"}},
+		Resolver:    "10.0.0.1",
+		DefaultCert: DefaultCertName,
+		PeerRoutes: []PeerRoute{{
+			Domain: "peer.test", Address: "192.168.0.59:8443", Authority: "/etc/nginx/peers/ca.crt",
+		}},
+		ClientCert: "/etc/nginx/peers/client.crt",
+		ClientKey:  "/etc/nginx/peers/client.key",
+		Generation: "g",
+	}
+	if err := RenderNginxConfig(dir, conf); err != nil {
+		t.Fatal(err)
+	}
+	body := readConf(t, dir)
+	if !strings.Contains(body, "proxy_ssl_session_reuse off;") {
+		t.Errorf("a peer route reuses its TLS session, which truncates a response:\n%s", body)
+	}
+}
