@@ -5,6 +5,21 @@ the day the change was made.
 
 ## 2026-09-10
 
+### Answer the link record switch without redrawing the screen
+
+Turning the record on ran as an action: the screen was drawn once with every
+button disabled, the proxy configuration was written and re-read, and the screen
+was drawn again from a fresh reading of the machine. Nothing on it had changed
+but the switch.
+
+The switch now answers on the screen at once and the configuration is written
+and re-read behind it, so nothing else moves. The proxy reads the record from
+its configuration and there is no way to change that without re-reading it, so
+that part remains.
+
+Verification: `make check` passes.
+
+
 ### Record what crosses a peer's link, when the machine asks
 
 A response cut short by the other machine is answered 200, so nothing in the

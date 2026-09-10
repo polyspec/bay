@@ -306,6 +306,27 @@ func (a *app) handle(id string) {
 		a.refreshWindowOnly()
 		return
 	}
+	if parts[0] == "toggle-link-log" {
+		settings, err := a.rt.Machine.Settings()
+		if err != nil {
+			a.report("error", "%s", err)
+			return
+		}
+		on := !settings.LinkLog
+		if err := a.rt.Machine.SetLinkLog(on); err != nil {
+			a.report("error", "%s", err)
+			return
+		}
+		// The switch answers on the screen at once. The proxy reads the record
+		// from its configuration, which is written and re-read behind it, so
+		// nothing else on the screen moves.
+		a.mu.Lock()
+		a.snap.Machine.LinkLog = on
+		a.mu.Unlock()
+		a.refreshWindowOnly()
+		go stack.SyncProxy(a.rt.Machine)
+		return
+	}
 	// Anything that asks a question first returns here through the dialog, so
 	// these never fall through to the action runner.
 	if a.ask(parts) {
@@ -443,24 +464,6 @@ func (a *app) handleSheet(id, value string, option bool) {
 func (a *app) run(rt *stack.Runtime, parts []string) error {
 	if parts[0] == "setup" {
 		return rt.EnsureInstalled()
-	}
-	if parts[0] == "toggle-link-log" {
-		settings, err := rt.Machine.Settings()
-		if err != nil {
-			return err
-		}
-		if err := rt.Machine.SetLinkLog(!settings.LinkLog); err != nil {
-			return err
-		}
-		if _, err := stack.SyncProxy(rt.Machine); err != nil {
-			return err
-		}
-		if settings.LinkLog {
-			rt.Progress(text.T("the link record is off"))
-		} else {
-			rt.Progress(text.T("the link record is on"))
-		}
-		return nil
 	}
 	if parts[0] == "peer-open" || parts[0] == "peer-close" {
 		if err := rt.Machine.SetPeering(parts[0] == "peer-open"); err != nil {
