@@ -5,6 +5,19 @@ the day the change was made.
 
 ## 2026-09-10
 
+### Run the runtime tests on the engine the machine has
+
+Four runtime tests named `container` directly, so on a machine that runs Docker
+and not Apple `container` they failed with the command not found rather than
+running or skipping. They ask the engine the services are created on, as the
+rest of the program does.
+
+Verification: `BAY_E2E=1 go test ./internal/stack -run ActualRuntime`
+passes on a machine with Docker and without Apple `container`, where before
+`TestPeerConfigurationIsAcceptedByNginxActualRuntime` failed with
+`exec: "container": executable file not found in $PATH`. `make check` passes.
+
+
 ### Judge a lost body by two counts on the same basis
 
 The record set the length read from the far end beside the length sent to the

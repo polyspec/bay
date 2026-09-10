@@ -92,7 +92,7 @@ func (p *probe) render(t *testing.T, ip, generation string) {
 // configuration. This is what SyncProxy and WaitForGeneration do.
 func (p *probe) reload(t *testing.T, generation string) {
 	t.Helper()
-	if out, err := exec.Command("container", "exec", probeEdge,
+	if out, err := exec.Command(engineBin(ServiceEngine()), "exec", probeEdge,
 		"nginx", "-s", "reload").CombinedOutput(); err != nil {
 		t.Fatalf("reloading the edge: %v\n%s", err, out)
 	}
@@ -211,14 +211,14 @@ func startProbeBackend(t *testing.T, body string) {
 	t.Helper()
 	args := append([]string{"run", "--detach", "--name", probeBackend,
 		"--network", ProxyNetwork, e2eImage}, e2eServer(body)...)
-	if out, err := exec.Command("container", args...).CombinedOutput(); err != nil {
+	if out, err := exec.Command(engineBin(ServiceEngine()), args...).CombinedOutput(); err != nil {
 		t.Fatalf("starting the backend: %v\n%s", err, out)
 	}
 }
 
 func startProbeEdge(t *testing.T, confDir, certDir string) {
 	t.Helper()
-	out, err := exec.Command("container", "run", "--detach", "--name", probeEdge,
+	out, err := exec.Command(engineBin(ServiceEngine()), "run", "--detach", "--name", probeEdge,
 		"--network", ProxyNetwork,
 		"--volume", confDir+":/etc/nginx/conf.d:ro",
 		"--volume", certDir+":/etc/nginx/certs:ro",

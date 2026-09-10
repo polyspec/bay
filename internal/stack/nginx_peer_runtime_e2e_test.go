@@ -67,7 +67,7 @@ func TestPeerConfigurationIsAcceptedByNginxActualRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := exec.Command("container", "run", "--rm",
+	out, err := exec.Command(engineBin(ServiceEngine()), "run", "--rm",
 		"--volume", confDir+":/etc/nginx/conf.d:ro",
 		"--volume", certDir+":/etc/nginx/certs:ro",
 		"--volume", peerDir+":/etc/nginx/peers:ro",

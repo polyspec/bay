@@ -207,10 +207,10 @@ func waitForBody(t *testing.T, c *http.Client, url, want string) {
 // about routing fails and the reason is not obvious from the response alone.
 func dumpProxy(t *testing.T) {
 	t.Helper()
-	conf, err := exec.Command("container", "exec", ProxyName,
+	conf, err := exec.Command(engineBin(ServiceEngine()), "exec", ProxyName,
 		"cat", "/etc/nginx/conf.d/stack.conf").CombinedOutput()
 	t.Logf("conf as the proxy sees it (err=%v):\n%s", err, conf)
-	logs, err := exec.Command("container", "logs", ProxyName).CombinedOutput()
+	logs, err := exec.Command(engineBin(ServiceEngine()), "logs", ProxyName).CombinedOutput()
 	lines := strings.Split(strings.TrimSpace(string(logs)), "\n")
 	if len(lines) > 15 {
 		lines = lines[len(lines)-15:]

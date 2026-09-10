@@ -4,6 +4,19 @@
 
 ## 2026-09-10
 
+### 런타임 테스트를 기계가 가진 엔진에서 실행한다
+
+런타임 테스트 넷이 `container`를 직접 지정해서, Docker는 있고 Apple `container`는
+없는 기계에서 실행이나 건너뛰기가 아니라 명령을 찾지 못해 실패했다. 이제 프로그램의
+나머지와 같이 서비스를 만드는 엔진에 묻는다.
+
+검증: Docker가 있고 Apple `container`가 없는 기계에서
+`BAY_E2E=1 go test ./internal/stack -run ActualRuntime`가 통과한다.
+변경 전에는 `TestPeerConfigurationIsAcceptedByNginxActualRuntime`가
+`exec: "container": executable file not found in $PATH`로 실패했다.
+`make check` 통과.
+
+
 ### 같은 기준의 두 수로 본문 유실을 판정한다
 
 기록이 상대에게서 읽은 길이와 클라이언트로 보낸 길이를 나란히 두었는데, 이 둘은
