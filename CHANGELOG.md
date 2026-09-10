@@ -22,6 +22,7 @@ answered 200 each time, while a request made directly to the peer arrived whole
 on every try. With the session not reused it arrived whole five times in a row
 and the proxy logged no upstream error. `make check` passes.
 
+## 2026-09-09
 
 ### Keep the tool that measures the window
 
