@@ -5,6 +5,22 @@ the day the change was made.
 
 ## 2026-09-10
 
+### Say when the proxy did not take the link record
+
+The switch wrote the setting, drew itself on, and applied the configuration
+behind the screen without reading the result. When that failed the switch still
+read as on while the proxy ran the configuration it had before, so the record
+was asked for and nothing was written, with nothing said about it.
+
+The result is read. When the proxy does not take the record the setting goes
+back to what the proxy is running, the switch follows it, and the failure is
+reported on the screen.
+
+Verification: `make check` passes. With the record on, a request over the link
+recorded `link 200 host=polyspec.test uri=/comparison.css declared=3905
+received=4130 sent=3893`.
+
+
 ### Answer the link record switch without redrawing the screen
 
 Turning the record on ran as an action: the screen was drawn once with every

@@ -324,7 +324,19 @@ func (a *app) handle(id string) {
 		a.snap.Machine.LinkLog = on
 		a.mu.Unlock()
 		a.refreshWindowOnly()
-		go stack.SyncProxy(a.rt.Machine)
+		go func() {
+			if _, err := stack.SyncProxy(a.rt.Machine); err != nil {
+				// The proxy did not take the record, so the switch goes back to
+				// what the proxy is running rather than reporting a state the
+				// machine is not in.
+				a.rt.Machine.SetLinkLog(!on)
+				a.mu.Lock()
+				a.snap.Machine.LinkLog = !on
+				a.mu.Unlock()
+				a.report("error", "%s", err)
+				a.refreshWindowOnly()
+			}
+		}()
 		return
 	}
 	// Anything that asks a question first returns here through the dialog, so
