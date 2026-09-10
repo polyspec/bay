@@ -16,6 +16,18 @@ is empty and the error the proxy writes for that request is the only signal:
 nginx reports the request itself as complete either way. The switch is off until
 it is turned on, because it writes a line for every request over the link.
 
+Reading the record is one command against the engine the proxy runs on. A
+request that lost bytes leaves an error beside its line:
+
+```sh
+docker logs bay-edge | grep -E '^link |prematurely closed'
+```
+
+A machine whose peer declares a length is read from the line alone: `declared`
+and `sent` are both counted in body bytes and differ only when bytes were lost.
+A machine whose peer sends chunked leaves `declared` empty, and the error is
+what reports the loss.
+
 Two machines on one network, each running bay, reach each other's
 domains. Neither machine's network configuration changes: no router setting, no
 DNS server on the network, no hosts file, no privileged port.

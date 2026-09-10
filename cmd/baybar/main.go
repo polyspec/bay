@@ -498,8 +498,10 @@ func (a *app) run(rt *stack.Runtime, parts []string) error {
 		if err != nil {
 			return err
 		}
+		// The address this machine was reached at is stored, not the one the
+		// other machine states about itself.
 		if err := stack.ApprovePeer(rt.Machine.Dir, stack.Peer{
-			Name: doc.Name, Address: doc.Address, Domains: doc.Domains, CA: doc.CA,
+			Name: doc.Name, Address: address, Domains: doc.Domains, CA: doc.CA,
 		}); err != nil {
 			return err
 		}

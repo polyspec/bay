@@ -5,6 +5,26 @@ the day the change was made.
 
 ## 2026-09-10
 
+### Approve a peer at the address it was reached at
+
+Approving a machine stored the address that machine states about itself, which
+is an address on its own network. A machine behind a router states an address
+that reaches it only from inside that network, so approving it by a public
+address stored a private one and every request after that went nowhere.
+
+The address the machine was reached at is stored, by the command line and by the
+window. The address a machine states about itself is still what it announces on
+its own network, which is how a machine that moves there is followed.
+
+Reading the link record is written down as one command, because a machine whose
+peer sends chunked declares no length and the error beside the request is what
+reports a loss.
+
+Verification: `go test ./internal/stack -run
+TestAnApprovedPeerKeepsTheAddressItWasReachedAt` checks that a peer approved at
+203.0.113.5:8443 is stored at that address. `make check` passes.
+
+
 ### Confirm the proxy answers on the port that serves names
 
 A command that produced routes returned once the proxy answered its health

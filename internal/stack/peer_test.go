@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -183,5 +184,33 @@ func TestTheSameAuthorityAtAKnownAddressIsNotReported(t *testing.T) {
 	}
 	if known != nil {
 		t.Error("a machine answering with the authority it was approved under is reported as changed")
+	}
+}
+
+// A machine states an address on its own network, which is not the address that
+// reaches it from here when it sits behind a router. What is stored is the
+// address this machine was reached at, so a peer approved by a public address
+// keeps being reached at that address.
+func TestAnApprovedPeerKeepsTheAddressItWasReachedAt(t *testing.T) {
+	dir := t.TempDir()
+	ca, err := LoadOrCreateCA(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pem, err := os.ReadFile(ca.CertPath())
+	if err != nil {
+		t.Fatal(err)
+	}
+	const reached = "203.0.113.5:8443"
+	if err := ApprovePeer(dir, Peer{Name: "far", Address: reached,
+		Domains: []string{"far.test"}, CA: string(pem)}); err != nil {
+		t.Fatal(err)
+	}
+	peers, err := Peers(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(peers) != 1 || peers[0].Address != reached {
+		t.Fatalf("the stored address is %v, want %s", peers, reached)
 	}
 }

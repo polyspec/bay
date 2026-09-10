@@ -444,7 +444,7 @@ func addPeer(m *stack.Machine, given string) error {
 	}
 	// An address that used to carry another authority is another machine. Say
 	// so before the fingerprint, so it is read before the question.
-	if known, err := stack.PeerAtAddress(peers, doc.Address, doc.CA); err != nil {
+	if known, err := stack.PeerAtAddress(peers, address, doc.CA); err != nil {
 		return err
 	} else if known != nil {
 		fmt.Printf("%s already carried the authority %s, approved as %q.\n",
@@ -453,7 +453,7 @@ func addPeer(m *stack.Machine, given string) error {
 	}
 
 	fmt.Printf("machine     %s\n", doc.Name)
-	fmt.Printf("address     %s\n", doc.Address)
+	fmt.Printf("address     %s\n", address)
 	fmt.Printf("fingerprint %s\n", short(fingerprint))
 	if len(doc.Domains) == 0 {
 		fmt.Println("domains     none yet")
@@ -472,8 +472,11 @@ func addPeer(m *stack.Machine, given string) error {
 		fmt.Println("not approved")
 		return nil
 	}
+	// The address this machine was reached at is stored, not the one the other
+	// machine states about itself. A machine behind a router states an address
+	// on its own network, which is not the address that reaches it from here.
 	if err := stack.ApprovePeer(m.Dir, stack.Peer{
-		Name: doc.Name, Address: doc.Address, Domains: doc.Domains, CA: doc.CA,
+		Name: doc.Name, Address: address, Domains: doc.Domains, CA: doc.CA,
 	}); err != nil {
 		return err
 	}
