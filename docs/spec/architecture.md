@@ -170,16 +170,6 @@ the caller receives its original error, including nginx stderr. A reload
 failure must not stop, start, delete or recreate the proxy. Other projects use
 the same proxy and must not be restarted as error recovery.
 
-One failure is not a reload failure: the engine answering that the proxy is not
-there. The proxy is read from the container list before the configuration is
-written and the reload is sent after, so a proxy removed in between is reported
-as missing by an engine that had just listed it running. There is no running
-proxy to protect in that case and no other project's proxy to restart, and the
-configuration has already been written, so the proxy is started and the sync
-reports it as started. Every other reload failure is still returned as it is,
-including a configuration the proxy refuses: replacing the proxy there would
-hide the fault behind a container that starts and fails the same way.
-
 `nginx -s reload` returns after sending the signal. The workers being replaced
 hold the listening sockets until they finish shutting down, and one of them can
 accept a connection it then does not serve.

@@ -252,28 +252,6 @@ removed. It described the design rather than the machine.
 
 Verification: `make check` passes. The window was not seen: it is a menu bar
 application and does not come forward from a script.
-### A proxy that went away is started, not reported as a reload failure
-
-`bay peer add` stored an approval and then failed with `container exec
-bay-edge nginx -s reload: Error: container with ID bay-edge
-not found`. The proxy is read from the container list before the configuration
-is written and the reload is sent after, so a proxy removed in between is
-reported as missing by an engine that had just listed it running. The machine
-was left with an approval stored, a configuration written, and a command
-reporting failure for a change it had already made.
-
-The rule that a reload failure must not restart the proxy stands: it protects a
-running proxy other projects share. A proxy that is not there is neither
-running nor shared, so that case starts it and the sync reports it as started.
-A configuration the proxy refuses still fails, because replacing the proxy
-there would hide the fault behind a container that starts and fails the same
-way.
-
-Verification: `make check`, including tests over each engine's wording for a
-container that is not there, a proxy removed between the container list and the
-reload, and a configuration the proxy refuses. Without the change the second
-fails with the message quoted above.
-
 ### Show each approved machine and its domains as one section
 
 The screen named each approved machine and did not state which domains that

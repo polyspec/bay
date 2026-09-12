@@ -116,11 +116,16 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 		if err := RenderNginxConfig(m.ConfDir(engine), conf); err != nil {
 			return res, err
 		}
-		action, err := applyProxy(engine, m.ConfDir(engine), m.CertDir(), peerDir)
+		created, err := EnsureProxy(engine, m.ConfDir(engine), m.CertDir(), peerDir)
 		if err != nil {
 			return res, err
 		}
-		res.Action = action
+		res.Action = "reloaded"
+		if created {
+			res.Action = "started"
+		} else if err := ReloadProxy(engine); err != nil {
+			return res, err
+		}
 		// Return only after the proxy serves the new configuration.
 		if err := WaitForGeneration(engine, conf.Generation, 60*time.Second); err != nil {
 			return res, err
@@ -138,58 +143,6 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 // peerRoutesFor returns the domains approved peers serve that this machine does
 // not serve itself. Every one of them is answered here, with a certificate this
 // machine issues, and forwarded over that peer's link.
-// applyProxy makes one engine serve the configuration that has just been
-// written and reports whether it started the proxy or reloaded it.
-//
-// A reload that fails because the proxy is not there is not a reload failure.
-// The proxy is read from the container list before the configuration is
-// written and the reload is sent after, so a proxy removed in between is
-// reported as missing by an engine that had just listed it running. There is no
-// running proxy to protect and the configuration is already written, so the
-// proxy is started. Every other failure is returned as it is.
-func applyProxy(engine, confDir, certDir, peerDir string) (string, error) {
-	created, err := EnsureProxy(engine, confDir, certDir, peerDir)
-	if err != nil {
-		return "", err
-	}
-	if created {
-		return "started", nil
-	}
-	err = ReloadProxy(engine)
-	if err == nil {
-		return "reloaded", nil
-	}
-	if !proxyIsGone(err) {
-		return "", err
-	}
-	// The engine has just said the proxy is not there while its container list
-	// still names it. Removing it first, which tolerates its absence, settles
-	// that disagreement so the proxy is created rather than found again.
-	if err := StopProxy(engine); err != nil {
-		return "", err
-	}
-	if _, err := EnsureProxy(engine, confDir, certDir, peerDir); err != nil {
-		return "", err
-	}
-	return "started", nil
-}
-
-// proxyIsGone reports whether a failed proxy command failed because the proxy
-// is not there. Each engine says so in its own words and neither carries a
-// code, so the words are what there is to read.
-func proxyIsGone(err error) bool {
-	if err == nil {
-		return false
-	}
-	message := strings.ToLower(err.Error())
-	for _, said := range []string{"not found", "no such container", "is not running"} {
-		if strings.Contains(message, said) {
-			return true
-		}
-	}
-	return false
-}
-
 func peerRoutesFor(m *Machine, peers []Peer, own []string) []PeerRoute {
 	byDomain := PeerDomains(peers, own)
 	domains := make([]string, 0, len(byDomain))
@@ -209,9 +162,6 @@ func peerRoutesFor(m *Machine, peers []Peer, own []string) []PeerRoute {
 	return out
 }
 
-// preparePeerLink writes what the proxy reads to run the link: this machine's
-// client certificate, the approved authorities, the certificates for the
-// domains peers serve, and the document a machine is approved from.
 // peerLinkServable reports whether one engine's proxy can serve all of
 // the peer link. The link is one port and a proxy serves only its own engine's
 // containers, so a machine running both engines would answer some of its own
@@ -233,6 +183,9 @@ func peerLinkServable() error {
 	return nil
 }
 
+// preparePeerLink writes what the proxy reads to run the link: this machine's
+// client certificate, the approved authorities, the certificates for the
+// domains peers serve, and the document a machine is approved from.
 func preparePeerLink(m *Machine, peers []Peer, routes []Route, engine string) error {
 	ca, err := LoadOrCreateCA(m.Dir)
 	if err != nil {
