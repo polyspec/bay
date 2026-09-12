@@ -82,10 +82,30 @@ to delete.
 
 Writing under `/etc/resolver` requires root. Every other step runs as the user.
 
-Root is needed once per domain, not once per command. A project served under a
-domain that is already delegated needs no privileged step at all: the authority,
-the certificates and the user's trust settings are all written as the user. A
-command that asks for nothing privileged does not ask for a password.
+Two steps of the setup put a prompt in front of a person, and they are not the
+same prompt.
+
+| Step | Needs root | What a person sees |
+| --- | --- | --- |
+| Write `/etc/resolver/<domain>` | Yes | `sudo` on the terminal, or the system authentication panel |
+| Trust the authority | No | macOS puts up its own trust-settings dialog and waits for the login password |
+
+Trusting the authority writes to the login keychain, not the system domain, so
+it needs no root. It still asks: macOS presents the dialog itself, and a program
+with no one at the keyboard cannot answer it any more than it can answer `sudo`.
+Every step this tool reports as outstanding states which of the two it asks for,
+so a caller reads that before running something that would stop and wait.
+
+Creating the authority and issuing certificates ask for nothing. They write
+inside the state directory.
+
+Neither prompt is per command. The resolver entry is written once per domain and
+the authority is trusted once per state directory, so a project served under a
+domain already delegated, by a state directory whose authority is already
+trusted, runs with nothing on the screen.
+
+A second state directory carries a second authority, and trusting it is a second
+dialog. That is one of the costs of having one.
 
 The command line acquires root with `sudo` on the terminal it was started from.
 The application has no terminal and calls

@@ -48,14 +48,14 @@ func TestPendingListsMissingSteps(t *testing.T) {
 	if len(steps) != 3 {
 		t.Fatalf("Pending() = %v, want a step per domain plus the keychain", steps)
 	}
-	if !strings.HasSuffix(steps[0], "/definitely-not-installed") {
-		t.Errorf("first step = %q", steps[0])
+	if !strings.HasSuffix(steps[0].Text, "/definitely-not-installed") {
+		t.Errorf("first step = %q", steps[0].Text)
 	}
-	if !strings.HasSuffix(steps[1], "/also-not-installed") {
-		t.Errorf("second step = %q", steps[1])
+	if !strings.HasSuffix(steps[1].Text, "/also-not-installed") {
+		t.Errorf("second step = %q", steps[1].Text)
 	}
-	if !strings.Contains(steps[2], "keychain") {
-		t.Errorf("third step = %q", steps[2])
+	if !strings.Contains(steps[2].Text, "keychain") {
+		t.Errorf("third step = %q", steps[2].Text)
 	}
 	// Trusting a certificate is not one of the steps that need root.
 	if got := in.privilegedSteps(); len(got) != 2 {

@@ -40,20 +40,56 @@ type Elevator func(exe string, args []string) error
 
 // Pending lists the steps that are not in place yet. An empty result means
 // there is nothing to elevate for.
-func (in Install) Pending() []string {
-	steps := in.privilegedSteps()
+func (in Install) Pending() []SetupStep {
+	var steps []SetupStep
+	for _, text := range in.privilegedSteps() {
+		steps = append(steps, SetupStep{Text: text, Asks: AsksAdministrator})
+	}
 	if in.UntrustCA != "" && CATrusted(in.UntrustCA) {
-		steps = append(steps, "stop trusting the retired "+in.UntrustCA)
+		steps = append(steps, SetupStep{
+			Text: "stop trusting the retired " + in.UntrustCA, Asks: AsksTrustSettings})
 	}
 	if in.CAPath != "" && !CATrusted(in.CAPath) {
-		steps = append(steps, "trust "+in.CAPath+" in your keychain")
+		steps = append(steps, SetupStep{
+			Text: "trust " + in.CAPath + " in your keychain", Asks: AsksTrustSettings})
 	}
 	return steps
 }
 
-// PrivilegedPending returns the pending steps that require root, so a report
-// can say which of them ask for administrator rights and which do not.
-func (in Install) PrivilegedPending() []string { return in.privilegedSteps() }
+// SetupStep is one part of the machine setup that is not in place yet, and what
+// it asks a person for.
+type SetupStep struct {
+	Text string
+	Asks Asks
+}
+
+// Asks says what a step puts in front of a person. A report that leaves a step
+// unmarked sends a program with no one at the keyboard into a prompt it cannot
+// answer, so every step states this.
+type Asks string
+
+const (
+	// AsksNobody is a step that runs without anyone present.
+	AsksNobody Asks = ""
+	// AsksAdministrator is a step that needs root. Writing under /etc/resolver
+	// is the only one.
+	AsksAdministrator Asks = "administrator rights"
+	// AsksTrustSettings is a step that changes the user's certificate trust
+	// settings. It needs no root, and macOS still puts its own dialog on the
+	// screen and waits for the login password.
+	AsksTrustSettings Asks = "your login password, in a dialog macOS puts on the screen"
+)
+
+// PendingText returns the pending steps as lines, for a caller that shows them
+// without their prompts.
+func (in Install) PendingText() []string {
+	steps := in.Pending()
+	out := make([]string, 0, len(steps))
+	for _, s := range steps {
+		out = append(out, s.Text)
+	}
+	return out
+}
 
 // privilegedSteps returns the steps that require root. Writing under /etc
 // requires root; changing the user's trust settings does not.

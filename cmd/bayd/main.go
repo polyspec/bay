@@ -77,7 +77,7 @@ func main() {
 		if err := in.Ensure(); err != nil {
 			log.Fatalf("install: %v", err)
 		}
-		if pending := in.Pending(); len(pending) > 0 {
+		if pending := in.PendingText(); len(pending) > 0 {
 			log.Fatalf("install did not complete: %v", pending)
 		}
 		for _, d := range doms {

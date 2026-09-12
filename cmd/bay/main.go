@@ -721,7 +721,9 @@ func doctor(m *stack.Machine) error {
 
 	pending := in.Pending()
 	if _, err := os.Stat(authority.Path); os.IsNotExist(err) {
-		pending = append([]string{"create local certificate authority"}, pending...)
+		pending = append([]stack.SetupStep{{
+			Text: "create local certificate authority", Asks: stack.AsksNobody,
+		}}, pending...)
 	}
 	if len(pending) == 0 && agent == "loaded and current" && authority.Unreadable() == "" {
 		fmt.Println("\nnothing to do")
@@ -729,18 +731,14 @@ func doctor(m *stack.Machine) error {
 		return nil
 	}
 	fmt.Println("\n\"bay up\" would:")
-	// Only writing under /etc/resolver asks for administrator rights. Saying so
-	// per step keeps the report from claiming more than the machine needs.
-	root := map[string]bool{}
-	for _, p := range in.PrivilegedPending() {
-		root[p] = true
-	}
+	// Each step says what it puts in front of a person, because the two that do
+	// ask for different things and neither can be answered by a script.
 	for _, p := range pending {
-		if root[p] {
-			fmt.Println("  - " + p + "   (needs administrator rights)")
+		if p.Asks == stack.AsksNobody {
+			fmt.Println("  - " + p.Text)
 			continue
 		}
-		fmt.Println("  - " + p)
+		fmt.Printf("  - %s   (asks for %s)\n", p.Text, p.Asks)
 	}
 	if agent != "loaded and current" {
 		fmt.Println("  - re-register " + stack.DNSAgentLabel)

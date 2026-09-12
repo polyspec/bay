@@ -179,7 +179,7 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 		DomainList: domainList,
 		CAPath:     authority.Path,
 		CATrusted:  authority.Trusted,
-		Pending:    install.Pending(),
+		Pending:    install.PendingText(),
 		DNS: DNSStatus{
 			Label:   DNSAgentLabel,
 			Addr:    addr,

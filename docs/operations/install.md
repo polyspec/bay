@@ -103,12 +103,22 @@ install`.
 
 ## What asks for a password
 
-Writing under `/etc/resolver` needs administrator rights. Nothing else does,
-and it is needed once per domain rather than once per command: a project served
-under a domain that is already delegated runs with no prompt at all. Run
-`bay doctor` to see what is outstanding before running anything that
-would ask.
+Two steps ask, and they ask for different things.
 
-Delegating a new domain from a script or from a program with no terminal cannot
-ask for a password. Run `bay install` once from a terminal; every
-command after that needs nothing.
+- Writing `/etc/resolver/<domain>` needs administrator rights: `sudo` on the
+  terminal, or the system authentication panel in the window.
+- Trusting the authority needs no root and still asks. It writes to the login
+  keychain, and macOS puts up its own trust-settings dialog for the login
+  password.
+
+Nothing else asks. Creating the authority and issuing certificates write inside
+the state directory.
+
+Neither is per command. A domain is delegated once and an authority is trusted
+once, so a project served under a domain already delegated, from a state
+directory whose authority is already trusted, runs with nothing on the screen.
+
+`bay doctor` lists what is outstanding and says which of the two each
+step asks for. Read it before running anything from a script: neither prompt can
+be answered by a program with no one at the keyboard. Run `bay install`
+once, with someone there to answer, and the commands after it need nothing.
