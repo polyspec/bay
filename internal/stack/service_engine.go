@@ -22,6 +22,17 @@ type serviceEngine struct {
 	timeout time.Duration
 	// engine is the engine used to create this project's containers.
 	engine string
+	// progress reports each step before it begins. A step that can take more
+	// than a moment says so first, so a command stopped in one is readable from
+	// what it has already printed.
+	progress func(string)
+}
+
+// say reports one step. It is called before the step runs, never after.
+func (e *serviceEngine) say(format string, args ...any) {
+	if e.progress != nil {
+		e.progress(fmt.Sprintf(format, args...))
+	}
 }
 
 func newServiceEngine(dir string) *serviceEngine {
@@ -44,7 +55,7 @@ func serviceCommand(ctx context.Context, engine string, args ...string) ([]byte,
 		var diagnostic creationDiagnostic
 		cmd.Stdout, cmd.Stderr = io.Discard, &diagnostic
 		if err := cmd.Run(); err != nil {
-			return nil, fmt.Errorf("container create failed (%s): %w", diagnostic.category(), err)
+			return nil, fmt.Errorf("%s", creationFailure(diagnostic.text.String(), args))
 		}
 		return nil, nil
 	}
@@ -67,8 +78,45 @@ func serviceCommand(ctx context.Context, engine string, args ...string) ([]byte,
 	return out, err
 }
 
-// Runtime diagnostics can echo arguments. Retain a bounded prefix only to
-// classify creation failures; never return the raw text or process output.
+// creationFailure reports a refused creation: the category, then what the
+// runtime said. The runtime names the thing it refused over and the category on
+// its own names nothing, so a missing bind source has to arrive as the path
+// that is missing rather than as a rejected creation.
+//
+// Environment values are passed on the command line, so a runtime that echoes
+// an argument echoes a value with it. Every pair this command passed is
+// redacted first.
+func creationFailure(said string, args []string) string {
+	d := creationDiagnostic{}
+	d.text.WriteString(said)
+	category := d.category()
+	said = strings.TrimSpace(redactEnvironment(said, args))
+	if said == "" {
+		return fmt.Sprintf("container create failed (%s)", category)
+	}
+	return fmt.Sprintf("container create failed (%s): %s", category, said)
+}
+
+// redactEnvironment replaces every KEY=VALUE this command passed with the key
+// and a placeholder. The pair is redacted rather than the bare value, because a
+// value is only ever echoed as part of the argument it came from and a short
+// value would otherwise match ordinary words.
+func redactEnvironment(said string, args []string) string {
+	for i := 0; i+1 < len(args); i++ {
+		if args[i] != "--env" {
+			continue
+		}
+		key, _, found := strings.Cut(args[i+1], "=")
+		if !found || key == "" {
+			continue
+		}
+		said = strings.ReplaceAll(said, args[i+1], key+"=<redacted>")
+	}
+	return said
+}
+
+// creationDiagnostic retains a bounded prefix of a refused creation so it can
+// be classified and reported.
 type creationDiagnostic struct{ text strings.Builder }
 
 func (d *creationDiagnostic) Write(data []byte) (int, error) {
@@ -86,6 +134,7 @@ func (d *creationDiagnostic) category() string {
 	message := strings.ToLower(d.text.String())
 	for _, candidate := range []struct{ text, category string }{
 		{"not found", "resource not found"},
+		{"does not exist", "resource not found"},
 		{"permission denied", "permission denied"},
 		{"no space left", "insufficient storage"},
 		{"invalid", "invalid configuration"},
@@ -147,6 +196,7 @@ func (e *serviceEngine) image(ctx context.Context, reference string) (string, er
 		if !strings.Contains(strings.ToLower(err.Error()), "not found") {
 			return "", err
 		}
+		e.say("pulling %s", reference)
 		if _, err = e.command(ctx, "image", "pull", reference); err != nil {
 			return "", err
 		}
@@ -199,6 +249,7 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	if s.OneShot && e.dir == "" {
 		return fmt.Errorf("initializer %s requires machine completion state", s.Name)
 	}
+	e.say("%s: reading %s", s.Name, s.Image)
 	digest, err := e.image(ctx, s.Image)
 	if err != nil {
 		return err
@@ -215,6 +266,7 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 		if in.State == "running" {
 			return nil
 		}
+		e.say("%s: starting it", s.Name)
 		if _, err = e.command(ctx, "start", s.ContainerName); err != nil {
 			return err
 		}
@@ -227,6 +279,7 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	}
 	// Create does not execute the process. Inspect its actual image before
 	// starting, since a local tag need not have a name@digest cache alias.
+	e.say("%s: creating its container", s.Name)
 	if _, err = e.command(ctx, serviceArguments(group, s, fingerprint)...); err != nil {
 		return fmt.Errorf("service %s create: %w", s.Name, err)
 	}
@@ -254,7 +307,8 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 				return fmt.Errorf("initializer %s timed out and stopping it failed: %w", s.Name, check)
 			}
 		}
-		return fmt.Errorf("service %s start: %w", s.Name, err)
+		return failureWithLog(fmt.Sprintf("service %s start: %v", s.Name, err),
+			e.serviceLog(s.ContainerName))
 	}
 	if s.OneShot {
 		after, ok, err := e.lookup(ctx, s.ContainerName)
@@ -281,7 +335,8 @@ func (e *serviceEngine) waitRunning(ctx context.Context, name string) error {
 			return nil
 		}
 		if ok && in.State == "stopped" {
-			return fmt.Errorf("service %s stopped before becoming ready", name)
+			return failureWithLog(fmt.Sprintf("service %s stopped before becoming ready", name),
+				e.serviceLog(name))
 		}
 		if err := sleepContext(deadline, 100*time.Millisecond); err != nil {
 			return fmt.Errorf("service %s did not start: %w", name, err)
@@ -348,7 +403,9 @@ func (e *serviceEngine) healthy(s *Service) error {
 	if h == nil {
 		return fmt.Errorf("service %s has no healthcheck", s.Name)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), h.StartPeriod+time.Duration(h.Retries)*(h.Interval+h.Timeout)+time.Second)
+	bound := h.StartPeriod + time.Duration(h.Retries)*(h.Interval+h.Timeout) + time.Second
+	e.say("%s: waiting for its healthcheck, up to %s", s.Name, bound)
+	ctx, cancel := context.WithTimeout(context.Background(), bound)
 	defer cancel()
 	started := time.Now()
 	failures := 0
@@ -358,7 +415,8 @@ func (e *serviceEngine) healthy(s *Service) error {
 			return err
 		}
 		if !ok || in.State != "running" {
-			return fmt.Errorf("service %s stopped during healthcheck", s.Name)
+			return failureWithLog(fmt.Sprintf("service %s stopped during healthcheck", s.Name),
+				e.serviceLog(s.ContainerName))
 		}
 		args := []string{"exec", s.ContainerName}
 		if h.Test[0] == "CMD-SHELL" {
@@ -376,10 +434,12 @@ func (e *serviceEngine) healthy(s *Service) error {
 			failures++
 		}
 		if failures >= h.Retries {
-			return fmt.Errorf("service %s failed its healthcheck after %d attempts", s.Name, failures)
+			return failureWithLog(fmt.Sprintf("service %s failed its healthcheck after %d attempts", s.Name, failures),
+				e.serviceLog(s.ContainerName))
 		}
 		if err = sleepContext(ctx, h.Interval); err != nil {
-			return fmt.Errorf("service %s healthcheck timed out", s.Name)
+			return failureWithLog(fmt.Sprintf("service %s healthcheck timed out", s.Name),
+				e.serviceLog(s.ContainerName))
 		}
 	}
 }

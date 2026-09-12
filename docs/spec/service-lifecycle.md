@@ -26,6 +26,18 @@ Successful completion records are private files under `~/.bay/completions`; proj
 
 TCP readiness reporting remains separate from declared startup conditions. After route synchronization, `up`, `start` and `restart` wait for the selected long-running services to accept connections and report slow services as starting. Completed one-shot services are excluded from that wait. An empty wait set performs no readiness lookup and prints no connection-success message. A failed declared healthcheck or initializer still fails startup.
 
-Creation errors report the lifecycle stage and a bounded diagnostic category without copying raw runtime output. Process stdout/stderr from start and health commands remain private and are available only through explicit logs; their failure does not expose credentials in startup errors.
+A project is registered before any work is done for it. Registration is what makes the project this machine's, and the window draws from the registry, so a project registered first is on the screen while its images are pulled and its containers are created, and it is still there when the run fails. Registering after the work, as a reward for succeeding, left a run that took minutes invisible and a run that failed invisible for good.
+
+Every step that can take more than a moment says so before it begins, naming the service and the step: pulling an image, creating a container, waiting for a healthcheck. A command stopped in one of them is then readable from what it has already printed. Reporting the steps after they finish tells nobody where a command is stuck.
+
+A failure reports the failing service's own output. A service that stops, exits non-zero or never becomes healthy took its reason with it into its log, and a command that names the stage without that reason leaves the operator with nothing to act on: a crashed database reported only as stopped during its healthcheck hides the crash that is sitting in the container's log. The last lines of that log are printed with the error.
+
+A creation failure reports what the runtime said. The runtime names the thing it refused over — a path that is not there, a name already taken — and a category on its own names nothing: a missing bind source reported as a rejected creation leaves the reader with no path to create. The category is kept and the runtime's sentence is printed after it.
+
+One thing in that sentence is held back. Environment values are passed on the command line, so a runtime that echoes an argument echoes a value with it. Every `KEY=VALUE` this command passed is replaced by `KEY=` and a placeholder before the sentence is printed, which is exact rather than a guess: the keys and values are the ones this tool just supplied. A value is only ever echoed as part of the argument it came from, so redacting the pair covers it without touching ordinary words that happen to read like a short value.
+
+Withholding the output protected nothing. The same bytes are one `bay logs` away for the same person at the same terminal, so the rule bought no confidentiality and cost the evidence at the moment it was needed. What is protected instead is where the output goes: it is written to the command's own error stream and nowhere else. It is not copied into the machine state, the completion records or any file this tool keeps, and it does not outlive the command. It is bounded to the last `FailureLogLines` lines.
+
+A program must not print values whose policy forbids logging. This tool does not filter application-specific values, and a service that prints a secret to its own log prints it here too.
 
 The native runtime retains initializer stdout in its logs even when the tool discards attached output. `TestLocalImageTagActualRuntime` verifies this with a fixed public marker. A program must not print values whose policy forbids logging; The tool does not filter application-specific values.

@@ -51,6 +51,15 @@ func (r *Runtime) ownsSetup() error {
 	return OwnsMachineSetup(r.Machine.Dir)
 }
 
+// engine returns a service engine that reports each step it begins through
+// this runtime's Progress, so a command stopped in a long step is readable from
+// what it has already printed.
+func (r *Runtime) engine() *serviceEngine {
+	e := newServiceEngine(r.Machine.Dir)
+	e.progress = r.Progress
+	return e
+}
+
 func (r *Runtime) say(format string, args ...any) {
 	if r.Progress != nil {
 		r.Progress(fmt.Sprintf(format, args...))
@@ -63,22 +72,27 @@ func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
 	if err := r.ownsSetup(); err != nil {
 		return SyncResult{}, err
 	}
-	if err := newServiceEngine(r.Machine.Dir).preflight(cfg.Name, cfg.Sorted()); err != nil {
+	// Registering is what makes the project this machine's, and the window
+	// draws from the registry, so it comes before the work: the project is on
+	// the screen while its images are pulled, and it is still there when the
+	// run fails.
+	if err := r.Machine.Register(cfg.Ref()); err != nil {
 		return SyncResult{}, err
 	}
-	if err := newServiceEngine(r.Machine.Dir).prepareVolumes(cfg.Name, cfg.Sorted(), false); err != nil {
+	engine := r.engine()
+	if err := engine.preflight(cfg.Name, cfg.Sorted()); err != nil {
+		return SyncResult{}, err
+	}
+	if err := engine.prepareVolumes(cfg.Name, cfg.Sorted(), false); err != nil {
 		return SyncResult{}, err
 	}
 	if err := r.checkDomainsFree(cfg); err != nil {
 		return SyncResult{}, err
 	}
-	if err := r.Machine.Register(cfg.Ref()); err != nil {
-		return SyncResult{}, err
-	}
 	if err := r.EnsureInstalled(); err != nil {
 		return SyncResult{}, err
 	}
-	if err := newServiceEngine(r.Machine.Dir).start(cfg, cfg.Sorted(), false); err != nil {
+	if err := engine.start(cfg, cfg.Sorted(), false); err != nil {
 		return SyncResult{}, err
 	}
 	res, err := r.sync()
@@ -145,7 +159,7 @@ func (r *Runtime) Down(cfg *Config) (SyncResult, error) {
 	if err := r.ownsSetup(); err != nil {
 		return SyncResult{}, err
 	}
-	if err := newServiceEngine(r.Machine.Dir).stop(cfg, cfg.Sorted(), true); err != nil {
+	if err := r.engine().stop(cfg, cfg.Sorted(), true); err != nil {
 		return SyncResult{}, err
 	}
 	if err := r.Machine.Unregister(cfg.Name); err != nil {
@@ -167,7 +181,7 @@ func (r *Runtime) StartServices(cfg *Config, names []string) (SyncResult, error)
 	if err := r.checkDomainsFree(cfg); err != nil {
 		return SyncResult{}, err
 	}
-	if err := newServiceEngine(r.Machine.Dir).start(cfg, targets, false); err != nil {
+	if err := r.engine().start(cfg, targets, false); err != nil {
 		return SyncResult{}, err
 	}
 	res, err := r.sync()
@@ -187,7 +201,7 @@ func (r *Runtime) StopServices(cfg *Config, names []string) (SyncResult, error) 
 	if err != nil {
 		return SyncResult{}, err
 	}
-	if err := newServiceEngine(r.Machine.Dir).stop(cfg, targets, false); err != nil {
+	if err := r.engine().stop(cfg, targets, false); err != nil {
 		return SyncResult{}, err
 	}
 	return r.sync()
@@ -204,7 +218,7 @@ func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, erro
 	if err := r.checkDomainsFree(cfg); err != nil {
 		return SyncResult{}, err
 	}
-	if err := newServiceEngine(r.Machine.Dir).start(cfg, targets, true); err != nil {
+	if err := r.engine().start(cfg, targets, true); err != nil {
 		return SyncResult{}, err
 	}
 	res, err := r.sync()

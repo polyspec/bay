@@ -5,6 +5,49 @@ the day the change was made.
 
 ## 2026-09-12
 
+### A run that fails says why, and is on the screen while it runs
+
+`bay up` reported `service mysql stopped during healthcheck` and
+nothing else. The database had crashed and said so in its own log, which the
+tool read and threw away. The project was not on the screen either, so there
+was nothing to look at and nothing to read. The run turned out to have been
+refused for want of disk space, which the runtime had stated plainly and the
+tool had reduced to a category.
+
+Three rules were wrong and are corrected.
+
+A failure reports the failing service's own output, bounded to the last thirty
+lines and written to the command's error stream and nowhere else. The rule that
+withheld it protected nothing: the same bytes are one `bay logs` away
+for the same person at the same terminal, so it bought no confidentiality and
+cost the evidence at the moment it was needed.
+
+A creation failure reports what the runtime said, after the category. The
+runtime names the thing it refused over and a category names nothing. What is
+held back instead is narrow and exact: environment values ride on the command
+line, so every `KEY=VALUE` this command passed is replaced by its key and a
+placeholder. The pair is redacted rather than the bare value, because a value
+is only echoed as part of the argument it came from and a short value would
+otherwise match ordinary words. The classifier did not recognise `does not
+exist`, which is what the runtime actually says.
+
+A project is registered before any work is done for it. Registering is what
+makes the project this machine's and the window draws from the registry, so
+registering after the work left a long run invisible while it ran and a failed
+run invisible for good. Every step that can take more than a moment now names
+the service and the step before it begins, and a healthcheck wait states how
+long it will wait.
+
+Verification: `make check`, including tests over a failure carrying output, the
+bound on it, the runtime's sentence, the redaction, ordinary words that read
+like a short value, the registry after a failed `up`, and the order of an
+announcement against the step it announces. On this machine the same `up` that
+reported a stopped service now reports
+`container create failed (resource not found): Error: path
+'/Users/maxkwon/orm/.runtime/db-tests' does not exist`, and prints each service
+and step as it reaches it.
+
+
 ### A command that owns nothing stops before it changes anything
 
 The ownership check was at the machine setup, which is the last thing a command

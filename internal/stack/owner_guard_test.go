@@ -22,6 +22,15 @@ func ownedElsewhere(t *testing.T) *Runtime {
 	return &Runtime{Machine: &Machine{Dir: dir}, Addr: "127.0.0.1:5354"}
 }
 
+// ownedMachine returns a runtime whose state directory owns the machine setup.
+func ownedMachine(t *testing.T) *Runtime {
+	t.Helper()
+	dir := t.TempDir()
+	machineOwner = func() (string, bool) { return dir, true }
+	t.Cleanup(func() { machineOwner = readMachineOwner })
+	return &Runtime{Machine: &Machine{Dir: dir}, Addr: "127.0.0.1:5354"}
+}
+
 // A configuration naming one service, written where the runtime will read it.
 func oneService(t *testing.T) *Config {
 	t.Helper()
