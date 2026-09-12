@@ -5,6 +5,24 @@ the day the change was made.
 
 ## 2026-09-12
 
+### A command that owns nothing stops before it changes anything
+
+The ownership check was at the machine setup, which is the last thing a command
+reaches. `up` gets there after creating volumes and registering the project;
+`down` after removing the containers. A command from a state directory that
+owns nothing would do that work, then stop and report failure for a machine it
+had already changed. The test written for it failed on the project `up` had
+already registered.
+
+The check is the first statement of up, down, start, stop and restart now, and
+of uninstall in both front ends. `install` is exempt, because taking the setup
+over is what it is for.
+
+Verification: `make check`, including tests that each of those five stops with
+nothing registered. On this machine `sync`, `uninstall` and `down` run from a
+second state directory each stopped with the owner named and left both the
+machine and that directory unchanged.
+
 ### The machine setup has one owner, and running a project withdraws nothing
 
 `bay -state <other> up` asked for administrator rights to remove

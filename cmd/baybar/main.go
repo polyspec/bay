@@ -735,6 +735,11 @@ func (a *app) addProject(rt *stack.Runtime, path string) error {
 // uninstallMachine removes what the machine setup wrote: the resolver entries,
 // which needs root, and the DNS agent, which does not.
 func (a *app) uninstallMachine(rt *stack.Runtime) error {
+	// Removing the setup changes it, so it belongs to the owner like every
+	// other change to it.
+	if err := stack.OwnsMachineSetup(rt.Machine.Dir); err != nil {
+		return err
+	}
 	domains, err := rt.Machine.Domains()
 	if err != nil {
 		return err

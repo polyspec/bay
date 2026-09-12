@@ -54,7 +54,11 @@ could disagree with it. No agent registered means no owner, and the next
 `install` takes it.
 
 A command run from a state directory that is not the owner does not write,
-replace or remove any part of the machine setup. It stops and names the owner.
+replace or remove any part of the machine setup. It stops before it changes
+anything, including its own state directory, and names the owner. Stopping at
+the machine setup would be too late: by then `up` has created volumes and
+registered the project and `down` has removed the containers, so the command
+would report failure for work it had already done.
 `bay install` is the one command that takes ownership, and it says
 what it took over.
 

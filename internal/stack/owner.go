@@ -25,7 +25,13 @@ import (
 // MachineOwner returns the state directory that owns the machine setup and
 // whether there is one. No registered agent, or one registered without a state
 // directory, means no owner: the next install takes it.
-func MachineOwner() (string, bool) {
+func MachineOwner() (string, bool) { return machineOwner() }
+
+// machineOwner is the reader. Tests replace it to put a state directory in the
+// position of not being the owner.
+var machineOwner = readMachineOwner
+
+func readMachineOwner() (string, bool) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", false

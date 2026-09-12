@@ -25,11 +25,30 @@ type Runtime struct {
 	// Retire names domains whose resolver entries are removed by this pass. It
 	// is set by the command asked to stop delegating them and by nothing else.
 	Retire []string
+	// TakeOwnership lets this runtime change a machine setup another state
+	// directory owns. Only "bay install" sets it, because taking the
+	// setup over is what that command is for.
+	TakeOwnership bool
 	// Elevate runs the helper with administrator rights. Nil uses sudo, which
 	// only works from a terminal.
 	Elevate Elevator
 	// Progress, when set, is called with a line describing each step.
 	Progress func(string)
+}
+
+// ownsSetup stops an operation that would change a machine setup this state
+// directory does not own. It is the first statement of every such operation,
+// because a refusal that arrives later leaves containers removed, volumes
+// created and the project registered, and reports failure for a machine the
+// command has already changed.
+//
+// TakeOwnership exempts the one command whose purpose is to take the setup
+// over.
+func (r *Runtime) ownsSetup() error {
+	if r.TakeOwnership {
+		return nil
+	}
+	return OwnsMachineSetup(r.Machine.Dir)
 }
 
 func (r *Runtime) say(format string, args ...any) {
@@ -41,6 +60,9 @@ func (r *Runtime) say(format string, args ...any) {
 // Up registers the project, applies any missing machine setup, starts every
 // service and republishes the routes.
 func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
+	if err := r.ownsSetup(); err != nil {
+		return SyncResult{}, err
+	}
 	if err := newServiceEngine(r.Machine.Dir).preflight(cfg.Name, cfg.Sorted()); err != nil {
 		return SyncResult{}, err
 	}
@@ -120,6 +142,9 @@ func (r *Runtime) checkDomainsFree(cfg *Config) error {
 // Down removes the project's containers and withdraws its routes. Other
 // projects are not changed.
 func (r *Runtime) Down(cfg *Config) (SyncResult, error) {
+	if err := r.ownsSetup(); err != nil {
+		return SyncResult{}, err
+	}
 	if err := newServiceEngine(r.Machine.Dir).stop(cfg, cfg.Sorted(), true); err != nil {
 		return SyncResult{}, err
 	}
@@ -132,6 +157,9 @@ func (r *Runtime) Down(cfg *Config) (SyncResult, error) {
 // StartServices starts the named services and creates any missing container. An
 // empty list selects every service in the project.
 func (r *Runtime) StartServices(cfg *Config, names []string) (SyncResult, error) {
+	if err := r.ownsSetup(); err != nil {
+		return SyncResult{}, err
+	}
 	targets, err := SelectServices(cfg, names)
 	if err != nil {
 		return SyncResult{}, err
@@ -152,6 +180,9 @@ func (r *Runtime) StartServices(cfg *Config, names []string) (SyncResult, error)
 
 // StopServices stops the named services and leaves their containers in place.
 func (r *Runtime) StopServices(cfg *Config, names []string) (SyncResult, error) {
+	if err := r.ownsSetup(); err != nil {
+		return SyncResult{}, err
+	}
 	targets, err := SelectServices(cfg, names)
 	if err != nil {
 		return SyncResult{}, err
@@ -163,6 +194,9 @@ func (r *Runtime) StopServices(cfg *Config, names []string) (SyncResult, error) 
 }
 
 func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, error) {
+	if err := r.ownsSetup(); err != nil {
+		return SyncResult{}, err
+	}
 	targets, err := SelectServices(cfg, names)
 	if err != nil {
 		return SyncResult{}, err
@@ -214,9 +248,7 @@ func (r *Runtime) sync() (SyncResult, error) {
 // It does nothing when the machine is set up, and requests administrator rights
 // only when a resolver entry changes.
 func (r *Runtime) EnsureInstalled() error {
-	// The resolver entries and the agent are the machine's and there is one of
-	// each, so a state directory that does not own them does not write them.
-	if err := OwnsMachineSetup(r.Machine.Dir); err != nil {
+	if err := r.ownsSetup(); err != nil {
 		return err
 	}
 	ca, err := LoadOrCreateCA(r.Machine.Dir)

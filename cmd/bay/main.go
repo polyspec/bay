@@ -570,6 +570,9 @@ func install(m *stack.Machine) error {
 	if err != nil {
 		return err
 	}
+	// Taking the machine setup over is what this command is for, so it is the
+	// one that may change a setup another state directory owns.
+	rt.TakeOwnership = true
 	if err := rt.EnsureInstalled(); err != nil {
 		return err
 	}
@@ -579,6 +582,10 @@ func install(m *stack.Machine) error {
 // uninstall removes the launchd job and every resolver entry this tool wrote.
 // The certificate authority is left in the trust settings.
 func uninstall(m *stack.Machine) error {
+	// Removing the setup changes it, so it belongs to the owner.
+	if err := stack.OwnsMachineSetup(m.Dir); err != nil {
+		return err
+	}
 	domains, err := m.Domains()
 	if err != nil {
 		return err
