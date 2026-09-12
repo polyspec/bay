@@ -34,6 +34,7 @@ var (
 	privApply   = flag.Bool("privileged-apply", false, "internal: apply the privileged setup steps")
 	privRemove  = flag.Bool("privileged-remove", false, "internal: remove resolver entries")
 	privDomain  = flag.String("domain", "", "internal: comma-separated domains for the privileged steps")
+	privRetire  = flag.String("retire", "", "internal: comma-separated domains whose resolver entries are removed")
 	privCA      = flag.String("ca", "", "internal: CA certificate for the privileged steps")
 	privUntrust = flag.String("untrust", "", "internal: retired CA certificate to stop trusting")
 )
@@ -66,7 +67,12 @@ func privileged() error {
 	if *privRemove {
 		return stack.UninstallResolver("", nil, domains...)
 	}
-	return stack.Install{Domains: domains, Addr: *addr, CAPath: *privCA, UntrustCA: *privUntrust}.Apply()
+	var retire []string
+	if *privRetire != "" {
+		retire = strings.Split(*privRetire, ",")
+	}
+	return stack.Install{Domains: domains, Retire: retire, Addr: *addr,
+		CAPath: *privCA, UntrustCA: *privUntrust}.Apply()
 }
 
 func dispatch(cmd string) error {
@@ -216,11 +222,15 @@ func domain(m *stack.Machine, args []string) error {
 	if err != nil {
 		return err
 	}
+	// Withdrawing is asked for by name: the entry is removed because this
+	// command was told to, and no other command removes one.
+	var retire []string
 	switch action {
 	case "add":
 		err = m.AddDomain(name)
 	case "remove":
 		err = m.RemoveDomain(name)
+		retire = []string{name}
 	case "default":
 		err = m.SetDefaultDomain(name)
 	default:
@@ -230,7 +240,7 @@ func domain(m *stack.Machine, args []string) error {
 		return err
 	}
 
-	if err := applyDomains(m); err != nil {
+	if err := applyDomains(m, retire...); err != nil {
 		if restore := m.SaveSettings(before); restore != nil {
 			return fmt.Errorf("%w (and the settings could not be restored: %v)", err, restore)
 		}
@@ -239,13 +249,14 @@ func domain(m *stack.Machine, args []string) error {
 	return listDomains(m)
 }
 
-// applyDomains writes the resolver entries for the recorded domains and
-// republishes the proxy.
-func applyDomains(m *stack.Machine) error {
+// applyDomains writes the resolver entries for the recorded domains, removes
+// the entries of the domains named for retirement, and republishes the proxy.
+func applyDomains(m *stack.Machine, retire ...string) error {
 	rt, err := newRuntime(m)
 	if err != nil {
 		return err
 	}
+	rt.Retire = retire
 	if err := rt.EnsureInstalled(); err != nil {
 		return err
 	}
@@ -683,10 +694,22 @@ func doctor(m *stack.Machine) error {
 	fmt.Printf("domains   %s\n", shown)
 	fmt.Printf("resolver  %s\n", *addr)
 
+	// The machine setup is one per machine. Saying who owns it here is what
+	// tells a reader running from another state directory why a command stops.
+	owner, owned := stack.MachineOwner()
+	switch {
+	case !owned:
+		fmt.Printf("owner     none yet; the next \"bay install\" takes it\n")
+	case stack.OwnsMachineSetup(m.Dir) == nil:
+		fmt.Printf("owner     this state directory\n")
+	default:
+		fmt.Printf("owner     %s  (this command cannot change the machine setup)\n", owner)
+	}
+
 	agent := "not loaded"
 	switch {
 	case !stack.DNSAgentLoaded():
-	case stack.DNSAgentServes(domains, *addr, dnsBinary()):
+	case stack.DNSAgentServes(domains, *addr, dnsBinary(), m.Dir):
 		agent = "loaded and current"
 	default:
 		agent = "loaded but out of date"
@@ -702,16 +725,45 @@ func doctor(m *stack.Machine) error {
 	}
 	if len(pending) == 0 && agent == "loaded and current" && authority.Unreadable() == "" {
 		fmt.Println("\nnothing to do")
+		reportUnclaimed(domains)
 		return nil
 	}
 	fmt.Println("\n\"bay up\" would:")
+	// Only writing under /etc/resolver asks for administrator rights. Saying so
+	// per step keeps the report from claiming more than the machine needs.
+	root := map[string]bool{}
+	for _, p := range in.PrivilegedPending() {
+		root[p] = true
+	}
 	for _, p := range pending {
-		fmt.Println("  - " + p + "   (needs your password)")
+		if root[p] {
+			fmt.Println("  - " + p + "   (needs administrator rights)")
+			continue
+		}
+		fmt.Println("  - " + p)
 	}
 	if agent != "loaded and current" {
 		fmt.Println("  - re-register " + stack.DNSAgentLabel)
 	}
+	reportUnclaimed(domains)
 	return nil
+}
+
+// reportUnclaimed names the resolver entries that point at this tool and that
+// no domain of this machine covers. They are reported rather than removed: one
+// may belong to another state directory, and they are removed by
+// "bay domain remove" and "bay uninstall" only.
+func reportUnclaimed(domains []string) {
+	left := stack.UnclaimedResolverEntries(domains, *addr)
+	if len(left) == 0 {
+		return
+	}
+	fmt.Println("\nresolver entries no domain of this machine covers:")
+	for _, d := range left {
+		fmt.Printf("  %s\n", stack.ResolverPath(d))
+	}
+	fmt.Println("They are left in place. Remove one with " +
+		"\"bay domain remove <name>\" if it is yours to withdraw.")
 }
 
 // dnsBinary returns the bayd this installation would register, or an

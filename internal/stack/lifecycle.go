@@ -22,6 +22,9 @@ type Runtime struct {
 	// RetiredCA is a former authority to stop trusting on the next setup pass,
 	// set while rotating the CA.
 	RetiredCA string
+	// Retire names domains whose resolver entries are removed by this pass. It
+	// is set by the command asked to stop delegating them and by nothing else.
+	Retire []string
 	// Elevate runs the helper with administrator rights. Nil uses sudo, which
 	// only works from a terminal.
 	Elevate Elevator
@@ -211,6 +214,11 @@ func (r *Runtime) sync() (SyncResult, error) {
 // It does nothing when the machine is set up, and requests administrator rights
 // only when a resolver entry changes.
 func (r *Runtime) EnsureInstalled() error {
+	// The resolver entries and the agent are the machine's and there is one of
+	// each, so a state directory that does not own them does not write them.
+	if err := OwnsMachineSetup(r.Machine.Dir); err != nil {
+		return err
+	}
 	ca, err := LoadOrCreateCA(r.Machine.Dir)
 	if err != nil {
 		return err
@@ -221,6 +229,7 @@ func (r *Runtime) EnsureInstalled() error {
 	}
 	in := Install{
 		Domains:   domains,
+		Retire:    r.Retire,
 		Addr:      r.Addr,
 		CAPath:    ca.CertPath(),
 		UntrustCA: r.RetiredCA,
@@ -233,13 +242,13 @@ func (r *Runtime) EnsureInstalled() error {
 	if pending := in.Pending(); len(pending) > 0 {
 		return fmt.Errorf("setup did not complete: %s", strings.Join(pending, "; "))
 	}
-	if DNSAgentLoaded() && DNSAgentServes(domains, r.Addr, r.DNSBin) {
+	if DNSAgentLoaded() && DNSAgentServes(domains, r.Addr, r.DNSBin, r.Machine.Dir) {
 		return nil
 	}
 	if r.DNSBin == "" {
 		return fmt.Errorf("no bayd binary configured for the launchd job")
 	}
-	_, err = InstallDNSAgent(r.DNSBin, strings.Join(domains, ","), r.Addr, r.Machine.LogDir())
+	_, err = InstallDNSAgent(r.DNSBin, strings.Join(domains, ","), r.Addr, r.Machine.Dir, r.Machine.LogDir())
 	return err
 }
 

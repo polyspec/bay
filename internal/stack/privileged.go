@@ -16,8 +16,13 @@ import (
 // certificate authority in the user's trust settings.
 type Install struct {
 	Domains []string // local domains, e.g. ["test", "lab.internal"]
-	Addr    string   // host:port bayd listens on
-	CAPath  string   // CA certificate to trust; empty to skip
+	// Retire names domains to stop delegating. Their resolver entries are
+	// removed. Withdrawing a delegation is asked for by name and never
+	// inferred, so running a project cannot withdraw one it was not asked
+	// about.
+	Retire []string
+	Addr   string // host:port bayd listens on
+	CAPath string // CA certificate to trust; empty to skip
 	// UntrustCA is a retired certificate to remove from the trust settings
 	// before the new one is added.
 	UntrustCA string
@@ -46,6 +51,10 @@ func (in Install) Pending() []string {
 	return steps
 }
 
+// PrivilegedPending returns the pending steps that require root, so a report
+// can say which of them ask for administrator rights and which do not.
+func (in Install) PrivilegedPending() []string { return in.privilegedSteps() }
+
 // privilegedSteps returns the steps that require root. Writing under /etc
 // requires root; changing the user's trust settings does not.
 func (in Install) privilegedSteps() []string {
@@ -55,37 +64,41 @@ func (in Install) privilegedSteps() []string {
 			steps = append(steps, "write "+ResolverPath(d))
 		}
 	}
-	for _, d := range in.Stale() {
+	for _, d := range in.retiring() {
 		steps = append(steps, "remove "+ResolverPath(d))
 	}
 	return steps
 }
 
-// Stale returns domains this tool delegated earlier and no longer serves. Only
-// entries whose contents point at this tool's listener are returned.
-func (in Install) Stale() []string {
+// UnclaimedResolverEntries returns the domains /etc/resolver delegates to this
+// tool's listener that the given domain list does not cover. They are reported
+// and never removed: an entry could have been written by another state
+// directory on this machine, and removing one because it has this tool's shape
+// is how one state directory withdrew another's delegations.
+func UnclaimedResolverEntries(domains []string, addr string) []string {
 	entries, err := os.ReadDir(resolverDir)
 	if err != nil {
 		return nil
 	}
-	current := make(map[string]bool, len(in.Domains))
-	for _, d := range in.Domains {
-		current[strings.Trim(d, ".")] = true
+	serving := make(map[string]bool, len(domains))
+	for _, d := range domains {
+		serving[strings.Trim(d, ".")] = true
 	}
-	var stale []string
+	in := Install{Addr: addr}
+	var out []string
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || current[name] {
+		if e.IsDir() || serving[name] {
 			continue
 		}
 		b, err := os.ReadFile(filepath.Join(resolverDir, name))
 		if err != nil || string(b) != in.resolverBody(name) {
 			continue
 		}
-		stale = append(stale, name)
+		out = append(out, name)
 	}
-	sort.Strings(stale)
-	return stale
+	sort.Strings(out)
+	return out
 }
 
 // Ensure applies whatever is missing, acquiring root itself. It prints what it
@@ -102,6 +115,9 @@ func (in Install) Ensure() error {
 			fmt.Fprintf(os.Stderr, "  - %s\n", s)
 		}
 		args := []string{"-privileged-apply", "-domain", strings.Join(in.Domains, ","), "-addr", in.Addr}
+		if len(in.Retire) > 0 {
+			args = append(args, "-retire", strings.Join(in.Retire, ","))
+		}
 		if err := in.elevate(args...); err != nil {
 			return err
 		}
@@ -114,6 +130,13 @@ func (in Install) Apply() error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("must run as root")
 	}
+	return in.applyAsRoot()
+}
+
+// applyAsRoot writes the entries the delegated domains are missing and removes
+// the entries of the domains being retired. It touches no other entry: a domain
+// this command does not serve belongs to whoever delegated it.
+func (in Install) applyAsRoot() error {
 	for _, d := range in.Domains {
 		if in.resolverInstalled(d) {
 			continue
@@ -122,7 +145,7 @@ func (in Install) Apply() error {
 			return err
 		}
 	}
-	for _, d := range in.Stale() {
+	for _, d := range in.retiring() {
 		path := ResolverPath(d)
 		if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
 			return err
@@ -130,6 +153,17 @@ func (in Install) Apply() error {
 		fmt.Printf("removed %s\n", path)
 	}
 	return nil
+}
+
+// retiring returns the named domains that still have an entry to remove.
+func (in Install) retiring() []string {
+	var out []string
+	for _, d := range in.Retire {
+		if _, err := os.Stat(ResolverPath(strings.Trim(d, "."))); err == nil {
+			out = append(out, strings.Trim(d, "."))
+		}
+	}
+	return out
 }
 
 // applyTrust updates the user's certificate trust settings. It does not require

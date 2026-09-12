@@ -7,13 +7,14 @@ import "testing"
 // from another copy is not the installation being used, so neither is current.
 func TestTheAgentIsNotCurrentWhenItRunsAnotherProgram(t *testing.T) {
 	args := []string{"/opt/homebrew/bin/bayd", "-domain", "test",
-		"-addr", "127.0.0.1:5354"}
+		"-addr", "127.0.0.1:5354", "-state", "/Users/someone/.bay"}
 	if !agentIsCurrent(args, []string{"test"}, "127.0.0.1:5354",
-		"/opt/homebrew/bin/bayd") {
+		"/opt/homebrew/bin/bayd", "/Users/someone/.bay") {
 		t.Error("the agent of the installation being used is not current")
 	}
 	if agentIsCurrent(args, []string{"test"}, "127.0.0.1:5354",
-		"/Applications/baybar.app/Contents/MacOS/bayd") {
+		"/Applications/baybar.app/Contents/MacOS/bayd",
+		"/Users/someone/.bay") {
 		t.Error("an agent running another copy is current")
 	}
 }
@@ -22,9 +23,9 @@ func TestTheAgentIsNotCurrentWhenItRunsAnotherProgram(t *testing.T) {
 // agent that is not current.
 func TestTheAgentIsNotCurrentForOtherDomains(t *testing.T) {
 	args := []string{"/opt/homebrew/bin/bayd", "-domain", "test",
-		"-addr", "127.0.0.1:5354"}
+		"-addr", "127.0.0.1:5354", "-state", "/Users/someone/.bay"}
 	if agentIsCurrent(args, []string{"test", "devel"}, "127.0.0.1:5354",
-		"/opt/homebrew/bin/bayd") {
+		"/opt/homebrew/bin/bayd", "/Users/someone/.bay") {
 		t.Error("an agent serving fewer domains is current")
 	}
 }
@@ -34,8 +35,21 @@ func TestTheAgentIsNotCurrentForOtherDomains(t *testing.T) {
 // still check.
 func TestWithoutABinaryTheSettingsDecide(t *testing.T) {
 	args := []string{"/anywhere/bayd", "-domain", "test",
-		"-addr", "127.0.0.1:5354"}
-	if !agentIsCurrent(args, []string{"test"}, "127.0.0.1:5354", "") {
+		"-addr", "127.0.0.1:5354", "-state", "/Users/someone/.bay"}
+	if !agentIsCurrent(args, []string{"test"}, "127.0.0.1:5354", "",
+		"/Users/someone/.bay") {
 		t.Error("the settings match but the agent is not current")
+	}
+}
+
+// An agent registered for another state directory is not this installation's
+// agent. Re-registering it is how the setup is taken over, and that is asked
+// for before it happens.
+func TestTheAgentIsNotCurrentForAnotherStateDirectory(t *testing.T) {
+	args := []string{"/opt/homebrew/bin/bayd", "-domain", "test",
+		"-addr", "127.0.0.1:5354", "-state", "/Users/someone/.bay"}
+	if agentIsCurrent(args, []string{"test"}, "127.0.0.1:5354",
+		"/opt/homebrew/bin/bayd", "/Users/someone/orm/.runtime/bay") {
+		t.Error("an agent registered for another state directory is current")
 	}
 }

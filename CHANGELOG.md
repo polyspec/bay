@@ -3,6 +3,46 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-09-12
+
+### The machine setup has one owner, and running a project withdraws nothing
+
+`bay -state <other> up` asked for administrator rights to remove
+`/etc/resolver/devel` and `/etc/resolver/staging`. Those entries belong to the
+state directory this machine is set up from. The other directory does not
+delegate those domains, and the code decided an entry was its own to remove by
+matching the file's contents against the shape it writes. Had the password been
+given, one state directory would have withdrawn another's delegations.
+
+The resolver entries, the DNS agent and the proxy are the machine's, and there
+is one of each: an entry is keyed by domain, the agent is one launchd job with
+one domain list, and the proxy is one container name per engine. `-state`
+selects the directory holding the authority, the certificates and the project
+registry; it does not divide what cannot be divided. One state directory owns
+the machine setup, and the owner is the state directory the registered agent
+runs with, so it is read from the program that answers the domains rather than
+from a record that could disagree with it. A command from another state
+directory writes none of the three. It stops and names the owner.
+`bay install` is the one command that takes ownership.
+
+Withdrawing a delegation is now asked for by name. `bay domain remove`
+removes the resolver entry, which it did not do before, and `uninstall` removes
+them all. No other command removes one. An entry no domain of this machine
+covers is reported by `doctor` and left in place, because a file under `/etc`
+this tool cannot show it wrote is not this tool's to delete.
+
+Root is needed to write under `/etc/resolver` and nowhere else, which is once
+per domain rather than once per command. `doctor` marks only those steps;
+trusting the authority is a change to the user's keychain and was being
+reported as though it needed administrator rights.
+
+Verification: `make check`, including tests over reading the owner, refusing
+another state directory, retiring by name, and leaving unclaimed entries alone.
+On this machine `install` took ownership and re-registered the agent with no
+password prompt, `doctor` from a second state directory reported the two
+entries as left in place instead of proposing to remove them, and `sync` from
+that directory stopped with exit 1, named the owner, and changed nothing.
+
 ## 2026-09-10
 
 ### Approve a peer at the address it was reached at

@@ -31,6 +31,12 @@ type SyncResult struct {
 // projects share one proxy and removing a project removes its routes. The proxy
 // is removed when no route remains.
 func SyncProxy(m *Machine) (SyncResult, error) {
+	// The proxy is one container per engine and it serves this state
+	// directory's configuration and certificates, so a state directory that
+	// does not own the machine setup does not replace it.
+	if err := OwnsMachineSetup(m.Dir); err != nil {
+		return SyncResult{}, err
+	}
 	routes, conflicts, err := Routes()
 	if err != nil {
 		return SyncResult{}, err

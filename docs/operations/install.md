@@ -90,3 +90,25 @@ sudo make uninstall          # in the clone, if make install was used
 `uninstall` removes the resolver entries and the launchd agent. The certificate
 authority stays in the trust settings until it is removed with the second
 command. `docs/spec/machine-state.md` lists every path this tool creates.
+
+## One machine, one setup
+
+`-state` selects the directory holding the authority, the certificates and the
+project registry. The resolver entries, the DNS agent and the proxy are the
+machine's and there is one of each, so one state directory owns them.
+`bay doctor` names the owner. A command run from another state
+directory reads the machine but does not change its setup; it stops and says
+whose it is. Take the setup over deliberately with `bay -state <dir>
+install`.
+
+## What asks for a password
+
+Writing under `/etc/resolver` needs administrator rights. Nothing else does,
+and it is needed once per domain rather than once per command: a project served
+under a domain that is already delegated runs with no prompt at all. Run
+`bay doctor` to see what is outstanding before running anything that
+would ask.
+
+Delegating a new domain from a script or from a program with no terminal cannot
+ask for a password. Run `bay install` once from a terminal; every
+command after that needs nothing.

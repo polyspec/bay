@@ -109,32 +109,6 @@ func TestBuildPlistIsValid(t *testing.T) {
 	}
 }
 
-func TestStaleFindsOnlyOurOwnEntries(t *testing.T) {
-	dir := useTempResolverDir(t)
-	in := Install{Domains: []string{"test"}, Addr: "127.0.0.1:5354"}
-
-	// One entry we wrote for a domain the stack no longer serves...
-	if err := os.WriteFile(filepath.Join(dir, "old"), []byte(in.resolverBody("old")), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// ...one we still serve, and one belonging to a different tool.
-	if err := os.WriteFile(filepath.Join(dir, "test"), []byte(in.resolverBody("test")), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	foreign := "domain other\nsearch other\nnameserver 127.0.0.1\nport 2053\n"
-	if err := os.WriteFile(filepath.Join(dir, "other"), []byte(foreign), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	if got := in.Stale(); len(got) != 1 || got[0] != "old" {
-		t.Fatalf("Stale() = %v, want [old]", got)
-	}
-	steps := in.Pending()
-	if len(steps) != 1 || !strings.Contains(steps[0], "remove ") {
-		t.Fatalf("Pending() = %v, want only the removal", steps)
-	}
-}
-
 // TestHasTerminalRejectsDevNull covers the case that made the menu bar app's
 // setup button do nothing: /dev/null is a character device, so a check that
 // stops there sends the app down the sudo path, where it cannot ask for a

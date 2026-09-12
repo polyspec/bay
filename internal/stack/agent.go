@@ -18,7 +18,7 @@ const DNSAgentLabel = "dev.bay.dns"
 
 // InstallDNSAgent writes the launchd job, loads it, and returns the plist
 // path.
-func InstallDNSAgent(exe, domain, addr, logDir string) (string, error) {
+func InstallDNSAgent(exe, domain, addr, state, logDir string) (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
@@ -32,7 +32,7 @@ func InstallDNSAgent(exe, domain, addr, logDir string) (string, error) {
 	}
 	path := filepath.Join(dir, DNSAgentLabel+".plist")
 
-	args := dnsAgentArgs(exe, domain, addr)
+	args := dnsAgentArgs(exe, domain, addr, state)
 	plist := buildPlist(DNSAgentLabel, args,
 		filepath.Join(logDir, "bayd.log"),
 		filepath.Join(logDir, "bayd.err.log"))
@@ -84,13 +84,16 @@ func UninstallDNSAgent() error {
 
 // dnsAgentArgs returns the job's argument list. The installer and the drift
 // check both call it.
-func dnsAgentArgs(exe, domain, addr string) []string {
-	return []string{exe, "-domain", domain, "-addr", addr}
+// dnsAgentArgs are the arguments the job is registered with. The state
+// directory is among them because the registered job is where this machine's
+// setup records its owner.
+func dnsAgentArgs(exe, domain, addr, state string) []string {
+	return []string{exe, "-domain", domain, "-addr", addr, "-state", state}
 }
 
 // DNSAgentServes reports whether the installed job runs with these settings. A
 // renamed domain leaves the job registered with the previous values.
-func DNSAgentServes(domains []string, addr, bin string) bool {
+func DNSAgentServes(domains []string, addr, bin, state string) bool {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return false
@@ -104,7 +107,7 @@ func DNSAgentServes(domains []string, addr, bin string) bool {
 	if err := json.Unmarshal(out, &got); err != nil || len(got) == 0 {
 		return false
 	}
-	return agentIsCurrent(got, domains, addr, bin)
+	return agentIsCurrent(got, domains, addr, bin, state)
 }
 
 // agentIsCurrent reports whether the registered arguments are the ones this
@@ -114,14 +117,14 @@ func DNSAgentServes(domains []string, addr, bin string) bool {
 // removed stops at the next login, and one registered from another copy is not
 // the installation being used. bin is empty for a reader that has no
 // installation to name, and then the settings alone decide.
-func agentIsCurrent(got, domains []string, addr, bin string) bool {
+func agentIsCurrent(got, domains []string, addr, bin, state string) bool {
 	if len(got) == 0 {
 		return false
 	}
 	if bin != "" && got[0] != bin {
 		return false
 	}
-	want := dnsAgentArgs(got[0], strings.Join(domains, ","), addr)
+	want := dnsAgentArgs(got[0], strings.Join(domains, ","), addr, state)
 	if len(got) != len(want) {
 		return false
 	}
