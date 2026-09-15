@@ -5,6 +5,30 @@ the day the change was made.
 
 ## 2026-09-15
 
+### Read what an approved machine holds, not only where it is
+
+A peer's domains were read once, when the machine was approved, and never again.
+The announcement carries a fingerprint, a name and an address and no domains, so
+a domain added or withdrawn on the other machine never reached here: the name
+was not served, and a name it had given up went on being served.
+
+The resident agent asks each approved machine what it holds every 30 seconds and
+rewrites the proxy configuration when the answer differs. The domains are read
+from the document behind the link rather than from the announcement, which is a
+broadcast anyone on the network can send.
+
+The authority behind the document must be the one that was approved. An address
+that answers with another authority is another machine, and what it states about
+its domains is not the approved machine's to change. A machine that does not
+answer keeps what it holds: it has not given up a domain, it has not been asked.
+
+Verification: `go test ./internal/stack -run
+'TestADomain|TestTheSameDomains|TestAnotherAuthority|TestAPeerThatDoesNotAnswer'`
+covers a domain added, a domain withdrawn, the same domains in another order,
+another authority at the address, and a machine that does not answer. `make
+check` passes.
+
+
 ### Give up on an engine that never answers
 
 An engine command was run with no bound. A daemon that has stopped answering

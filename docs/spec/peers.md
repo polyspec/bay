@@ -16,6 +16,15 @@ is empty and the error the proxy writes for that request is the only signal:
 nginx reports the request itself as complete either way. The switch is off until
 it is turned on, because it writes a line for every request over the link.
 
+What an approved machine holds is read from that machine, every 30 seconds, by
+the resident agent. The announcement carries only where to look, so a domain
+added or withdrawn over there reaches here by reading the document again. The
+authority behind the document must be the one that was approved: an address that
+answers with another authority is another machine, and what it states about its
+domains is not the approved machine's to change. A machine that does not answer
+keeps what it holds, because it has not given up a domain, it has not been
+asked.
+
 Reading the record is one command against the engine the proxy runs on. A
 request that lost bytes leaves an error beside its line:
 

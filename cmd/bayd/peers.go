@@ -11,13 +11,53 @@ import (
 )
 
 // The resident agent is what keeps a machine findable and its peers reachable.
-// It announces this machine while the link is open, and it follows an approved
-// peer that comes back at another address, which is what happens when the
-// network hands out a different one.
+// It announces this machine while the link is open, it follows an approved peer
+// that comes back at another address, which is what happens when the network
+// hands out a different one, and it reads what domains each approved peer holds
+// so that one added or withdrawn over there is served or dropped here.
 func servePeers(ctx context.Context, dir string) {
 	m := stack.NewMachine(dir)
 	go announceSelf(ctx, m)
 	go followPeers(ctx, m)
+	go refreshDomains(ctx, m)
+}
+
+// domainRefresh is how often each approved peer is asked what it holds. The
+// announcement carries no domains, so this is the only thing that brings a
+// change over there to here, and it is a request over the link per peer rather
+// than a packet on the network.
+const domainRefresh = 30 * time.Second
+
+// refreshDomains asks each approved peer what domains it holds and rewrites the
+// proxy configuration when the answer differs from what is stored.
+func refreshDomains(ctx context.Context, m *stack.Machine) {
+	t := time.NewTicker(domainRefresh)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+		peers, err := stack.Peers(m.Dir)
+		if err != nil || len(peers) == 0 {
+			continue
+		}
+		changed, err := stack.RefreshPeerDomains(m.Dir)
+		if err != nil {
+			// A peer that is off or out of reach is not a fault of this
+			// machine, so it is said once at this level and not repeated.
+			log.Printf("reading what the approved machines hold: %v", err)
+		}
+		if !changed {
+			continue
+		}
+		if _, err := stack.SyncProxy(m); err != nil {
+			log.Printf("serving what the approved machines now hold: %v", err)
+			continue
+		}
+		log.Printf("what the approved machines hold has changed")
+	}
 }
 
 // announceSelf broadcasts this machine while its link is open. It reads the
