@@ -2,7 +2,11 @@ package stack
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 )
 
 // dockerInspect is the output `docker inspect` returns for a container. The
@@ -198,5 +202,48 @@ func TestOneDomainIsClaimedOncePerMachineAcrossEngines(t *testing.T) {
 	}
 	if got := RoutesOn(routes, DockerEngine); len(got) != 1 {
 		t.Fatalf("docker proxy got %v, want the container that holds the domain", got)
+	}
+}
+
+// A daemon that has stopped answering accepts the connection and never replies.
+// Without a bound the command never returns and everything that reads the
+// container list stops with it, which is how a whole test run came to sit for
+// ten minutes on one call. A command that does not answer within its bound is
+// an engine that does not answer, which contributes nothing.
+func TestAnEngineThatNeverAnswersIsGivenUpOn(t *testing.T) {
+	dir := t.TempDir()
+	fake := filepath.Join(dir, "docker")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\nsleep 300\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("DOCKER_BIN", fake)
+
+	start := time.Now()
+	_, err := runEngineWithin(300*time.Millisecond, DockerEngine, "container", "ls")
+	if err == nil {
+		t.Fatal("a command that never answered was reported as having answered")
+	}
+	if took := time.Since(start); took > 5*time.Second {
+		t.Fatalf("the command was waited on for %s, so it is not bound", took)
+	}
+	if !strings.Contains(err.Error(), "no answer within") {
+		t.Errorf("the error does not say the engine did not answer: %v", err)
+	}
+
+	// The list treats it as an engine that does not answer: no containers, and
+	// no error, so one stuck engine does not stop the machine reading another.
+	stuck := engineReader{name: DockerEngine, read: func() ([]Instance, error) {
+		_, err := runEngineWithin(200*time.Millisecond, DockerEngine, "container", "ls")
+		return nil, err
+	}}
+	answering := engineReader{name: AppleEngine, read: func() ([]Instance, error) {
+		return []Instance{{Name: "edge", Engine: AppleEngine}}, nil
+	}}
+	list, err := listFrom([]engineReader{stuck, answering})
+	if err != nil {
+		t.Fatalf("a stuck engine made the list fail: %v", err)
+	}
+	if len(list) != 1 || list[0].Name != "edge" {
+		t.Fatalf("list is %v, want only the answering engine's container", list)
 	}
 }

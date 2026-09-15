@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,6 +9,7 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+	"time"
 )
 
 // The engines that run containers. Each engine is named by the command used to
@@ -15,6 +17,16 @@ import (
 const (
 	AppleEngine  = "container"
 	DockerEngine = "docker"
+)
+
+// An engine command is given a bound. A daemon that has stopped answering
+// accepts the connection and never replies, so a command against it returns
+// nothing and never ends. Reading is bounded short because the answer is a list
+// the engine already holds; creating and removing are bounded long because the
+// engine may be pulling an image or stopping a process.
+const (
+	engineReadWait = 15 * time.Second
+	engineActWait  = 10 * time.Minute
 )
 
 // engineReader reads the container list of one engine.
@@ -76,11 +88,27 @@ func engineBin(engine string) string {
 // runEngine runs one command against an engine and returns its output. On
 // failure the error contains the command's stderr.
 func runEngine(engine string, args ...string) ([]byte, error) {
+	return runEngineWithin(engineActWait, engine, args...)
+}
+
+// runEngineWithin runs one command against an engine and gives up after wait.
+func runEngineWithin(wait time.Duration, engine string, args ...string) ([]byte, error) {
 	bin := engineBin(engine)
 	if bin == "" {
 		return nil, fmt.Errorf("%s is not installed", engine)
 	}
-	out, err := exec.Command(bin, args...).Output()
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, bin, args...)
+	// Ending the command ends the process it started and no other. A process
+	// that started one of its own leaves that one holding the output, and
+	// reading it would wait for a process nothing is bound to. The read is
+	// given up on shortly after the command is.
+	cmd.WaitDelay = time.Second
+	out, err := cmd.Output()
+	if ctx.Err() != nil {
+		return nil, fmt.Errorf("%s %s: no answer within %s", engine, strings.Join(args, " "), wait)
+	}
 	var ee *exec.ExitError
 	if errors.As(err, &ee) {
 		msg := strings.TrimSpace(string(ee.Stderr))
@@ -93,7 +121,7 @@ func runEngine(engine string, args ...string) ([]byte, error) {
 }
 
 func appleContainers() ([]Instance, error) {
-	out, err := runEngine(AppleEngine, "ls", "--all", "--format", "json")
+	out, err := runEngineWithin(engineReadWait, AppleEngine, "ls", "--all", "--format", "json")
 	if err != nil {
 		return nil, err
 	}
@@ -104,7 +132,8 @@ func appleContainers() ([]Instance, error) {
 // `docker container ls` returns labels as one joined string and returns no
 // address, so inspect is required.
 func dockerContainers() ([]Instance, error) {
-	out, err := runEngine(DockerEngine, "container", "ls", "--all", "--quiet", "--no-trunc")
+	out, err := runEngineWithin(engineReadWait, DockerEngine,
+		"container", "ls", "--all", "--quiet", "--no-trunc")
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +141,8 @@ func dockerContainers() ([]Instance, error) {
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	out, err = runEngine(DockerEngine, append([]string{"inspect", "--type", "container"}, ids...)...)
+	out, err = runEngineWithin(engineReadWait, DockerEngine,
+		append([]string{"inspect", "--type", "container"}, ids...)...)
 	if err != nil {
 		return nil, err
 	}

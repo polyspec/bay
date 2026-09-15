@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -8,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 )
 
 // Labels carry a container's routing settings. The proxy configuration and the
@@ -307,7 +309,15 @@ func Logs(name string, follow bool, tail int, w io.Writer) error {
 	if err != nil {
 		return err
 	}
-	cmd := exec.Command(engineBin(engine), args...)
+	// Following an output has no end of its own, so only a fixed read is bound.
+	ctx := context.Background()
+	if !follow {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, engineReadWait)
+		defer cancel()
+	}
+	cmd := exec.CommandContext(ctx, engineBin(engine), args...)
+	cmd.WaitDelay = time.Second
 	cmd.Stdout = w
 	cmd.Stderr = w
 	return cmd.Run()
