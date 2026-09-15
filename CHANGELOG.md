@@ -3,6 +3,33 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-09-15
+
+### Give up on an engine that never answers
+
+An engine command was run with no bound. A daemon that has stopped answering
+accepts the connection and never replies, so the command returned nothing and
+never ended, and everything that reads the container list stopped with it. A
+test run sat for ten minutes on one such call and was killed by its own timeout.
+
+Reading the list is bound to 15 seconds and creating or removing to 10 minutes,
+because that one may be pulling an image or stopping a process. A command that
+does not answer within its bound is an engine that does not answer, which
+contributes no containers and does not stop the machine reading another engine.
+
+Ending a command ends the process it started and no other, and a process that
+started one of its own leaves that one holding the output. Reading it would then
+wait for a process nothing is bound to, so the read is given up on a second
+after the command is.
+
+Verification: a fake engine that sleeps for five minutes is asked for the
+container list. `go test ./internal/stack -run
+TestAnEngineThatNeverAnswersIsGivenUpOn` passes in 2.9 seconds and checks that
+the command is given up on, that the error says so, and that a second engine is
+still read. `TestTheHealthcheckWaitStatesItsBound`, which sat for ten minutes
+against this machine's stopped daemon, now ends in 15.2 seconds. `make check`
+passes.
+
 ## 2026-09-12
 
 ### A run that fails says why, and is on the screen while it runs
