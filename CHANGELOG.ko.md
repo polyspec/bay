@@ -4,6 +4,19 @@
 
 ## 2026-09-25
 
+### 초기화는 런타임이 중지를 보고할 때 완료
+
+일회성 서비스의 attach한 start가 반환된 뒤 `up`·`start`·`restart`는 일회성 제한
+시간 안에서 런타임이 중지를 보고할 때까지 100밀리초마다 컨테이너를 읽는다. attach한
+start는 런타임이 중지 상태를 보고하기 전에 반환될 수 있으며, 한 번만 읽으면 성공한
+실행이 "has no stable stopped identity"로 실패했다. 시작한 컨테이너와 다른
+컨테이너는 다른 필드마다 하나의 오류로 실패한다: 상태, 생성 시각, 시작 시각, 설정
+label, 이미지 digest.
+
+검증: `go test ./internal/stack -run
+'TestServiceEngineWaitsForAttachedInitializerToStop|TestServiceEngineNamesEachDifferingStoppedField'`
+(두 테스트 모두 변경 전에 실패); `make check`; `go test -count=1 ./...`.
+
 ### 프로젝트는 up과 프로젝트 추가만 등록
 
 `install`은 더 이상 작업 디렉터리의 Compose 프로젝트를 등록하지 않고 등록된

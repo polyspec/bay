@@ -313,16 +313,60 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 			e.serviceLog(s.ContainerName))
 	}
 	if s.OneShot {
-		after, ok, err := e.lookup(ctx, s.ContainerName)
+		after, err := e.waitStopped(ctx, s.ContainerName, created.Created)
 		if err != nil {
-			return err
+			return fmt.Errorf("initializer %s: %w", s.Name, err)
 		}
-		if !ok || owns(group, s, after) != nil || after.State != "stopped" || after.Created != created.Created || after.Started == "" || after.Labels[LabelConfig] != fingerprint || after.ImageDigest != digest {
-			return fmt.Errorf("initializer %s has no stable stopped identity", s.Name)
+		if err := stoppedIdentity(group, s, after, created.Created, fingerprint, digest); err != nil {
+			return fmt.Errorf("initializer %s has no stable stopped identity: %w", s.Name, err)
 		}
 		return e.record(after, fingerprint)
 	}
 	return e.started(ctx, s)
+}
+
+// waitStopped waits for the runtime to report an attached one-shot container
+// stopped, because the attached start can return before the runtime reports the
+// stopped state. It returns the container as last read, which is a replacement
+// when the creation time differs.
+func (e *serviceEngine) waitStopped(ctx context.Context, name, created string) (Instance, error) {
+	var last Instance
+	err := e.waitFor(ctx, name, func(in Instance, ok bool) (bool, error) {
+		if !ok {
+			return false, fmt.Errorf("container %s is missing", name)
+		}
+		last = in
+		return in.State == "stopped" || in.Created != created, nil
+	})
+	if err != nil && ctx.Err() != nil {
+		return last, fmt.Errorf("container %s state is %q after the attached start returned: %w", name, last.State, err)
+	}
+	return last, err
+}
+
+// stoppedIdentity returns one error for each field of a finished one-shot
+// container that differs from the container this command created and started.
+func stoppedIdentity(group string, s *Service, in Instance, created, fingerprint, digest string) error {
+	var differ []error
+	if err := owns(group, s, in); err != nil {
+		differ = append(differ, err)
+	}
+	if in.State != "stopped" {
+		differ = append(differ, fmt.Errorf("state is %q, not stopped", in.State))
+	}
+	if in.Created != created {
+		differ = append(differ, fmt.Errorf("creation time is %q, not %q", in.Created, created))
+	}
+	if in.Started == "" {
+		differ = append(differ, errors.New("start time is empty"))
+	}
+	if in.Labels[LabelConfig] != fingerprint {
+		differ = append(differ, fmt.Errorf("configuration label is %q, not %q", in.Labels[LabelConfig], fingerprint))
+	}
+	if in.ImageDigest != digest {
+		differ = append(differ, fmt.Errorf("image digest is %q, not %q", in.ImageDigest, digest))
+	}
+	return errors.Join(differ...)
 }
 
 // started waits for the service's container to run and reports it, so a caller
@@ -338,20 +382,35 @@ func (e *serviceEngine) started(ctx context.Context, s *Service) error {
 func (e *serviceEngine) waitRunning(ctx context.Context, name string) error {
 	deadline, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
-	for {
-		in, ok, err := e.lookup(deadline, name)
-		if err != nil {
-			return err
-		}
-		if ok && in.State == "running" && in.IPv4 != "" {
-			return nil
-		}
+	err := e.waitFor(deadline, name, func(in Instance, ok bool) (bool, error) {
 		if ok && in.State == "stopped" {
-			return failureWithLog(fmt.Sprintf("service %s stopped before becoming ready", name),
+			return false, failureWithLog(fmt.Sprintf("service %s stopped before becoming ready", name),
 				e.serviceLog(name))
 		}
-		if err := sleepContext(deadline, 100*time.Millisecond); err != nil {
-			return fmt.Errorf("service %s did not start: %w", name, err)
+		return ok && in.State == "running" && in.IPv4 != "", nil
+	})
+	if err != nil && deadline.Err() != nil {
+		return fmt.Errorf("service %s did not start: %w", name, err)
+	}
+	return err
+}
+
+// waitFor reads the named container every 100 milliseconds until reached
+// returns true or an error. It returns ctx's error when ctx ends first.
+func (e *serviceEngine) waitFor(ctx context.Context, name string, reached func(Instance, bool) (bool, error)) error {
+	for {
+		in, ok, err := e.lookup(ctx, name)
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			return err
+		}
+		if done, err := reached(in, ok); done || err != nil {
+			return err
+		}
+		if err := sleepContext(ctx, 100*time.Millisecond); err != nil {
+			return err
 		}
 	}
 }

@@ -19,6 +19,7 @@
 | 프로세스 시작 전에 로컬 이미지 tag 검증 | 구현됨 | `TestLocalImageTagActualRuntime`이 digest 별칭 누락을 재현하고 로컬 tag 초기화·재사용·비공개 실패 출력·네이티브 로그 보존을 검증하며 단위 테스트가 시작 전 이미지·소유자·설정 변경을 거부 | 설치: `ea95bf0` |
 | Compose가 관리하는 영속 named volume | 구현됨 | `make check`와 `go test -race ./internal/stack`이 소유권·선언 검증을 검사하고 `BAY_SERVICE_E2E=1 go test -race ./internal/stack -run TestManagedVolumeActualRuntime`가 서비스 제거·재생성 뒤 데이터·볼륨 식별 정보 보존을 확인 | 설치: `ea95bf0` |
 | Compose 런타임 제한 및 순서·재사용을 지키는 서비스 시작 | 구현됨 | `make check`가 치환·mount·의존성 오류·소유권·재사용·완료 증거를 검사하고 `BAY_SERVICE_E2E=1 go test ./internal/stack -run TestServiceLifecycleActualRuntime`가 실제 제한·초기화·기존 컨테이너 보존을 검사 | 설치: `ea95bf0` |
+| 초기화는 런타임이 중지를 보고할 때 완료 | 구현됨 | `go test ./internal/stack -run 'TestServiceEngineWaitsForAttachedInitializerToStop\|TestServiceEngineNamesEachDifferingStoppedField'`가 attach한 start 반환 뒤 세 번의 읽기 동안 컨테이너를 실행 중으로 보고하는 런타임과, 바뀐 상태·생성 시각·시작 시각·설정 label·이미지 digest를 각각 오류에 명시하는지 검사. 두 테스트는 변경 전에 "has no stable stopped identity"로 실패했다 | 빌드됨; 미설치 |
 | Compose 파일을 프로젝트 형식으로 사용 | 구현됨 | `go test ./internal/stack`과 `go test ./internal/contract`이 키 파싱, 두 가지 라벨 표기, 포트 결정, 파일 검색, 문서의 예제를 검사 | 예 |
 | 머신 단위 도메인과 프로젝트 지정 | 구현됨 | `go test ./internal/stack`이 추가, 제거, 기본값 변경, 지정된 도메인 제거 거부를 검사 | 예 |
 | 컨테이너 라벨에서 라우트 생성 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestTwoGroupsShareOneProxy`이 프로젝트 두 개를 띄워 각자 도메인으로 응답함을 확인 | 예 |

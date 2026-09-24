@@ -5,6 +5,20 @@ the day the change was made.
 
 ## 2026-09-25
 
+### An initializer completes when the runtime reports it stopped
+
+After the attached start of a one-shot service returns, `up`, `start` and
+`restart` read the container every 100 milliseconds until the runtime reports it
+stopped, within the one-shot deadline. The attached start can return before the
+runtime reports the stopped state, and a single read then failed a successful
+run with "has no stable stopped identity". A container that differs from the one
+started fails with one error for each differing field: state, creation time,
+start time, configuration label or image digest.
+
+Verification: `go test ./internal/stack -run
+'TestServiceEngineWaitsForAttachedInitializerToStop|TestServiceEngineNamesEachDifferingStoppedField'`
+(both failed before the change); `make check`; `go test -count=1 ./...`.
+
 ### Only up and Add project register a project
 
 `install` no longer registers the Compose project of the working directory; it

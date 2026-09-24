@@ -23,6 +23,12 @@ type fakeServices struct {
 	failInit       bool
 	blockInit      bool
 	sequence       int
+	// stopLag is the number of list reads after an attached start returns
+	// that still report the container running.
+	stopLag int
+	lagging string
+	// attached changes the container when an attached start returns.
+	attached func(*Instance)
 }
 
 func fakeEngine(t *testing.T) (*serviceEngine, *fakeServices) {
@@ -38,6 +44,16 @@ func (f *fakeServices) command(ctx context.Context, args ...string) ([]byte, err
 	f.calls = append(f.calls, append([]string{}, args...))
 	switch args[0] {
 	case "ls":
+		if f.lagging != "" {
+			if f.stopLag == 0 {
+				in := f.instances[f.lagging]
+				in.State = "stopped"
+				f.instances[f.lagging] = in
+				f.lagging = ""
+			} else {
+				f.stopLag--
+			}
+		}
 		raw := []any{}
 		for _, in := range f.instances {
 			raw = append(raw, map[string]any{"configuration": map[string]any{"id": in.Name, "creationDate": in.Created, "labels": in.Labels, "image": map[string]any{"descriptor": map[string]string{"digest": in.ImageDigest}}}, "status": map[string]any{"state": in.State, "startedDate": in.Started, "networks": []any{map[string]string{"ipv4Address": in.IPv4}}}})
@@ -71,7 +87,14 @@ func (f *fakeServices) command(ctx context.Context, args ...string) ([]byte, err
 				<-ctx.Done()
 				return nil, ctx.Err()
 			}
-			in.State = "stopped"
+			if f.stopLag > 0 {
+				f.lagging = name
+			} else {
+				in.State = "stopped"
+			}
+			if f.attached != nil {
+				f.attached(&in)
+			}
 			f.instances[name] = in
 			if f.failInit {
 				return nil, errors.New("exit 7")
@@ -367,6 +390,62 @@ func TestServiceEngineFailedDependencyNeverStartsWeb(t *testing.T) {
 		})
 	}
 }
+func TestServiceEngineWaitsForAttachedInitializerToStop(t *testing.T) {
+	cfg := lifecycleConfig(t)
+	e, f := fakeEngine(t)
+	f.stopLag = 3
+	if err := e.start(cfg, cfg.Sorted(), false); err != nil {
+		t.Fatal(err)
+	}
+	if f.lagging != "" || f.stopLag != 0 {
+		t.Fatal("initializer completed before the runtime reported it stopped")
+	}
+	if _, err := os.Stat(e.completionPath("app-initialize")); err != nil {
+		t.Fatalf("completed initializer was not recorded: %v", err)
+	}
+	if _, ok := f.instances["app-web"]; !ok {
+		t.Fatal("web did not start after the initializer stopped")
+	}
+}
+
+func TestServiceEngineNamesEachDifferingStoppedField(t *testing.T) {
+	fields := []string{"state", "creation time", "start time", "configuration label", "image digest"}
+	for _, c := range []struct {
+		field  string
+		change func(*Instance)
+	}{
+		{"state", func(in *Instance) { in.State = "unknown" }},
+		{"creation time", func(in *Instance) { in.Created = "replacement" }},
+		{"start time", func(in *Instance) { in.Started = "" }},
+		{"configuration label", func(in *Instance) {
+			in.Labels = map[string]string{LabelRole: roleService, LabelGroup: "app", LabelService: "initialize", LabelConfig: "other"}
+		}},
+		{"image digest", func(in *Instance) { in.ImageDigest = "sha256:" + strings.Repeat("c", 64) }},
+	} {
+		t.Run(c.field, func(t *testing.T) {
+			cfg := lifecycleConfig(t)
+			e, f := fakeEngine(t)
+			e.timeout = 300 * time.Millisecond
+			f.attached = c.change
+			err := e.start(cfg, cfg.Sorted(), false)
+			if err == nil {
+				t.Fatal("changed initializer identity was accepted")
+			}
+			for _, field := range fields {
+				if named := strings.Contains(err.Error(), field); named != (field == c.field) {
+					t.Fatalf("error naming %s is %v: %v", field, named, err)
+				}
+			}
+			if _, err := os.Stat(e.completionPath("app-initialize")); !os.IsNotExist(err) {
+				t.Fatal("changed initializer identity was recorded successful")
+			}
+			if _, ok := f.instances["app-web"]; ok {
+				t.Fatal("web started after a changed initializer identity")
+			}
+		})
+	}
+}
+
 func TestServiceEngineRejectsUnprovenOrExternallyRestartedCompletion(t *testing.T) {
 	for _, change := range []string{"started", "created", "missing", "corrupt"} {
 		t.Run(change, func(t *testing.T) {
