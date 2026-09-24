@@ -73,7 +73,7 @@ Writes the server blocks and issues any certificate a route needs, then reloads 
 
 ### `install`
 
-Writes /etc/resolver entries, adds the certificate authority to the user's trust settings, and registers the DNS launchd agent.
+Writes /etc/resolver entries, adds the certificate authority to the user's trust settings, and registers the DNS launchd agent. Registers no project.
 
 ### `uninstall`
 

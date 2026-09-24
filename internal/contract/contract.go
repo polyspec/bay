@@ -110,7 +110,7 @@ func Commands() []Command {
 			Name: "install", Args: "",
 			Summary: "Apply the machine setup now instead of during the next up.",
 			Effect: "Writes /etc/resolver entries, adds the certificate authority to " +
-				"the user's trust settings, and registers the DNS launchd agent.",
+				"the user's trust settings, and registers the DNS launchd agent. Registers no project.",
 			Root:    true,
 			Example: "bay install",
 		},

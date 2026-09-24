@@ -559,12 +559,6 @@ func sync(m *stack.Machine) error {
 }
 
 func install(m *stack.Machine) error {
-	// Register the project in the working directory so install covers it.
-	if cfg, err := stack.LoadIn(m, *file); err == nil {
-		if err := m.Register(cfg.Ref()); err != nil {
-			return err
-		}
-	}
 	rt, err := newRuntime(m)
 	if err != nil {
 		return err

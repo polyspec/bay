@@ -4,6 +4,19 @@
 
 ## 2026-09-25
 
+### 프로젝트는 up과 프로젝트 추가만 등록
+
+`install`은 더 이상 작업 디렉터리의 Compose 프로젝트를 등록하지 않고 등록된
+프로젝트의 준비를 적용한다. 메뉴바 프로그램은 시작할 때 Compose 파일을 등록하는
+`-f`를 더 이상 받지 않으며, 창의 프로젝트 추가가 프로젝트를 등록한다. `status`와
+`doctor`는 이전처럼 아무것도 등록하지 않는다. 프로젝트는 `up` 또는 프로젝트
+추가로 등록한다.
+
+검증: `go test ./cmd/bay -run DoesNotRegister`(status와 install이 다른
+경로로 등록된 항목을 바이트 단위로 그대로 둔다. install 경우는 변경 전에 실패했다)와
+`go test ./cmd/baybar -run TestStartTakesNoComposeFileToRegister`(변경 전에
+실패했다), `make check`.
+
 ### 서비스가 x-bay.domains에 도메인을 나열
 
 서비스는 제공될 모든 도메인을 자신의 `x-bay.domains` 목록에 적는다.

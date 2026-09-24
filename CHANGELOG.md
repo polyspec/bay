@@ -5,6 +5,19 @@ the day the change was made.
 
 ## 2026-09-25
 
+### Only up and Add project register a project
+
+`install` no longer registers the Compose project of the working directory; it
+applies the setup for the registered projects. The menu bar program no longer
+takes `-f` to register a Compose file on start; Add project in its window
+registers one. `status` and `doctor` register nothing, as before. A project is
+registered by `up` or by Add project.
+
+Verification: `go test ./cmd/bay -run DoesNotRegister` (status and
+install leave a registry entry of another path byte for byte unchanged; the
+install case failed before the change) and `go test ./cmd/baybar -run
+TestStartTakesNoComposeFileToRegister` (failed before the change); `make check`.
+
 ### Services list their domains in x-bay.domains
 
 A service lists every domain it is served at in its own `x-bay.domains`

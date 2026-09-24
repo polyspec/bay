@@ -16,6 +16,9 @@ unreadable public certificates appear in the report; `status --json` includes
 `certificates.authority.readError` when the public CA cannot be read. `doctor`
 includes the selected project's domains in its setup report without saving them.
 When it reports missing steps, run `bay install`; see [Install](install.md).
+`install` applies the setup for the registered projects and registers no
+project. A project is registered by `up`, or by Add project in the menu bar
+window.
 
 `status` lists the domains other projects already serve. Choose a different name
 for yours: `up` refuses a domain another running project serves and names that

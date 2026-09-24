@@ -32,7 +32,6 @@ import (
 const maxGroupLines = 12
 
 var (
-	file     = flag.String("f", "", "Compose file or directory to register on start (optional)")
 	dir      = flag.String("state", defaultState(), "bay state directory")
 	addr     = flag.String("addr", stack.DefaultDNSAddr, "address bayd listens on")
 	dnsBin   = flag.String("dnsbin", "", "path to the bayd binary (default: next to this one)")
@@ -72,11 +71,6 @@ func main() {
 	log.SetFlags(log.Ltime)
 
 	m := stack.NewMachine(*dir)
-	if *file != "" {
-		if cfg, err := stack.LoadIn(m, *file); err == nil {
-			m.Register(cfg.Ref())
-		}
-	}
 	applyLanguage()
 	a := &app{rt: &stack.Runtime{
 		Machine:   m,
