@@ -97,21 +97,25 @@ type GroupStatus struct {
 type ServiceStatus struct {
 	Name      string `json:"name"`
 	Container string `json:"container"`
-	Domain    string `json:"domain"`
-	Image     string `json:"image"`
-	Port      int    `json:"port"`
-	Scheme    string `json:"scheme"`
+	// Domains are the domains the proxy routes to the service, in the order of
+	// x-bay.domains.
+	Domains []string `json:"domains"`
+	Image   string   `json:"image"`
+	Port    int      `json:"port"`
+	Scheme  string   `json:"scheme"`
 	// State is "running", "starting", "stopped", or "absent" when no container
 	// exists. "starting" means the container runs but does not yet accept a
 	// connection on its port.
 	State string `json:"state"`
 	IPv4  string `json:"ipv4"`
-	// Routed says the proxy currently forwards this service's domain to it.
+	// Routed says the proxy currently forwards every domain of this service to
+	// it.
 	Routed bool `json:"routed"`
 	// Internal marks a service with no domain. Other services reach it by name;
 	// the proxy does not route to it.
-	Internal bool   `json:"internal"`
-	URL      string `json:"url"`
+	Internal bool `json:"internal"`
+	// URLs are the addresses of the domains, in the order of Domains.
+	URLs []string `json:"urls"`
 	// Address is how other services reach it from inside the network.
 	Address string `json:"address"`
 	// Started is when the runtime started the container, in RFC 3339. It is
@@ -225,9 +229,7 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 			use.Unread = true
 		}
 		for _, svc := range status.Services {
-			if svc.Domain != "" {
-				use.Declared = append(use.Declared, svc.Domain)
-			}
+			use.Declared = append(use.Declared, svc.Domains...)
 		}
 	}
 	for _, r := range routes {
@@ -385,16 +387,14 @@ func groupStatus(m *Machine, g GroupRef, byContainer map[string]ServiceInstance,
 		st := ServiceStatus{
 			Name:      s.Name,
 			Container: s.ContainerName,
-			Domain:    s.Domain,
+			Domains:   s.Domains,
 			Image:     s.Image,
 			Port:      s.Port,
 			Scheme:    "http",
 			State:     "absent",
-			Internal:  s.Internal,
+			Internal:  s.Internal(),
+			URLs:      domainURLs(s.Domains),
 			Address:   fmt.Sprintf("%s.%s:%d", s.ContainerName, BackendDomain, s.Port),
-		}
-		if !s.Internal {
-			st.URL = "https://" + s.Domain + "/"
 		}
 		if s.TLS {
 			st.Scheme = "https"
@@ -405,10 +405,30 @@ func groupStatus(m *Machine, g GroupRef, byContainer map[string]ServiceInstance,
 				st.State = "starting"
 			}
 		}
-		st.Routed = routed[s.Domain] && st.Running()
+		st.Routed = allRouted(s.Domains, routed) && st.Running()
 		out.Services = append(out.Services, st)
 	}
 	return out
+}
+
+// domainURLs returns the HTTPS address of each domain.
+func domainURLs(domains []string) []string {
+	out := make([]string, 0, len(domains))
+	for _, d := range domains {
+		out = append(out, "https://"+d+"/")
+	}
+	return out
+}
+
+// allRouted reports whether domains is not empty and the proxy routes each of
+// them.
+func allRouted(domains []string, routed map[string]bool) bool {
+	for _, d := range domains {
+		if !routed[d] {
+			return false
+		}
+	}
+	return len(domains) > 0
 }
 
 func serviceFromInstance(in ServiceInstance, routed map[string]bool) ServiceStatus {
@@ -416,21 +436,18 @@ func serviceFromInstance(in ServiceInstance, routed map[string]bool) ServiceStat
 	if in.Running() && !in.Ready() {
 		state = "starting"
 	}
-	st := ServiceStatus{
+	return ServiceStatus{
 		Name:      in.Service,
 		Container: in.Container,
-		Domain:    in.Domain,
+		Domains:   in.Domains,
 		Port:      in.Port,
 		Scheme:    in.Scheme,
 		State:     state,
 		IPv4:      in.IPv4,
 		Started:   in.Started,
-		Routed:    routed[in.Domain] && in.Running(),
-		Internal:  in.Domain == "",
+		Routed:    allRouted(in.Domains, routed) && in.Running(),
+		Internal:  len(in.Domains) == 0,
+		URLs:      domainURLs(in.Domains),
 		Address:   fmt.Sprintf("%s.%s:%d", in.Container, BackendDomain, in.Port),
 	}
-	if !st.Internal {
-		st.URL = "https://" + in.Domain + "/"
-	}
-	return st
 }

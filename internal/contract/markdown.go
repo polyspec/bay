@@ -65,6 +65,10 @@ func MarkdownSchema(w io.Writer) {
 	markdownKeys(w, ProjectKeys())
 
 	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "## Service keys")
+	markdownKeys(w, ServiceKeys())
+
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "## Service labels")
 	markdownKeys(w, ServiceLabels())
 

@@ -23,9 +23,9 @@ project.
 
 ## Add a project
 
-A project is a Compose file. A service with no extra settings is served at
-`<service>.<project domain>`, and the project domain is the machine default
-unless the file names one.
+A project is a Compose file. A service is served at the domains listed in its
+`x-bay.domains`. The project domain is the machine default unless the
+file names one.
 
 ```yaml
 name: myapp
@@ -37,6 +37,8 @@ services:
     command: ["npm", "run", "dev"]
     volumes:
       - ./src:/app/src
+    x-bay:
+      domains: [web.test]
 ```
 
 ```sh
@@ -50,23 +52,27 @@ bay up
 to a host port: each container has its own address, and the proxy connects to it
 directly.
 
-## Choose the name a service is served at
+## Choose the names a service is served at
 
-The default is `<service>.<project domain>`. A label sets it explicitly:
+`x-bay.domains` lists every name of a service. The proxy routes each
+name to the same container and issues a certificate for each:
 
 ```yaml
   web:
     image: node:26-slim
-    labels:
-      bay.domain: shop.test
+    x-bay:
+      domains:
+        - shop.test
+        - admin.shop.test
 ```
 
-The name must be under one of the project's domains. Two services in a project
-cannot claim the same name.
+The container receives the requested name in the `Host` header. Every name must
+be under one of the project's domains. A name another service claims, in this
+project or in a running project, is refused with both services named.
 
 ## Services with no domain
 
-A database, a queue or a worker is marked internal. It receives no domain, no
+A database, a queue or a worker lists no domains. It is internal: it receives no
 route and no certificate:
 
 ```yaml
@@ -75,8 +81,6 @@ route and no certificate:
     expose: ["5432"]
     environment:
       POSTGRES_PASSWORD: dev
-    labels:
-      bay.internal: "true"
 ```
 
 The container runs and other services reach it by name.

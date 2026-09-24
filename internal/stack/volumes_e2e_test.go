@@ -24,7 +24,6 @@ func TestManagedVolumeActualRuntime(t *testing.T) {
 services:
   store:
     image: docker.io/library/node:26.8.1-trixie-slim
-    labels: {bay.internal: 'true'}
     volumes: ['data:/data']
     command: [node, -e, "require('fs').appendFileSync('/data/persist','x');setInterval(()=>{},1000)"]
     healthcheck:

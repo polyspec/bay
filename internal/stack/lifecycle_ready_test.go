@@ -10,10 +10,8 @@ func TestReadinessSelectionExcludesCompletedDependencies(t *testing.T) {
   db:
     image: postgres
     expose: ["5432"]
-    labels: {bay.internal: 'true'}
   initialize:
     image: application
-    labels: {bay.internal: 'true'}
   web:
     image: application
     depends_on:

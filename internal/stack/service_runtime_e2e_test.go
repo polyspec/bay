@@ -32,7 +32,6 @@ func TestServiceLifecycleActualRuntime(t *testing.T) {
 services:
   db:
     image: docker.io/library/node:26.8.1-trixie-slim
-    labels: {bay.internal: 'true'}
     command: [node, -e, "require('net').createServer().listen(4321,'127.0.0.1')"]
     healthcheck:
       test: [CMD, node, -e, "const c=require('net').connect(4321,'127.0.0.1',()=>{c.end();process.exit(0)});c.on('error',()=>process.exit(1))"]
@@ -41,7 +40,6 @@ services:
       retries: 10
   initialize:
     image: docker.io/library/node:26.8.1-trixie-slim
-    labels: {bay.internal: 'true'}
     user: '%d:%d'
     read_only: true
     cap_drop: [ALL]
@@ -50,7 +48,6 @@ services:
     depends_on: {db: {condition: service_healthy}}
   web:
     image: docker.io/library/node:26.8.1-trixie-slim
-    labels: {bay.internal: 'true'}
     user: '%d:%d'
     read_only: true
     cap_drop: [ALL]

@@ -47,7 +47,8 @@
 | 모든 결과를 로그로 남김 | 구현됨 | 성공한 동작에 대해 창이 `info: 프록시 설정을 다시 썼습니다 · 경로 5개`를 로그로 남김. 이전에는 실패만 남겨서, 창이 보여준 내용이 다음 동작으로 덮이면 사라졌음 | 예 |
 | 오래된 주소 연결은 매달리지 않고 실패 | 구현됨 | `go test ./internal/stack -run TestConnectTimeoutIsBounded`가 모든 `proxy_pass`에 상한이 있는지 검사. 상한이 없을 때 재생성된 컨테이너에서 1분 0.027초를 기다린 뒤 504가 났음 | 예 |
 | 프록시가 새 설정을 제공한 뒤 명령이 반환 | 구현됨 | `BAY_E2E=1 go test ./internal/stack`이 15초 클라이언트 시간 초과로 실패하던 자리에서 4초 이내에 완료 | 예 |
-| 도메인 없는 internal 서비스 | 구현됨 | `go test ./internal/stack`이 라벨을 검사하고, 종단 테스트가 라우트와 인증서가 없음을 확인 | 예 |
+| `x-bay.domains`의 서비스 도메인, 서비스당 여러 개 | 구현됨 | `go test ./internal/stack -run 'TestServiceDomains\|TestRejects\|TestRoutes\|TestDomainServedByAnotherProject\|TestServiceArguments\|TestSetPrimaryDomain'`이 목록, 치환, 모든 거부, 도메인마다 라우트 하나, 두 서비스를 적은 점유 오류, 도메인 이동을 검사하고 `go test ./cmd/baybar`가 창에서 도메인마다 링크 하나를 검사 | 빌드됨, 설치 안 함 |
+| 도메인 없는 internal 서비스 | 구현됨 | `go test ./internal/stack -run 'TestDefaults\|TestInternalServicesGetNoDomain\|TestRoutesSkipAnInternalContainer'`이 `x-bay.domains`가 없는 서비스에 도메인과 라우트가 없음을 검사 | 빌드됨, 설치 안 함 |
 | 실행 중인 프로젝트의 도메인을 다른 프로젝트가 가져가지 못함 | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestUpRefusesADomainAnotherProjectServes`이 거부 메시지가 보유 프로젝트를 명시하고 컨테이너를 만들지 않음을 확인 | 예 |
 | running과 구분되는 starting 상태 | 구현됨 | `TestReadinessActualRuntime`이 격리된 listener로 두 snapshot 경로·Ready/Live·WaitReady를 검사하고 lifecycle 테스트가 완료 초기화·빈 선택을 제외함. 기존 `TestStartingIsDistinctFromRunning`은 보존하며 공유 프록시 사용 중에는 건너뜀 | 설치: `ea95bf0` |
 | 서비스 단위 start, stop, restart, logs | 구현됨 | `BAY_E2E=1 go test ./internal/stack -run TestStoppingOneServiceWithdrawsOnlyItsRoute`와 `-run TestLogsReachTheCaller` | 예 |

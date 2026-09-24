@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -59,11 +60,11 @@ func TestTwoGroupsShareOneProxy(t *testing.T) {
 	m := NewMachine(t.TempDir())
 	alpha := &Service{
 		Name: "web", ContainerName: "e2ealpha-web", Image: e2eImage,
-		Command: e2eServer("alpha"), Domain: "web.alpha.test", Port: 80, Network: ProxyNetwork,
+		Command: e2eServer("alpha"), Domains: []string{"web.alpha.test"}, Port: 80, Network: ProxyNetwork,
 	}
 	beta := &Service{
 		Name: "web", ContainerName: "e2ebeta-web", Image: e2eImage,
-		Command: e2eServer("beta"), Domain: "web.beta.test", Port: 80, Network: ProxyNetwork,
+		Command: e2eServer("beta"), Domains: []string{"web.beta.test"}, Port: 80, Network: ProxyNetwork,
 	}
 	t.Cleanup(func() {
 		Remove(alpha.ContainerName)
@@ -155,7 +156,7 @@ func TestServiceRestartKeepsRoute(t *testing.T) {
 	m := NewMachine(t.TempDir())
 	svc := &Service{
 		Name: "web", ContainerName: "e2ekeep-web", Image: e2eImage,
-		Command: e2eServer("before"), Domain: "web.keep.test", Port: 80, Network: ProxyNetwork,
+		Command: e2eServer("before"), Domains: []string{"web.keep.test"}, Port: 80, Network: ProxyNetwork,
 	}
 	t.Cleanup(func() { Remove(svc.ContainerName); stopEveryProxy() })
 
@@ -315,11 +316,11 @@ func TestStoppingOneServiceWithdrawsOnlyItsRoute(t *testing.T) {
 	m := NewMachine(t.TempDir())
 	one := &Service{
 		Name: "one", ContainerName: "e2esvc-one", Image: e2eImage,
-		Command: e2eServer("one"), Domain: "one.svc.test", Port: 80, Network: ProxyNetwork,
+		Command: e2eServer("one"), Domains: []string{"one.svc.test"}, Port: 80, Network: ProxyNetwork,
 	}
 	two := &Service{
 		Name: "two", ContainerName: "e2esvc-two", Image: e2eImage,
-		Command: e2eServer("two"), Domain: "two.svc.test", Port: 80, Network: ProxyNetwork,
+		Command: e2eServer("two"), Domains: []string{"two.svc.test"}, Port: 80, Network: ProxyNetwork,
 	}
 	t.Cleanup(func() { Remove(one.ContainerName); Remove(two.ContainerName); stopEveryProxy() })
 
@@ -380,7 +381,7 @@ func TestLogsReachTheCaller(t *testing.T) {
 	svc := &Service{
 		Name: "log", ContainerName: "e2elog-svc", Image: e2eImage,
 		Command: []string{"node", "-e", "console.log('hello-from-logs');setTimeout(()=>{},2000)"},
-		Domain:  "log.logs.test", Port: 80, Network: ProxyNetwork,
+		Domains: []string{"log.logs.test"}, Port: 80, Network: ProxyNetwork,
 	}
 	t.Cleanup(func() { Remove(svc.ContainerName) })
 
@@ -418,14 +419,16 @@ services:
   up:
     image: `+e2eImage+`
     command: ["node","-e","require('http').createServer((q,s)=>s.end('up')).listen(80)"]
+    x-bay:
+      domains: [up.snap.test]
   down:
     image: `+e2eImage+`
     command: ["node","-e","require('http').createServer((q,s)=>s.end('down')).listen(80)"]
+    x-bay:
+      domains: [down.snap.test]
   work:
     image: `+e2eImage+`
     command: ["node","-e","setInterval(()=>{},1000)"]
-    labels:
-      bay.internal: "true"
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -479,7 +482,7 @@ services:
 	for _, s := range g.Services {
 		byName[s.Name] = s
 	}
-	if s := byName["up"]; s.State != "running" || !s.Routed || s.IPv4 == "" || s.URL != "https://up.snap.test/" {
+	if s := byName["up"]; s.State != "running" || !s.Routed || s.IPv4 == "" || !reflect.DeepEqual(s.URLs, []string{"https://up.snap.test/"}) {
 		t.Errorf("started service = %+v", s)
 	}
 	if s := byName["down"]; s.State != "absent" || s.Routed {
@@ -487,7 +490,7 @@ services:
 	}
 	// An internal service has no domain, no URL and no route, but it does have
 	// an address other services can reach it by.
-	if s := byName["work"]; !s.Internal || s.Domain != "" || s.URL != "" || s.Routed {
+	if s := byName["work"]; !s.Internal || len(s.Domains) != 0 || len(s.URLs) != 0 || s.Routed {
 		t.Errorf("internal service = %+v", s)
 	} else if s.Address != "e2esnap-work."+BackendDomain+":80" {
 		t.Errorf("internal service address = %q", s.Address)
@@ -505,7 +508,7 @@ func TestUpRefusesADomainAnotherProjectServes(t *testing.T) {
 
 	holder := &Service{
 		Name: "web", ContainerName: "e2ehold-web", Image: e2eImage,
-		Command: e2eServer("holder"), Domain: "web.hold.test", Port: 80, Network: ProxyNetwork,
+		Command: e2eServer("holder"), Domains: []string{"web.hold.test"}, Port: 80, Network: ProxyNetwork,
 	}
 	t.Cleanup(func() { Remove(holder.ContainerName); stopEveryProxy() })
 
@@ -530,6 +533,8 @@ x-bay:
 services:
   web:
     image: `+e2eImage+`
+    x-bay:
+      domains: [web.hold.test]
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -575,7 +580,7 @@ func TestStartingIsDistinctFromRunning(t *testing.T) {
 		Name: "late", ContainerName: "e2elate-web", Image: e2eImage,
 		Command: []string{"node", "-e",
 			"setTimeout(()=>require('http').createServer((q,s)=>s.end('late')).listen(80),20000)"},
-		Domain: "late.start.test", Port: 80, Network: ProxyNetwork,
+		Domains: []string{"late.start.test"}, Port: 80, Network: ProxyNetwork,
 	}
 	t.Cleanup(func() { Remove(svc.ContainerName); stopEveryProxy() })
 

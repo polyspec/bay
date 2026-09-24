@@ -31,8 +31,10 @@ func Brief(w io.Writer) {
 	fmt.Fprintln(w, "\nCOMPOSE FILE")
 	fmt.Fprintln(w, "  A project is a Compose file: compose.yaml, compose.yml,")
 	fmt.Fprintln(w, "  docker-compose.yaml or docker-compose.yml. Settings live under the")
-	fmt.Fprintln(w, "  top-level x-bay mapping and in bay.* service labels.")
-	fmt.Fprintln(w, "  A service with no label is served at <service>.<project domain>.")
+	fmt.Fprintln(w, "  top-level x-bay mapping, a service's x-bay mapping")
+	fmt.Fprintln(w, "  and bay.* service labels. A service is served at the domains")
+	fmt.Fprintln(w, "  listed in its x-bay.domains; a service without the list is")
+	fmt.Fprintln(w, "  internal.")
 	fmt.Fprint(w, "\n", indent(Example(), "    "))
 	fmt.Fprintln(w, "\n  Run \"bay schema\" for every key and its default.")
 
@@ -91,6 +93,7 @@ func BriefJSON(w io.Writer) error {
 		"purpose":       Purpose,
 		"commands":      Commands(),
 		"projectKeys":   ProjectKeys(),
+		"serviceKeys":   ServiceKeys(),
 		"serviceLabels": ServiceLabels(),
 		"composeKeys":   ComposeKeys(),
 		"portOrder":     PortOrder(),
@@ -117,6 +120,9 @@ func Schema(w io.Writer) {
 	fmt.Fprintln(w, "\nPROJECT KEYS")
 	writeKeys(w, ProjectKeys())
 
+	fmt.Fprintln(w, "\nSERVICE KEYS")
+	writeKeys(w, ServiceKeys())
+
 	fmt.Fprintln(w, "\nSERVICE LABELS")
 	writeKeys(w, ServiceLabels())
 
@@ -139,6 +145,7 @@ func SchemaJSON(w io.Writer) error {
 			"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml",
 		},
 		"projectKeys":   ProjectKeys(),
+		"serviceKeys":   ServiceKeys(),
 		"serviceLabels": ServiceLabels(),
 		"composeKeys":   ComposeKeys(),
 		"portOrder":     PortOrder(),
@@ -165,21 +172,25 @@ services:
     volumes:
       - ./src:/app/src
     command: ["npm", "run", "dev"]
+    x-bay:
+      domains: [web.shop.test]
     # served at https://web.shop.test/
 
   api:
     image: node:26-slim
     expose: ["8080"]
-    labels:
-      bay.domain: api.shop.test
+    x-bay:
+      domains:
+        - api.shop.test
+        - admin.shop.test
+    # served at https://api.shop.test/ and https://admin.shop.test/
 
   db:
     image: postgres:18
     expose: ["5432"]
     environment:
       POSTGRES_PASSWORD: dev
-    labels:
-      bay.internal: "true"
+    # no domains: internal, reached at shop-db.container.test:5432
 `
 }
 

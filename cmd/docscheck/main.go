@@ -106,9 +106,11 @@ func checkNames() []string {
 		commands[c.Name] = true
 	}
 	keys := map[string]bool{}
-	for _, k := range contract.ProjectKeys() {
-		if name, ok := strings.CutPrefix(k.Path, "x-bay."); ok {
-			keys[name] = true
+	for _, set := range [][]contract.Key{contract.ProjectKeys(), contract.ServiceKeys()} {
+		for _, k := range set {
+			if _, name, ok := strings.Cut(k.Path, "x-bay."); ok {
+				keys[name] = true
+			}
 		}
 	}
 	labels := map[string]bool{}
@@ -122,6 +124,11 @@ func checkNames() []string {
 
 	var problems []string
 	for _, path := range markdownFiles() {
+		// The changelog records earlier behavior, including names the code no
+		// longer declares.
+		if strings.HasPrefix(filepath.Base(path), "CHANGELOG") {
+			continue
+		}
 		body, err := os.ReadFile(path)
 		if err != nil {
 			continue

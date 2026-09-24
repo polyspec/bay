@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -525,14 +526,16 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 			if s.Internal || !s.Live() {
 				continue
 			}
-			r := row{Text: s.Name, Dot: "on", Link: s.URL, LinkText: s.URL, Detail: g.Name}
-			switch {
-			case down:
-				r.Dot, r.Link, r.Detail = "bad", "", text.T("no answer")
-			case !s.Routed:
-				r.Dot, r.Link, r.Detail = "warn", "", text.T("502 · not listening")
+			for _, u := range s.URLs {
+				r := row{Text: s.Name, Dot: "on", Link: u, LinkText: u, Detail: g.Name}
+				switch {
+				case down:
+					r.Dot, r.Link, r.Detail = "bad", "", text.T("no answer")
+				case !s.Routed:
+					r.Dot, r.Link, r.Detail = "warn", "", text.T("502 · not listening")
+				}
+				addrs.Rows = append(addrs.Rows, r)
 			}
-			addrs.Rows = append(addrs.Rows, r)
 		}
 	}
 	if len(addrs.Rows) > 0 {
@@ -560,21 +563,33 @@ func projectView(p *panel, g stack.GroupStatus, busy bool) {
 		services.Note = g.Error
 	}
 	for _, s := range g.Services {
-		link, linkText := s.URL, s.URL
+		// The first row of a service holds its controls; each further domain
+		// is a row of its own with its link.
 		detail := s.IPv4
 		if detail == "" {
 			detail = s.State
 		}
-		if s.Internal {
-			link, linkText = "", text.T("internal · no route")
-		} else if s.Live() && !s.Routed {
+		if !s.Internal && s.Live() && !s.Routed {
 			detail = s.State
 		}
-		services.Rows = append(services.Rows, row{
-			Text: s.Name, Dot: serviceDot(s), Link: link, LinkText: linkText, Detail: detail,
+		first := row{
+			Text: s.Name, Dot: serviceDot(s), Detail: detail,
 			ID:      "select:" + viewService + g.Name + ":" + s.Name,
 			Buttons: []button{quiet("logs:"+g.Name+":"+s.Name, text.T("Logs"), s.State == "absent")},
-		})
+		}
+		if s.Internal {
+			first.LinkText = text.T("internal · no route")
+			services.Rows = append(services.Rows, first)
+			continue
+		}
+		first.Link, first.LinkText = s.URLs[0], s.URLs[0]
+		services.Rows = append(services.Rows, first)
+		for _, u := range s.URLs[1:] {
+			services.Rows = append(services.Rows, row{
+				Text: s.Name, Dot: serviceDot(s), Link: u, LinkText: u, Detail: detail,
+				ID: "select:" + viewService + g.Name + ":" + s.Name,
+			})
+		}
 	}
 	p.Sections = append(p.Sections, services)
 
@@ -662,14 +677,17 @@ func serviceView(p *panel, snap stack.Snapshot, g stack.GroupStatus, s stack.Ser
 		if !s.Routed {
 			reach = text.T("not being forwarded right now")
 		}
-		route.Rows = []row{
-			{Text: text.T("Address"), Kind: "kv", Link: s.URL, LinkText: s.URL,
-				Buttons: []button{
-					quiet("copy:"+s.URL, text.T("Copy"), false),
-					quiet(s.URL, text.T("Open"), false),
-				}},
-			{Text: text.T("Certificate"), Kind: "kv", Detail: s.Domain,
-				Faint: certStatus(snap, s.Domain)},
+		// Every domain of the service has its address and its certificate.
+		for i, d := range s.Domains {
+			u := s.URLs[i]
+			route.Rows = append(route.Rows,
+				row{Text: text.T("Address"), Kind: "kv", Link: u, LinkText: u,
+					Buttons: []button{
+						quiet("copy:"+u, text.T("Copy"), false),
+						quiet(u, text.T("Open"), false),
+					}},
+				row{Text: text.T("Certificate"), Kind: "kv", Detail: d,
+					Faint: certStatus(snap, d)})
 		}
 		route.Rows = append(route.Rows, row{Text: text.T("Forwarding"), Kind: "kv",
 			Detail: dotWord(s.Routed), Faint: reach})
@@ -945,7 +963,7 @@ func unusedCertificates(snap stack.Snapshot) []string {
 func certOwner(snap stack.Snapshot, info stack.CertInfo) string {
 	for _, g := range snap.Groups {
 		for _, s := range g.Services {
-			if s.Domain == info.Name {
+			if slices.Contains(s.Domains, info.Name) {
 				return g.Name
 			}
 		}

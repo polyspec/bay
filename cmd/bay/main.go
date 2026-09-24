@@ -138,10 +138,9 @@ func up(m *stack.Machine) error {
 	}
 	fmt.Println()
 	for _, s := range cfg.Sorted() {
-		if s.Internal {
-			continue
+		for _, d := range s.Domains {
+			fmt.Printf("  https://%s/\n", d)
 		}
-		fmt.Printf("  https://%s/\n", s.Domain)
 	}
 	return nil
 }
@@ -662,7 +661,7 @@ func printSnapshot(snap stack.Snapshot) {
 			fmt.Printf("  ! %s\n", g.Error)
 		}
 		for _, s := range g.Services {
-			route, where := "-", s.Domain
+			route, where := "-", strings.Join(s.Domains, " ")
 			if s.Routed {
 				route = "routed"
 			}

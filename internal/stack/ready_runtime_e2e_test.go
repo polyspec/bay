@@ -22,8 +22,8 @@ func TestReadinessActualRuntime(t *testing.T) {
 	group := fmt.Sprintf("ctl-ready-%d", time.Now().UnixNano())
 	svc := &Service{
 		Name: "web", ContainerName: group + "-web", Image: "docker.io/library/node:26.8.1-trixie-slim",
-		Command:  []string{"node", "-e", "const t=setInterval(()=>{if(require('fs').existsSync('/tmp/release')){clearInterval(t);require('http').createServer((q,s)=>s.end('ready')).listen(8080)}},50)"},
-		Internal: true, Port: 8080, Network: ProxyNetwork,
+		Command: []string{"node", "-e", "const t=setInterval(()=>{if(require('fs').existsSync('/tmp/release')){clearInterval(t);require('http').createServer((q,s)=>s.end('ready')).listen(8080)}},50)"},
+		Port:    8080, Network: ProxyNetwork,
 	}
 	t.Cleanup(func() {
 		in, found, err := Lookup(svc.ContainerName)
@@ -71,7 +71,7 @@ func TestReadinessActualRuntime(t *testing.T) {
 	if status.State != "starting" || status.Running() || !status.Live() {
 		t.Fatalf("unready process status = %+v", status)
 	}
-	cfg, err := Load(write(t, fmt.Sprintf("name: %s\nservices:\n  web:\n    image: node\n    expose: ['8080']\n    labels: {bay.internal: 'true'}\n", group)))
+	cfg, err := Load(write(t, fmt.Sprintf("name: %s\nservices:\n  web:\n    image: node\n    expose: ['8080']\n", group)))
 	if err != nil {
 		t.Fatal(err)
 	}

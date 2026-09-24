@@ -3,6 +3,7 @@ package stack
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -34,8 +35,8 @@ func TestDefaults(t *testing.T) {
 		t.Fatalf("Domains() = %v, want [test]", got)
 	}
 	s := cfg.Services["web"]
-	if s.Domain != "web.test" {
-		t.Errorf("service domain = %q, want web.test", s.Domain)
+	if len(s.Domains) != 0 || !s.Internal() {
+		t.Errorf("service without x-bay.domains: domains %v, want none and internal", s.Domains)
 	}
 	if s.ContainerName != "proj-web" {
 		t.Errorf("container name = %q, want proj-web", s.ContainerName)
@@ -62,33 +63,59 @@ func TestContainerNamesAreGroupScoped(t *testing.T) {
 	}
 }
 
-func TestExtraDomains(t *testing.T) {
-	cfg, err := Load(write(t, `x-bay:
-  domain: test
+func TestServiceDomains(t *testing.T) {
+	path := write(t, `x-bay:
+  domain: site.test
   extra_domains: [Lab.Internal]
 services:
-  a:
+  web:
     image: nginx
-  b:
-    image: nginx
-    labels:
-      bay.domain: b.lab.internal
-`))
+    x-bay:
+      domains:
+        - console.site.test
+        - Example.Site.Test
+        - ${ADMIN_HOST}
+        - web.lab.internal
+`)
+	if err := os.WriteFile(filepath.Join(filepath.Dir(path), ".env"), []byte("ADMIN_HOST=admin.example.site.test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := cfg.Domains(); len(got) != 2 || got[1] != "lab.internal" {
 		t.Fatalf("Domains() = %v", got)
 	}
-	if got := cfg.Services["b"].Domain; got != "b.lab.internal" {
-		t.Errorf("b domain = %q", got)
+	web := cfg.Services["web"]
+	want := []string{"console.site.test", "example.site.test", "admin.example.site.test", "web.lab.internal"}
+	if !reflect.DeepEqual(web.Domains, want) || web.Internal() {
+		t.Fatalf("web domains = %v, internal %v; want %v", web.Domains, web.Internal(), want)
 	}
 }
 
-func TestRejectsDomainOutsideGroup(t *testing.T) {
-	_, err := Load(write(t, "services:\n  a:\n    image: nginx\n    labels:\n      bay.domain: a.example.com\n"))
-	if err == nil || !strings.Contains(err.Error(), "outside") {
-		t.Fatalf("err = %v, want a domain-scope error", err)
+func TestServiceDomainsRejected(t *testing.T) {
+	cases := map[string]struct{ service, want string }{
+		"outside the project": {
+			"x-bay:\n      domains: [a.example.com]", "outside"},
+		"empty list": {
+			"x-bay:\n      domains: []", "empty"},
+		"not a list": {
+			"x-bay:\n      domains: a.site.test", "must be a list"},
+		"duplicate": {
+			"x-bay:\n      domains: [a.site.test, A.site.test]", "repeats"},
+		"invalid name": {
+			"x-bay:\n      domains: [a_b.site.test]", "may only contain"},
+		"empty name": {
+			"x-bay:\n      domains: ['']", "empty"},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := Load(write(t, "x-bay:\n  domain: site.test\nservices:\n  web:\n    image: nginx\n    "+c.service+"\n"))
+			if err == nil || !strings.Contains(err.Error(), c.want) || !strings.Contains(err.Error(), `"web"`) {
+				t.Fatalf("err = %v, want it to name the service and contain %q", err, c.want)
+			}
+		})
 	}
 }
 
@@ -96,13 +123,14 @@ func TestRejectsDuplicateDomainWithinGroup(t *testing.T) {
 	_, err := Load(write(t, `services:
   a:
     image: nginx
-    labels: {bay.domain: shared.test}
+    x-bay: {domains: [shared.test]}
   b:
     image: nginx
-    labels: {bay.domain: shared.test}
+    x-bay: {domains: [b.test, shared.test]}
 `))
-	if err == nil || !strings.Contains(err.Error(), "both claim") {
-		t.Fatalf("err = %v, want a duplicate-domain error", err)
+	if err == nil || !strings.Contains(err.Error(), "both claim shared.test") ||
+		!strings.Contains(err.Error(), `"a"`) || !strings.Contains(err.Error(), `"b"`) {
+		t.Fatalf("err = %v, want a duplicate-domain error naming both services", err)
 	}
 }
 
@@ -132,43 +160,37 @@ func TestRefCarriesDomains(t *testing.T) {
 	}
 }
 
-// A database or a worker has no business claiming a domain, and issuing it a
-// certificate for a port nothing serves would be worse than useless.
+// A database or a worker declares no domains: it runs on the shared network and
+// receives no route and no certificate.
 func TestInternalServicesGetNoDomain(t *testing.T) {
 	cfg, err := Load(write(t, `name: app
 services:
   web:
     image: nginx
+    x-bay:
+      domains: [web.test]
   db:
     image: postgres
     expose: ["5432"]
-    labels:
-      bay.internal: "true"
 `))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := cfg.Services["db"].Domain; got != "" {
-		t.Errorf("internal service got domain %q", got)
+	db := cfg.Services["db"]
+	if !db.Internal() || len(db.Domains) != 0 {
+		t.Errorf("db domains = %v, want internal", db.Domains)
 	}
-	if got := cfg.Services["db"].Port; got != 5432 {
-		t.Errorf("internal service port = %d", got)
+	if db.Port != 5432 {
+		t.Errorf("internal service port = %d", db.Port)
 	}
-	if got := cfg.Services["db"].ContainerName; got != "app-db" {
-		t.Errorf("internal service container = %q", got)
+	if db.ContainerName != "app-db" {
+		t.Errorf("internal service container = %q", db.ContainerName)
 	}
-	if got := cfg.Services["db"].Network; got != ProxyNetwork {
-		t.Errorf("internal service network = %q, want the shared one", got)
+	if db.Network != ProxyNetwork {
+		t.Errorf("internal service network = %q, want the shared one", db.Network)
 	}
-	if got := cfg.Services["web"].Domain; got != "web.test" {
-		t.Errorf("routed service domain = %q", got)
-	}
-}
-
-func TestInternalServiceCannotClaimADomain(t *testing.T) {
-	_, err := Load(write(t, "services:\n  db:\n    image: postgres\n    labels:\n      bay.internal: \"true\"\n      bay.domain: db.test\n"))
-	if err == nil || !strings.Contains(err.Error(), "internal") {
-		t.Fatalf("err = %v, want a refusal", err)
+	if got := cfg.Services["web"].Domains; !reflect.DeepEqual(got, []string{"web.test"}) {
+		t.Errorf("routed service domains = %v", got)
 	}
 }
 
@@ -194,13 +216,15 @@ services:
       DEBUG: "1"
     volumes:
       - ./src:/app/src
+    x-bay:
+      domains: [web.test]
   db:
     image: postgres:18
     expose: ["5432/tcp"]
     environment:
       - POSTGRES_PASSWORD=secret
     labels:
-      - bay.internal=true
+      - com.example.owner=shop
 `))
 	if err != nil {
 		t.Fatal(err)
@@ -211,8 +235,8 @@ services:
 	if web.Port != 3000 {
 		t.Errorf("web port = %d, want 3000 from \"8080:3000\"", web.Port)
 	}
-	if web.Domain != "web.test" {
-		t.Errorf("web domain = %q", web.Domain)
+	if !reflect.DeepEqual(web.Domains, []string{"web.test"}) {
+		t.Errorf("web domains = %v", web.Domains)
 	}
 	if web.Env["DATABASE_URL"] == "" || web.Env["DEBUG"] != "1" {
 		t.Errorf("web environment = %v", web.Env)
@@ -221,10 +245,10 @@ services:
 		t.Errorf("web volumes = %v", web.Volumes)
 	}
 
-	// Labels in list form work the same as in mapping form.
+	// Labels in list form are read the same as in mapping form.
 	db := cfg.Services["db"]
-	if !db.Internal || db.Domain != "" {
-		t.Errorf("db = %+v, want internal with no domain", db)
+	if !db.Internal() {
+		t.Errorf("db = %+v, want internal", db)
 	}
 	if db.Port != 5432 {
 		t.Errorf("db port = %d, want 5432 from expose", db.Port)

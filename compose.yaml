@@ -1,9 +1,9 @@
 # A normal Compose file. Everything this tool adds lives where Compose puts
-# extensions: an x-bay block, and bay.* labels on a service.
+# extensions: x-bay blocks, and bay.* labels on a service.
 name: platform
 
-# No x-bay block: this project uses the machine's default domain.
-# Pin one here only when this project needs a domain of its own:
+# No top-level x-bay block: this project uses the machine's default
+# domain. Pin one here only when this project needs a domain of its own:
 #
 #   x-bay:
 #     domain: shop.test
@@ -11,7 +11,9 @@ name: platform
 services:
   platform1:
     image: node:26.8.1-trixie-slim
-    # No label needed: this becomes https://platform1.test/
+    # served at https://platform1.test/
+    x-bay:
+      domains: [platform1.test]
     command:
       - node
       - -e
@@ -20,6 +22,8 @@ services:
 
   platform2:
     image: node:26.8.1-trixie-slim
+    x-bay:
+      domains: [platform2.test]
     command:
       - node
       - -e
@@ -28,8 +32,9 @@ services:
 
   platform3:
     image: node:26.8.1-trixie-slim
-    labels:
-      bay.domain: api.platform3.test
+    # one container served at two names
+    x-bay:
+      domains: [api.platform3.test, admin.platform3.test]
     command:
       - node
       - -e

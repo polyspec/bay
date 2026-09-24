@@ -158,9 +158,9 @@ func TestBothEnginesContributeToOneList(t *testing.T) {
 // receives only the routes of its own engine.
 func TestRoutesNameOnlyTheContainersTheProxyCanReach(t *testing.T) {
 	instances := []ServiceInstance{
-		{Container: "shop-web", Group: "shop", Domain: "shop.test", Port: 80,
+		{Container: "shop-web", Group: "shop", Domains: []string{"shop.test"}, Port: 80,
 			Scheme: "http", State: "running", IPv4: "192.168.64.9", Engine: AppleEngine},
-		{Container: "blog-web", Group: "blog", Domain: "blog.test", Port: 80,
+		{Container: "blog-web", Group: "blog", Domains: []string{"blog.test"}, Port: 80,
 			Scheme: "http", State: "running", IPv4: "172.20.0.4", Engine: DockerEngine},
 	}
 	routes, conflicts := routesFrom(instances)
@@ -183,9 +183,9 @@ func TestRoutesNameOnlyTheContainersTheProxyCanReach(t *testing.T) {
 // the routes are split by engine.
 func TestOneDomainIsClaimedOncePerMachineAcrossEngines(t *testing.T) {
 	instances := []ServiceInstance{
-		{Container: "blog-web", Group: "blog", Domain: "shop.test", Port: 80,
+		{Container: "blog-web", Group: "blog", Domains: []string{"shop.test"}, Port: 80,
 			Scheme: "http", State: "running", IPv4: "172.20.0.4", Engine: DockerEngine},
-		{Container: "shop-web", Group: "shop", Domain: "shop.test", Port: 80,
+		{Container: "shop-web", Group: "shop", Domains: []string{"shop.test"}, Port: 80,
 			Scheme: "http", State: "running", IPv4: "192.168.64.9", Engine: AppleEngine},
 	}
 	routes, conflicts := routesFrom(instances)

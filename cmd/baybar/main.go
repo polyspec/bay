@@ -411,13 +411,9 @@ func (a *app) ask(parts []string) bool {
 			text.T("Remove"), false)
 	case "domain-rename":
 		prompt("do-domain-rename:"+parts[1], text.T("Domain for %s", parts[1]),
-			text.T("Services in this project default into it. Naming one here pins it in "+
+			text.T("Service domains under the current domain move under it. Naming one here pins it in "+
 				"the project's Compose file; the machine's default is used otherwise."),
 			"test", parts[2])
-	case "service-domain":
-		prompt("do-service-domain:"+parts[1]+":"+parts[2],
-			text.T("Change the domain of %s", parts[2]),
-			text.T("It has to sit under one of the project's domains."), "app.test", parts[3])
 	case "cert-remove":
 		confirm("do-cert-remove:"+parts[1], text.T("Remove the certificate for %s?", parts[1]),
 			text.T("It is reissued automatically if a route still needs it."),
@@ -623,7 +619,7 @@ func (a *app) runEdit(rt *stack.Runtime, parts []string) (bool, error) {
 		_, err := stack.SyncProxy(m)
 		return true, err
 
-	case "do-domain-rename", "do-service-domain", "do-domain-remove":
+	case "do-domain-rename", "do-domain-remove":
 		cfg, err := rt.LoadGroup(parts[1])
 		if err != nil {
 			return true, err
@@ -635,10 +631,6 @@ func (a *app) runEdit(rt *stack.Runtime, parts []string) (bool, error) {
 			}
 		case "do-domain-remove":
 			if err := stack.RemoveDomain(cfg, parts[2]); err != nil {
-				return true, err
-			}
-		case "do-service-domain":
-			if err := stack.SetServiceDomain(cfg, parts[2], parts[3]); err != nil {
 				return true, err
 			}
 		}

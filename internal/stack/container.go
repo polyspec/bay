@@ -14,7 +14,8 @@ import (
 
 // Labels carry a container's routing settings. The proxy configuration and the
 // DNS answers are generated from them, so removing a container removes its
-// route without editing a file.
+// routes without editing a file. LabelDomain holds the service's domains
+// separated by commas; it is empty for an internal service.
 const (
 	LabelRole    = "bay.role"
 	LabelGroup   = "bay.group"
@@ -153,7 +154,7 @@ func serviceArguments(group string, s *Service, fingerprint string) []string {
 		"--label", LabelRole + "=" + roleService,
 		"--label", LabelGroup + "=" + group,
 		"--label", LabelService + "=" + s.Name,
-		"--label", LabelDomain + "=" + s.Domain,
+		"--label", LabelDomain + "=" + strings.Join(s.Domains, ","),
 		"--label", LabelPort + "=" + strconv.Itoa(s.Port),
 		"--label", LabelScheme + "=" + scheme,
 		"--label", LabelConfig + "=" + fingerprint,

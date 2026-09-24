@@ -152,7 +152,7 @@ func validateDependencies(c *Config) error {
 				return fmt.Errorf("service %s requires a healthcheck on %s", s.Name, name)
 			}
 			if condition == "service_completed_successfully" {
-				if !dep.Internal {
+				if !dep.Internal() {
 					return fmt.Errorf("completed service %s must be internal", name)
 				}
 				dep.OneShot = true

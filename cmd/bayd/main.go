@@ -185,11 +185,11 @@ func (r *resolver) index() (*index, error) {
 		if in.State != "running" {
 			continue
 		}
-		d := strings.ToLower(in.Labels[stack.LabelDomain])
-		if d == "" {
+		addr := proxies[in.Engine]
+		if addr == "" {
 			continue
 		}
-		if addr := proxies[in.Engine]; addr != "" {
+		for _, d := range stack.LabelledDomains(in.Labels) {
 			idx.byDomain[d] = addr
 		}
 	}

@@ -152,9 +152,9 @@ type Key struct {
 func ProjectKeys() []Key {
 	return []Key{
 		{"x-bay.domain", "string", "the machine default domain",
-			"Local domain this project's services use. Naming it here pins it to the project."},
+			"Local domain the project's service domains fall under. Naming it here pins it to the project."},
 		{"x-bay.extra_domains", "list of string", "empty",
-			"Further local domains this project's services may claim."},
+			"Further local domains the project's service domains may fall under."},
 		{"x-bay.network", "string", "default",
 			"Container network the project's services and the proxy share."},
 		{"name", "string", "the Compose file's directory name",
@@ -162,16 +162,21 @@ func ProjectKeys() []Key {
 	}
 }
 
+// ServiceKeys are the keys under a service's `x-bay` mapping.
+func ServiceKeys() []Key {
+	return []Key{
+		{"services.<name>.x-bay.domains", "list of string", "none: the service is internal",
+			"Domains the proxy routes to this service, each under one of the project's domains. " +
+				"Each domain gets its own certificate and route. A service without it runs and " +
+				"other services reach it by name, but the proxy does not route to it and issues it no certificate."},
+	}
+}
+
 // ServiceLabels are the labels this tool reads from a Compose service.
 func ServiceLabels() []Key {
 	return []Key{
-		{"bay.domain", "string", "<service>.<project domain>",
-			"Domain the proxy routes to this service."},
 		{"bay.port", "integer", "see the port order below",
 			"Port the service listens on inside the container."},
-		{"bay.internal", "boolean", "false",
-			"Marks a service with no domain. It runs and other services reach it by name, " +
-				"but the proxy does not route to it and issues it no certificate."},
 		{"bay.tls", "boolean", "false",
 			"Marks a backend that already serves HTTPS on its port."},
 	}
@@ -184,6 +189,7 @@ func InternalLabels() []Key {
 		{"bay.role", "string", "none", "Marks a container as a service or the proxy."},
 		{"bay.group", "string", "none", "Project the container belongs to."},
 		{"bay.service", "string", "none", "Service name within the project."},
+		{"bay.domain", "string", "empty", "Domains the proxy routes to the container, separated by commas; empty for an internal service."},
 		{"bay.scheme", "string", "http", "Scheme the proxy uses to reach the service."},
 		{"bay.config", "string", "none", "Digest of the resolved service configuration and local image."},
 		{"bay.volume", "string", "none", "Compose declaration key of a managed named volume."},

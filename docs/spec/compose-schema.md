@@ -18,18 +18,22 @@ readable by other Compose tools.
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `x-bay.domain` | string | the machine default domain | Local domain this project's services use. Naming it here pins it to the project. |
-| `x-bay.extra_domains` | list of string | empty | Further local domains this project's services may claim. |
+| `x-bay.domain` | string | the machine default domain | Local domain the project's service domains fall under. Naming it here pins it to the project. |
+| `x-bay.extra_domains` | list of string | empty | Further local domains the project's service domains may fall under. |
 | `x-bay.network` | string | default | Container network the project's services and the proxy share. |
 | `name` | string | the Compose file's directory name | Project name. Prefixes every container name. |
+
+## Service keys
+
+| Key | Type | Default | Description |
+| --- | --- | --- | --- |
+| `services.<name>.x-bay.domains` | list of string | none: the service is internal | Domains the proxy routes to this service, each under one of the project's domains. Each domain gets its own certificate and route. A service without it runs and other services reach it by name, but the proxy does not route to it and issues it no certificate. |
 
 ## Service labels
 
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
-| `bay.domain` | string | <service>.<project domain> | Domain the proxy routes to this service. |
 | `bay.port` | integer | see the port order below | Port the service listens on inside the container. |
-| `bay.internal` | boolean | false | Marks a service with no domain. It runs and other services reach it by name, but the proxy does not route to it and issues it no certificate. |
 | `bay.tls` | boolean | false | Marks a backend that already serves HTTPS on its port. |
 
 ## Port resolution
@@ -77,21 +81,25 @@ services:
     volumes:
       - ./src:/app/src
     command: ["npm", "run", "dev"]
+    x-bay:
+      domains: [web.shop.test]
     # served at https://web.shop.test/
 
   api:
     image: node:26-slim
     expose: ["8080"]
-    labels:
-      bay.domain: api.shop.test
+    x-bay:
+      domains:
+        - api.shop.test
+        - admin.shop.test
+    # served at https://api.shop.test/ and https://admin.shop.test/
 
   db:
     image: postgres:18
     expose: ["5432"]
     environment:
       POSTGRES_PASSWORD: dev
-    labels:
-      bay.internal: "true"
+    # no domains: internal, reached at shop-db.container.test:5432
 ```
 
 <!-- end generated -->
@@ -103,11 +111,19 @@ services:
 - a service has no `image`;
 - a project or service name contains a character other than a letter, a digit,
   `-` or `_`;
-- a service's domain is outside the project's domains;
-- two services in the project claim the same domain;
-- a service marked `bay.internal` also sets `bay.domain`;
+- a service's `x-bay.domains` is not a list, is empty, holds an
+  invalid domain name, repeats a domain, or holds a domain outside the
+  project's domains;
+- two services in the project claim the same domain; the error names both
+  services;
 - `x-bay.extra_domains` contains an empty entry or repeats
   `x-bay.domain`.
 
-Keys this tool does not read are ignored, so a file written for other Compose
-tools loads without change.
+`up`, `start` and `restart` refuse a project when a running service of another
+project serves one of its domains; the error names the domain and both
+services with their projects.
+
+Keys and labels this tool does not read are ignored, so a file written for
+other Compose tools loads without change. A service without
+`x-bay.domains` is internal. Values of `domains` use the same `.env`
+and environment interpolation as other values.

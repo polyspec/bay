@@ -18,10 +18,14 @@ services:
   web:
     image: nginx        # keep this comment
     expose: ["80"]
+    x-bay:
+      domains:
+        - web.test
+        - admin.web.test
   api:
     image: nginx
-    labels:
-      bay.domain: api.lab.internal
+    x-bay:
+      domains: [api.lab.internal]
 `
 
 func loadEditable(t *testing.T, body string) *Config {
@@ -96,7 +100,7 @@ func TestRemoveDomainRefusesWhenStillUsed(t *testing.T) {
 
 func TestRemoveDomainWorksOnceFree(t *testing.T) {
 	cfg := loadEditable(t, strings.Replace(editable,
-		"    labels:\n      bay.domain: api.lab.internal\n", "", 1))
+		"    x-bay:\n      domains: [api.lab.internal]\n", "", 1))
 	if err := RemoveDomain(cfg, "lab.internal"); err != nil {
 		t.Fatal(err)
 	}
@@ -116,39 +120,15 @@ func TestSetPrimaryDomainMovesServices(t *testing.T) {
 	if next.Domain != "dev.test" {
 		t.Fatalf("domain = %q", next.Domain)
 	}
-	if got := next.Services["web"].Domain; got != "web.dev.test" {
-		t.Errorf("web domain = %q, want web.dev.test", got)
+	if got := strings.Join(next.Services["web"].Domains, " "); got != "web.dev.test admin.web.dev.test" {
+		t.Errorf("web domains = %q, want web.dev.test admin.web.dev.test", got)
 	}
-	// A service pinned to another domain must not be dragged along.
-	if got := next.Services["api"].Domain; got != "api.lab.internal" {
-		t.Errorf("api domain = %q, want it left alone", got)
+	// A domain under another project domain must not be dragged along.
+	if got := strings.Join(next.Services["api"].Domains, " "); got != "api.lab.internal" {
+		t.Errorf("api domains = %q, want them left alone", got)
 	}
-}
-
-func TestSetServiceDomain(t *testing.T) {
-	cfg := loadEditable(t, editable)
-	if err := SetServiceDomain(cfg, "web", "www.test"); err != nil {
-		t.Fatal(err)
-	}
-	if got := reload(t, cfg).Services["web"].Domain; got != "www.test" {
-		t.Fatalf("web domain = %q", got)
-	}
-}
-
-func TestSetServiceDomainRefusesOutsideAndDuplicate(t *testing.T) {
-	cfg := loadEditable(t, editable)
-	if err := SetServiceDomain(cfg, "web", "web.example.com"); err == nil {
-		t.Error("a domain outside the group was allowed")
-	}
-	if err := SetServiceDomain(cfg, "web", "api.lab.internal"); err == nil {
-		t.Error("a domain another service already claims was allowed")
-	}
-	if err := SetServiceDomain(cfg, "nope", "x.test"); err == nil {
-		t.Error("an unknown service was allowed")
-	}
-	// None of those should have touched the file.
-	if got := reload(t, cfg).Services["web"].Domain; got != "web.test" {
-		t.Fatalf("web domain changed to %q despite the errors", got)
+	if out := body(t, cfg); !strings.Contains(out, "# keep this comment") {
+		t.Errorf("comment was lost:\n%s", out)
 	}
 }
 

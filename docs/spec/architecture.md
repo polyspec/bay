@@ -106,8 +106,12 @@ Plain HTTP on port 80 returns 308 to the HTTPS address, except
 A proxy's configuration is generated from labels on running containers, not
 from the Compose files. `bay` lists the containers of every engine
 present, selects those labelled `bay.role=service`, and writes one
-nginx server block per container that carries a `bay.domain` label and
-is running, into the configuration of the proxy for that container's engine.
+nginx server block per domain of each running container, into the
+configuration of the proxy for that container's engine. A container carries the
+domains of its service's `x-bay.domains` in the `bay.domain`
+label, separated by commas; the label is empty for an internal service. Each
+domain gets its own certificate. All server blocks of a container proxy to the
+same backend.
 
 Consequences:
 
@@ -208,7 +212,8 @@ apply to `nope.test`. A domain with two labels, such as `dev.test`, gives
 A domain is delegated once per machine by a file in `/etc/resolver`. Domains are
 therefore machine state, stored in `~/.bay/machine.json`. A project
 uses the machine's default domain unless its Compose file names one under
-`x-bay.domain`.
+`x-bay.domain`. The domains of a service must fall under the project's
+domains.
 
 The set of delegated domains is the machine's domains plus any domain a project
 pins.

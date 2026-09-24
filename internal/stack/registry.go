@@ -19,11 +19,13 @@ type ServiceInstance struct {
 	Container string
 	Group     string
 	Service   string
-	Domain    string
-	Port      int
-	Scheme    string
-	State     string
-	IPv4      string
+	// Domains are the domains the proxy routes to the container. An internal
+	// service has none.
+	Domains []string
+	Port    int
+	Scheme  string
+	State   string
+	IPv4    string
 	// Started is when the runtime started the container, in RFC 3339. It is
 	// empty for a container that has never run.
 	Started string
@@ -32,6 +34,16 @@ type ServiceInstance struct {
 }
 
 func (s ServiceInstance) Running() bool { return s.State == "running" }
+
+// LabelledDomains returns the domains of a container's LabelDomain label,
+// which serviceArguments writes separated by commas.
+func LabelledDomains(labels map[string]string) []string {
+	value := strings.ToLower(labels[LabelDomain])
+	if value == "" {
+		return nil
+	}
+	return strings.Split(value, ",")
+}
 
 // Addr returns the address and port the container holds now. It is empty until
 // the runtime has given the container an address.
@@ -49,12 +61,18 @@ func (s ServiceInstance) Backend() string {
 }
 
 // Instances returns every container labelled as a bay service, ordered
-// by project then domain.
+// by project then container.
 func Instances() ([]ServiceInstance, error) {
 	list, err := List()
 	if err != nil {
 		return nil, err
 	}
+	return serviceInstances(list), nil
+}
+
+// serviceInstances reads the service containers of list from their labels,
+// ordered by project then container.
+func serviceInstances(list []Instance) []ServiceInstance {
 	var out []ServiceInstance
 	for _, in := range list {
 		if in.Labels[LabelRole] != roleService {
@@ -72,7 +90,7 @@ func Instances() ([]ServiceInstance, error) {
 			Container: in.Name,
 			Group:     in.Labels[LabelGroup],
 			Service:   in.Labels[LabelService],
-			Domain:    strings.ToLower(in.Labels[LabelDomain]),
+			Domains:   LabelledDomains(in.Labels),
 			Port:      port,
 			Scheme:    scheme,
 			State:     in.State,
@@ -85,9 +103,9 @@ func Instances() ([]ServiceInstance, error) {
 		if out[i].Group != out[j].Group {
 			return out[i].Group < out[j].Group
 		}
-		return out[i].Domain < out[j].Domain
+		return out[i].Container < out[j].Container
 	})
-	return out, nil
+	return out
 }
 
 // Routes returns one entry per running service that claims a domain, across
@@ -110,25 +128,27 @@ func routesFrom(instances []ServiceInstance) ([]Route, []DomainConflict) {
 	var conflicts []DomainConflict
 	claimed := map[string]ServiceInstance{}
 	for _, in := range instances {
-		if !in.Running() || in.Domain == "" {
+		if !in.Running() {
 			continue
 		}
-		if prev, taken := claimed[in.Domain]; taken {
-			conflicts = append(conflicts, DomainConflict{
-				Domain: in.Domain, Kept: prev.Container, Dropped: in.Container,
+		for _, d := range in.Domains {
+			if prev, taken := claimed[d]; taken {
+				conflicts = append(conflicts, DomainConflict{
+					Domain: d, Kept: prev.Container, Dropped: in.Container,
+				})
+				continue
+			}
+			claimed[d] = in
+			routes = append(routes, Route{
+				Domain:  d,
+				Address: in.Addr(),
+				Backend: in.Backend(),
+				Scheme:  in.Scheme,
+				Engine:  in.Engine,
+				ipv4:    in.IPv4,
+				started: in.Started,
 			})
-			continue
 		}
-		claimed[in.Domain] = in
-		routes = append(routes, Route{
-			Domain:  in.Domain,
-			Address: in.Addr(),
-			Backend: in.Backend(),
-			Scheme:  in.Scheme,
-			Engine:  in.Engine,
-			ipv4:    in.IPv4,
-			started: in.Started,
-		})
 	}
 	sort.Slice(routes, func(i, j int) bool { return routes[i].Domain < routes[j].Domain })
 	return routes, conflicts

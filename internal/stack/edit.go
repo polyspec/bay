@@ -89,58 +89,19 @@ func SetPrimaryDomain(cfg *Config, domain string) error {
 		if services == nil {
 			return nil
 		}
+		// Only the entries of x-bay.domains under the old domain move.
 		for i := 0; i+1 < len(services.Content); i += 2 {
-			name, body := services.Content[i].Value, services.Content[i+1]
-			s := cfg.Services[strings.ToLower(name)]
-			if s == nil || s.Internal {
+			list := findKey(findKey(services.Content[i+1], projectKey), "domains")
+			if list == nil {
 				continue
 			}
-			// Only rewrite domains that actually sat under the old name, and
-			// only where the file spelled them out; the rest re-derive.
-			if !strings.HasSuffix(s.Domain, "."+old) {
-				continue
-			}
-			if node := findLabel(body, LabelKeyDomain); node != nil {
-				node.Value = strings.TrimSuffix(s.Domain, "."+old) + "." + domain
+			for _, item := range list.Content {
+				if name := normalizeDomain(item.Value); strings.HasSuffix(name, "."+old) {
+					item.Value = strings.TrimSuffix(name, "."+old) + "." + domain
+				}
 			}
 		}
 		return nil
-	})
-}
-
-// SetServiceDomain sets one service's domain. The name must be under one of the
-// project's domains.
-func SetServiceDomain(cfg *Config, service, domain string) error {
-	domain = normalizeDomain(domain)
-	if err := checkDomain(domain); err != nil {
-		return err
-	}
-	s, ok := cfg.Services[strings.ToLower(service)]
-	if !ok {
-		return fmt.Errorf("group %q has no service %q", cfg.Name, service)
-	}
-	if !cfg.covers(domain) {
-		return fmt.Errorf("%s is outside .%s - add the domain to this group first",
-			domain, strings.Join(cfg.Domains(), ", ."))
-	}
-	for _, other := range cfg.Sorted() {
-		if other.Name != s.Name && other.Domain == domain {
-			return fmt.Errorf("%s already claims %s", other.Name, domain)
-		}
-	}
-	return editStack(cfg, func(root *yaml.Node) error {
-		services := findKey(root, "services")
-		if services == nil {
-			return fmt.Errorf("no services in %s", cfg.Path())
-		}
-		for i := 0; i+1 < len(services.Content); i += 2 {
-			if strings.ToLower(services.Content[i].Value) != s.Name {
-				continue
-			}
-			setLabel(services.Content[i+1], LabelKeyDomain, domain)
-			return nil
-		}
-		return fmt.Errorf("service %q not found in %s", s.Name, cfg.Path())
 	})
 }
 
@@ -202,43 +163,6 @@ func ensureMapping(root *yaml.Node, key string) *yaml.Node {
 	return node
 }
 
-// findLabel returns a service's label value. Compose accepts a mapping or a
-// list.
-func findLabel(service *yaml.Node, key string) *yaml.Node {
-	labels := findKey(service, "labels")
-	if labels == nil {
-		return nil
-	}
-	switch labels.Kind {
-	case yaml.MappingNode:
-		return findKey(labels, key)
-	case yaml.SequenceNode:
-		for _, item := range labels.Content {
-			if k, _, ok := strings.Cut(item.Value, "="); ok && strings.TrimSpace(k) == key {
-				return item
-			}
-		}
-	}
-	return nil
-}
-
-// setLabel writes a service label and keeps the form the file uses.
-func setLabel(service *yaml.Node, key, value string) {
-	labels := findKey(service, "labels")
-	if labels != nil && labels.Kind == yaml.SequenceNode {
-		for _, item := range labels.Content {
-			if k, _, ok := strings.Cut(item.Value, "="); ok && strings.TrimSpace(k) == key {
-				item.Value = key + "=" + value
-				return
-			}
-		}
-		labels.Content = append(labels.Content, scalar(key+"="+value))
-		return
-	}
-	mapping := ensureMapping(service, "labels")
-	ensureKey(mapping, key, scalar(value)).Value = value
-}
-
 func findKey(mapping *yaml.Node, key string) *yaml.Node {
 	if mapping == nil || mapping.Kind != yaml.MappingNode {
 		return nil
@@ -296,8 +220,11 @@ func checkDomain(d string) error {
 func servicesUnder(cfg *Config, domain string) []string {
 	var out []string
 	for _, s := range cfg.Sorted() {
-		if s.Domain == domain || strings.HasSuffix(s.Domain, "."+domain) {
-			out = append(out, s.Name)
+		for _, d := range s.Domains {
+			if d == domain || strings.HasSuffix(d, "."+domain) {
+				out = append(out, s.Name)
+				break
+			}
 		}
 	}
 	return out

@@ -3,6 +3,7 @@ package contract_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/polyspec/bay/internal/contract"
@@ -36,20 +37,23 @@ func TestExampleLoads(t *testing.T) {
 	if web.Port != 3000 {
 		t.Errorf("web port = %d, want 3000 from ports", web.Port)
 	}
-	if web.Domain != "web.shop.test" {
-		t.Errorf("web domain = %q", web.Domain)
+	if got := strings.Join(web.Domains, " "); got != "web.shop.test" {
+		t.Errorf("web domains = %q", got)
 	}
 	if web.ContainerName != "shop-web" {
 		t.Errorf("web container = %q", web.ContainerName)
 	}
 
 	api := cfg.Services["api"]
-	if api == nil || api.Domain != "api.shop.test" || api.Port != 8080 {
-		t.Errorf("api = %+v", api)
+	if api == nil || api.Port != 8080 {
+		t.Fatalf("api = %+v", api)
+	}
+	if got := strings.Join(api.Domains, " "); got != "api.shop.test admin.shop.test" {
+		t.Errorf("api domains = %q", got)
 	}
 
 	db := cfg.Services["db"]
-	if db == nil || !db.Internal || db.Domain != "" || db.Port != 5432 {
+	if db == nil || !db.Internal() || db.Port != 5432 {
 		t.Errorf("db = %+v", db)
 	}
 	// The example tells the reader to reach the database by this address.

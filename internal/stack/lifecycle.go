@@ -135,19 +135,27 @@ func (r *Runtime) checkDomainsFree(cfg *Config) error {
 	if err != nil {
 		return err
 	}
+	return domainsFree(cfg, instances)
+}
+
+// domainsFree reports an error naming both services when a running service of
+// another project claims a domain of cfg.
+func domainsFree(cfg *Config, instances []ServiceInstance) error {
 	claimed := map[string]ServiceInstance{}
 	for _, in := range instances {
-		if in.Running() && in.Domain != "" && in.Group != cfg.Name {
-			claimed[in.Domain] = in
+		if !in.Running() || in.Group == cfg.Name {
+			continue
+		}
+		for _, d := range in.Domains {
+			claimed[d] = in
 		}
 	}
 	for _, s := range cfg.Sorted() {
-		if s.Internal {
-			continue
-		}
-		if held, taken := claimed[s.Domain]; taken {
-			return fmt.Errorf("%s is served by project %q; change the domain of service %q or stop %q",
-				s.Domain, held.Group, s.Name, held.Group)
+		for _, d := range s.Domains {
+			if held, taken := claimed[d]; taken {
+				return fmt.Errorf("%s is served by service %q of project %q and claimed by service %q of project %q; change the domain or stop %q",
+					d, held.Service, held.Group, s.Name, cfg.Name, held.Group)
+			}
 		}
 	}
 	return nil
@@ -296,14 +304,6 @@ func (r *Runtime) EnsureInstalled() error {
 	}
 	_, err = InstallDNSAgent(r.DNSBin, strings.Join(domains, ","), r.Addr, r.Machine.Dir, r.Machine.LogDir())
 	return err
-}
-
-// describe returns the service's domain, or "internal" when it has none.
-func describe(s *Service) string {
-	if s.Internal {
-		return "internal"
-	}
-	return s.Domain
 }
 
 // LoadGroup reads a registered project's Compose file by project name.

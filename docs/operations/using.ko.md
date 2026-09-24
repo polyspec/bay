@@ -23,9 +23,8 @@ bay domain     # 이 머신이 제공하는 도메인
 
 ## 프로젝트 추가
 
-프로젝트는 Compose 파일이다. 추가 설정이 없는 서비스는
-`<서비스>.<프로젝트 도메인>`으로 제공되고, 프로젝트 도메인은 파일이 지정하지
-않으면 머신 기본값이다.
+프로젝트는 Compose 파일이다. 서비스는 `x-bay.domains`에 적은 도메인으로
+제공된다. 프로젝트 도메인은 파일이 지정하지 않으면 머신 기본값이다.
 
 ```yaml
 name: myapp
@@ -37,6 +36,8 @@ services:
     command: ["npm", "run", "dev"]
     volumes:
       - ./src:/app/src
+    x-bay:
+      domains: [web.test]
 ```
 
 ```sh
@@ -51,22 +52,26 @@ bay up
 
 ## 서비스가 제공될 이름 정하기
 
-기본값은 `<서비스>.<프로젝트 도메인>`이다. 라벨로 직접 지정한다.
+`x-bay.domains`에 서비스의 모든 이름을 적는다. 프록시는 각 이름을 같은
+컨테이너로 라우팅하고 이름마다 인증서를 발급한다.
 
 ```yaml
   web:
     image: node:26-slim
-    labels:
-      bay.domain: shop.test
+    x-bay:
+      domains:
+        - shop.test
+        - admin.shop.test
 ```
 
-이름은 프로젝트의 도메인 아래여야 한다. 한 프로젝트의 두 서비스가 같은 이름을
-가질 수 없다.
+컨테이너는 요청된 이름을 `Host` 헤더로 받는다. 모든 이름은 프로젝트의 도메인
+아래여야 한다. 이 프로젝트나 실행 중인 다른 프로젝트의 서비스가 이미 가진 이름은
+두 서비스의 이름을 적은 오류로 거부한다.
 
 ## 도메인이 없는 서비스
 
-데이터베이스, 큐, 워커는 internal로 표시한다. 도메인도 라우트도 인증서도 받지
-않는다.
+데이터베이스, 큐, 워커는 도메인을 적지 않는다. 이런 서비스는 internal이며 라우트도
+인증서도 받지 않는다.
 
 ```yaml
   db:
@@ -74,8 +79,6 @@ bay up
     expose: ["5432"]
     environment:
       POSTGRES_PASSWORD: dev
-    labels:
-      bay.internal: "true"
 ```
 
 컨테이너는 실행되고 다른 서비스가 이름으로 접근한다.

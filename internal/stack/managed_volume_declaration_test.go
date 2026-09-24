@@ -7,7 +7,6 @@ func TestComposeManagedVolumeSizeDeclaration(t *testing.T) {
 services:
   db:
     image: postgres
-    labels: {bay.internal: 'true'}
     volumes: [pgdata:/var/lib/postgresql]
 volumes:
   pgdata:

@@ -12,13 +12,12 @@ import (
 )
 
 // This tool reads Compose files. Settings beyond the Compose schema are stored
-// in the `x-bay` extension mapping and in `bay.*` service
-// labels, so other Compose tools can read the same file.
+// in the top-level and service-level `x-bay` extension mappings and in
+// `bay.*` service labels, so other Compose tools can read the same
+// file.
 const (
-	LabelKeyDomain   = "bay.domain"
-	LabelKeyPort     = "bay.port"
-	LabelKeyInternal = "bay.internal"
-	LabelKeyTLS      = "bay.tls"
+	LabelKeyPort = "bay.port"
+	LabelKeyTLS  = "bay.tls"
 )
 
 // ComposeFileNames are looked for in a directory, in the order Compose itself
@@ -68,12 +67,9 @@ type Service struct {
 	NamedVolumes       []*Volume
 	dependencyIdentity map[string]string
 
-	// Internal marks a service that receives no domain. The container runs and
-	// other services reach it by name, but the proxy does not route to it and
-	// issues no certificate for it.
-	Internal bool
-	// Domain the proxy routes to this service.
-	Domain string
+	// Domains are the domains the proxy routes to this service, from
+	// x-bay.domains. A service without domains is internal.
+	Domains []string
 	// Port the service listens on inside the container.
 	Port int
 	// TLS marks a backend that already speaks HTTPS on Port.
@@ -95,24 +91,31 @@ type projectSettings struct {
 	Network      string   `yaml:"network"`
 }
 
+// serviceSettings holds the keys this tool reads from a service's
+// x-bay mapping.
+type serviceSettings struct {
+	Domains yaml.Node `yaml:"domains"`
+}
+
 type composeService struct {
-	Image         string       `yaml:"image"`
-	Command       stringOrList `yaml:"command"`
-	Entrypoint    stringOrList `yaml:"entrypoint"`
-	Environment   mapOrList    `yaml:"environment"`
-	Labels        mapOrList    `yaml:"labels"`
-	Volumes       []string     `yaml:"volumes"`
-	Ports         []string     `yaml:"ports"`
-	Expose        []string     `yaml:"expose"`
-	ContainerName string       `yaml:"container_name"`
-	Networks      yaml.Node    `yaml:"networks"`
-	CPUs          string       `yaml:"cpus"`
-	MemLimit      string       `yaml:"mem_limit"`
-	User          string       `yaml:"user"`
-	ReadOnly      bool         `yaml:"read_only"`
-	CapDrop       []string     `yaml:"cap_drop"`
-	DependsOn     yaml.Node    `yaml:"depends_on"`
-	Healthcheck   yaml.Node    `yaml:"healthcheck"`
+	Image         string           `yaml:"image"`
+	Command       stringOrList     `yaml:"command"`
+	Entrypoint    stringOrList     `yaml:"entrypoint"`
+	Environment   mapOrList        `yaml:"environment"`
+	Labels        mapOrList        `yaml:"labels"`
+	Volumes       []string         `yaml:"volumes"`
+	Ports         []string         `yaml:"ports"`
+	Expose        []string         `yaml:"expose"`
+	ContainerName string           `yaml:"container_name"`
+	Networks      yaml.Node        `yaml:"networks"`
+	CPUs          string           `yaml:"cpus"`
+	MemLimit      string           `yaml:"mem_limit"`
+	User          string           `yaml:"user"`
+	ReadOnly      bool             `yaml:"read_only"`
+	CapDrop       []string         `yaml:"cap_drop"`
+	DependsOn     yaml.Node        `yaml:"depends_on"`
+	Healthcheck   yaml.Node        `yaml:"healthcheck"`
+	Bay  *serviceSettings `yaml:"x-bay"`
 }
 
 // FindComposeFile returns the path when it names a file, or the first known
@@ -257,11 +260,11 @@ func (c *Config) build(file *composeFile) error {
 		if err := normalizeVolumes(c, s); err != nil {
 			return err
 		}
-		if s.Domain != "" {
-			if other, dup := claimed[s.Domain]; dup {
-				return fmt.Errorf("services %q and %q both claim %s", other, name, s.Domain)
+		for _, d := range s.Domains {
+			if other, dup := claimed[d]; dup {
+				return fmt.Errorf("services %q and %q both claim %s", other, s.Name, d)
 			}
-			claimed[s.Domain] = name
+			claimed[d] = s.Name
 		}
 		c.Services[s.Name] = s
 	}
@@ -305,27 +308,58 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 	}
 
 	labels := cs.Labels
-	s.Internal = isTrue(labels[LabelKeyInternal])
 	s.TLS = isTrue(labels[LabelKeyTLS])
 	s.Port = servicePort(labels[LabelKeyPort], cs)
 
-	if s.Internal {
-		if labels[LabelKeyDomain] != "" {
-			return nil, fmt.Errorf("service %q is internal, so it cannot claim %s",
-				name, labels[LabelKeyDomain])
+	if cs.Bay != nil {
+		s.Domains, err = c.serviceDomains(cs.Bay.Domains)
+		if err != nil {
+			return nil, fmt.Errorf("service %q: x-bay.domains: %w", name, err)
 		}
-		return s, nil
-	}
-	s.Domain = normalizeDomain(labels[LabelKeyDomain])
-	if s.Domain == "" {
-		s.Domain = s.Name + "." + c.Domain
-	}
-	if !c.covers(s.Domain) {
-		return nil, fmt.Errorf("service %q: domain %q is outside %s", name, s.Domain,
-			"."+strings.Join(c.Domains(), ", ."))
 	}
 	return s, nil
 }
+
+// serviceDomains reads a service's x-bay.domains: a non-empty list of
+// distinct domains under the project's domains. An absent list gives no
+// domains.
+func (c *Config) serviceDomains(list yaml.Node) ([]string, error) {
+	if list.Kind == 0 {
+		return nil, nil
+	}
+	if list.Kind != yaml.SequenceNode {
+		return nil, fmt.Errorf("domains must be a list")
+	}
+	if len(list.Content) == 0 {
+		return nil, fmt.Errorf("domains is empty")
+	}
+	out := make([]string, 0, len(list.Content))
+	seen := map[string]bool{}
+	for i, item := range list.Content {
+		if item.Kind != yaml.ScalarNode {
+			return nil, fmt.Errorf("domains[%d] is not a string", i)
+		}
+		d := normalizeDomain(item.Value)
+		if err := checkDomain(d); err != nil {
+			return nil, fmt.Errorf("domains[%d]: %w", i, err)
+		}
+		if seen[d] {
+			return nil, fmt.Errorf("domains[%d] repeats %s", i, d)
+		}
+		seen[d] = true
+		if !c.covers(d) {
+			return nil, fmt.Errorf("domains[%d] %q is outside %s", i, d,
+				"."+strings.Join(c.Domains(), ", ."))
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+// Internal reports that the service has no domains: the container runs and
+// other services reach it by name, but the proxy does not route to it and
+// issues no certificate for it.
+func (s *Service) Internal() bool { return len(s.Domains) == 0 }
 
 // servicePort returns the port the container listens on. It reads the
 // bay.port label, then `expose`, then the container side of `ports`,

@@ -5,6 +5,25 @@ the day the change was made.
 
 ## 2026-09-25
 
+### Services list their domains in x-bay.domains
+
+A service lists every domain it is served at in its own `x-bay.domains`
+list. Each domain gets its own certificate and proxy route to the same
+container; the container receives the requested name in the `Host` header. A
+service without the list is internal: no route and no certificate. The list
+must not be empty, repeat a domain, hold an invalid name or a name outside the
+project's domains. A domain claimed by two services of a project, or by a
+running service of another project, is refused with both services named.
+
+A container carries its domains in the `bay.domain` label, separated by
+commas, so running containers keep their routes. `bay status --json`
+reports `domains` and `urls` lists per service; `status`, `up`, bayd and
+the menu bar window use every domain, and the window links each one and states
+its certificate. The service identity includes the domain list, so the first
+`up` of a project after this change recreates its containers; volumes are kept.
+
+Verification: `make check` and `go test -count=1 -v ./...`.
+
 ### Startup reports each started container and healthcheck attempt
 
 `up`, `start` and `restart` print a line when a service's container has started, each failed healthcheck attempt with its elapsed time and attempt count, and the elapsed time at which the service became healthy. A caller that streams output sees the wait progress and can attach to the started container's logs before health is reached. Health semantics, limits and results are unchanged.

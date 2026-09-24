@@ -35,7 +35,7 @@ func TestLocalImageTagActualRuntime(t *testing.T) {
 		t.Fatal(err)
 	}
 	svc := &Service{Name: "initialize", ContainerName: group + "-initialize", Image: ref,
-		Command: []string{"node", "-e", "console.log('fixture-public-marker')"}, Internal: true, OneShot: true, Network: ProxyNetwork}
+		Command: []string{"node", "-e", "console.log('fixture-public-marker')"}, OneShot: true, Network: ProxyNetwork}
 	t.Cleanup(func() {
 		in, found, err := Lookup(svc.ContainerName)
 		if err != nil {
