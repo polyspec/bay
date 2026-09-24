@@ -160,6 +160,45 @@ func TestServiceEngineImageChangeAndConcurrentUp(t *testing.T) {
 	}
 }
 
+func TestServiceEngineReportsStartAndEveryHealthAttempt(t *testing.T) {
+	cfg := lifecycleConfig(t)
+	e, f := fakeEngine(t)
+	var lines []string
+	e.progress = func(line string) { lines = append(lines, line) }
+	f.healthFailures = 2
+	if err := e.start(cfg, cfg.Sorted(), false); err != nil {
+		t.Fatal(err)
+	}
+	// A caller that streams output learns the container is up before the health wait, and sees
+	// each attempt, so a start period of minutes is never a silent wait.
+	want := []string{
+		"db: started container app-db",
+		"db: waiting for its healthcheck, up to",
+		"db: not healthy yet after",
+		"db: not healthy yet after",
+		"db: healthy after",
+		"web: started container app-web",
+	}
+	var got []string
+	for _, line := range lines {
+		if strings.Contains(line, "started container") || strings.Contains(line, "health") {
+			got = append(got, line)
+		}
+	}
+	if len(got) != len(want) {
+		t.Fatalf("progress=%v", lines)
+	}
+	for i, prefix := range want {
+		if !strings.HasPrefix(got[i], prefix) {
+			t.Fatalf("progress line %d=%q, want %q", i, got[i], prefix)
+		}
+	}
+	e.progress = nil
+	if err := e.start(cfg, cfg.Sorted(), false); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestServiceEngineStopAndRemoveOwnershipAndOrder(t *testing.T) {
 	cfg := lifecycleConfig(t)
 	e, f := fakeEngine(t)

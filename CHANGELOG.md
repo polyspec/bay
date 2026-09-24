@@ -3,6 +3,14 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-09-25
+
+### Startup reports each started container and healthcheck attempt
+
+`up`, `start` and `restart` print a line when a service's container has started, each failed healthcheck attempt with its elapsed time and attempt count, and the elapsed time at which the service became healthy. A caller that streams output sees the wait progress and can attach to the started container's logs before health is reached. Health semantics, limits and results are unchanged.
+
+Verification: `go test ./internal/stack -run TestServiceEngineReportsStartAndEveryHealthAttempt` checks the started, bound, two failed attempts and healthy lines in order with the fake runtime; `make check`.
+
 ## 2026-09-15
 
 ### Read what an approved machine holds, not only where it is

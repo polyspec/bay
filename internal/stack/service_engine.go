@@ -24,11 +24,13 @@ type serviceEngine struct {
 	engine string
 	// progress reports each step before it begins. A step that can take more
 	// than a moment says so first, so a command stopped in one is readable from
-	// what it has already printed.
+	// what it has already printed. It also reports each started container and
+	// the result of each healthcheck attempt, so a long startup gate reports
+	// its elapsed time.
 	progress func(string)
 }
 
-// say reports one step. It is called before the step runs, never after.
+// say reports one progress line.
 func (e *serviceEngine) say(format string, args ...any) {
 	if e.progress != nil {
 		e.progress(fmt.Sprintf(format, args...))
@@ -270,7 +272,7 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 		if _, err = e.command(ctx, "start", s.ContainerName); err != nil {
 			return err
 		}
-		return e.waitRunning(ctx, s.ContainerName)
+		return e.started(ctx, s)
 	}
 	if found {
 		if _, err = e.command(ctx, "rm", "--force", s.ContainerName); err != nil {
@@ -320,7 +322,17 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 		}
 		return e.record(after, fingerprint)
 	}
-	return e.waitRunning(ctx, s.ContainerName)
+	return e.started(ctx, s)
+}
+
+// started waits for the service's container to run and reports it, so a caller
+// that streams progress can attach to the container while a healthcheck waits.
+func (e *serviceEngine) started(ctx context.Context, s *Service) error {
+	if err := e.waitRunning(ctx, s.ContainerName); err != nil {
+		return err
+	}
+	e.say("%s: started container %s", s.Name, s.ContainerName)
+	return nil
 }
 
 func (e *serviceEngine) waitRunning(ctx context.Context, name string) error {
@@ -428,11 +440,14 @@ func (e *serviceEngine) healthy(s *Service) error {
 		_, err = e.command(probe, args...)
 		stop()
 		if err == nil {
+			e.say("%s: healthy after %s", s.Name, time.Since(started).Round(time.Second))
 			return nil
 		}
 		if time.Since(started) >= h.StartPeriod {
 			failures++
 		}
+		e.say("%s: not healthy yet after %s (%d of %d attempts)",
+			s.Name, time.Since(started).Round(time.Second), failures, h.Retries)
 		if failures >= h.Retries {
 			return failureWithLog(fmt.Sprintf("service %s failed its healthcheck after %d attempts", s.Name, failures),
 				e.serviceLog(s.ContainerName))
