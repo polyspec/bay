@@ -95,7 +95,7 @@ func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
 	if err := engine.start(cfg, cfg.Sorted(), false); err != nil {
 		return SyncResult{}, err
 	}
-	res, err := r.sync()
+	res, err := r.sync(containerNames(cfg.Sorted()))
 	if err != nil {
 		return res, err
 	}
@@ -173,7 +173,7 @@ func (r *Runtime) Down(cfg *Config) (SyncResult, error) {
 	if err := r.Machine.Unregister(cfg.Name); err != nil {
 		return SyncResult{}, err
 	}
-	return r.sync()
+	return r.sync(nil)
 }
 
 // StartServices starts the named services and creates any missing container. An
@@ -192,7 +192,7 @@ func (r *Runtime) StartServices(cfg *Config, names []string) (SyncResult, error)
 	if err := r.engine().start(cfg, targets, false); err != nil {
 		return SyncResult{}, err
 	}
-	res, err := r.sync()
+	res, err := r.sync(containerNames(targets))
 	if err != nil {
 		return res, err
 	}
@@ -212,7 +212,7 @@ func (r *Runtime) StopServices(cfg *Config, names []string) (SyncResult, error) 
 	if err := r.engine().stop(cfg, targets, false); err != nil {
 		return SyncResult{}, err
 	}
-	return r.sync()
+	return r.sync(nil)
 }
 
 func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, error) {
@@ -229,7 +229,7 @@ func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, erro
 	if err := r.engine().start(cfg, targets, true); err != nil {
 		return SyncResult{}, err
 	}
-	res, err := r.sync()
+	res, err := r.sync(containerNames(targets))
 	if err != nil {
 		return res, err
 	}
@@ -237,7 +237,8 @@ func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, erro
 	return res, nil
 }
 
-// containerNames returns the long-running services that need TCP readiness.
+// containerNames returns the long-running services that need TCP readiness and,
+// when routed, a connection from the proxy.
 func containerNames(services []*Service) []string {
 	out := make([]string, 0, len(services))
 	for _, s := range services {
@@ -248,8 +249,10 @@ func containerNames(services []*Service) []string {
 	return out
 }
 
-func (r *Runtime) sync() (SyncResult, error) {
-	res, err := SyncProxy(r.Machine)
+// sync republishes the routes. A route to a container in started is published
+// only after the proxy opens a connection to it.
+func (r *Runtime) sync(started []string) (SyncResult, error) {
+	res, err := syncProxy(r.Machine, started, r.Progress)
 	if err != nil {
 		return res, err
 	}

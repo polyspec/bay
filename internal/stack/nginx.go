@@ -18,9 +18,11 @@ type Route struct {
 	Backend string
 	Scheme  string // http or https
 	// Engine is the engine running the container this route sends to.
-	Engine  string
-	ipv4    string // current instance identity for the reload generation
-	started string
+	Engine string
+	// container is the container this route sends to.
+	container string
+	ipv4      string // current instance identity for the reload generation
+	started   string
 }
 
 // HealthPath is served over plain HTTP by the default server and returns the

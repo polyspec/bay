@@ -51,9 +51,9 @@ func TestRoutesCoverEveryDomainOfAService(t *testing.T) {
 	}
 	backend := "site-web." + BackendDomain + ":8080"
 	want := []Route{
-		{Domain: "admin.example.site.test", Backend: backend, Scheme: "http"},
-		{Domain: "console.site.test", Backend: backend, Scheme: "http"},
-		{Domain: "example.site.test", Backend: backend, Scheme: "http"},
+		{Domain: "admin.example.site.test", Backend: backend, Scheme: "http", container: "site-web"},
+		{Domain: "console.site.test", Backend: backend, Scheme: "http", container: "site-web"},
+		{Domain: "example.site.test", Backend: backend, Scheme: "http", container: "site-web"},
 	}
 	if !reflect.DeepEqual(routes, want) {
 		t.Fatalf("routes = %+v, want %+v", routes, want)

@@ -89,6 +89,7 @@ Removes /etc/resolver entries and the launchd agent. The certificate authority s
 | Certificates are issued and reissued automatically. | One per routed domain, plus a default certificate for unrouted names. |
 | Container addresses change on every start. | The proxy names backends and resolves them per request, so addresses are never pinned. |
 | up, down, start, stop and restart return after the proxy serves the new configuration. | Reloading nginx is asynchronous, so the commands poll the proxy's health endpoint. |
+| up, start and restart publish the route of a started service after the proxy connects to it. | A healthcheck runs inside the service's container, so the proxy runs its own connection attempt to the service's address. |
 | Only /etc/resolver writes require administrator rights. | Trusting the certificate authority uses the user's trust settings. |
 
 ## Diagnostics

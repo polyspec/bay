@@ -31,6 +31,13 @@ type SyncResult struct {
 // projects share one proxy and removing a project removes its routes. The proxy
 // is removed when no route remains.
 func SyncProxy(m *Machine) (SyncResult, error) {
+	return syncProxy(m, nil, nil)
+}
+
+// syncProxy is SyncProxy for a command that started the containers in verify.
+// A route to one of them is published only after the proxy opens a connection
+// to the container's address. say, when set, reports the wait before it begins.
+func syncProxy(m *Machine, verify []string, say func(string)) (SyncResult, error) {
 	// The proxy is one container per engine and it serves this state
 	// directory's configuration and certificates, so a state directory that
 	// does not own the machine setup does not replace it.
@@ -119,18 +126,13 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 			conf.ClientKey = "/etc/nginx/peers/" + ClientCertName + ".key"
 		}
 		conf.Generation = configGeneration(conf)
-		if err := RenderNginxConfig(m.ConfDir(engine), conf); err != nil {
-			return res, err
-		}
-		created, err := EnsureProxy(engine, m.ConfDir(engine), m.CertDir(), peerDir)
+		created, err := publishProxy(m, engine, conf, peerDir, verifiedRoutes(own, verify), ProxyConnectTimeout, say)
 		if err != nil {
 			return res, err
 		}
 		res.Action = "reloaded"
 		if created {
 			res.Action = "started"
-		} else if err := ReloadProxy(engine); err != nil {
-			return res, err
 		}
 		// Return only after the proxy serves the new configuration.
 		if err := WaitForGeneration(engine, conf.Generation, 60*time.Second); err != nil {
@@ -145,6 +147,97 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 	}
 	return res, nil
 }
+
+// ProxyConnectTimeout bounds how long a command waits for the proxy to open a
+// connection to a container it has started and routes to.
+const ProxyConnectTimeout = 60 * time.Second
+
+// verifiedRoutes returns one route for each address of the containers in
+// verify. Several domains of one service share one address.
+func verifiedRoutes(routes []Route, verify []string) []Route {
+	started := make(map[string]bool, len(verify))
+	for _, name := range verify {
+		started[name] = true
+	}
+	seen := map[string]bool{}
+	var out []Route
+	for _, r := range routes {
+		if started[r.container] && !seen[r.Address] {
+			seen[r.Address] = true
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// publishProxy writes conf and makes the engine's proxy serve it, creating the
+// proxy when it is not running. It reports whether it created the proxy.
+//
+// A route in verify is sent to a container this command started. A running
+// proxy is given the configuration only after the proxy itself opens a
+// connection to each such address, because a healthcheck runs inside the
+// service's container and the readiness report connects from the host, and
+// neither uses the proxy's path to the container. A proxy this call creates
+// starts with the configuration, and the call returns only after that proxy
+// opens the same connections.
+func publishProxy(m *Machine, engine string, conf NginxConfig, peerDir string, verify []Route, within time.Duration, say func(string)) (bool, error) {
+	in, found, err := lookupOn(engine, ProxyName)
+	if err != nil {
+		return false, err
+	}
+	if found && in.State == "running" {
+		if err := waitProxyConnects(engine, verify, within, say); err != nil {
+			return false, err
+		}
+	}
+	if err := RenderNginxConfig(m.ConfDir(engine), conf); err != nil {
+		return false, err
+	}
+	created, err := EnsureProxy(engine, m.ConfDir(engine), m.CertDir(), peerDir)
+	if err != nil {
+		return false, err
+	}
+	if created {
+		return true, waitProxyConnects(engine, verify, within, say)
+	}
+	return false, ReloadProxy(engine)
+}
+
+// waitProxyConnects runs a connection attempt inside the proxy container to the
+// address of each route, as a healthcheck runs inside a service's container,
+// and repeats it until it succeeds. It fails with the last attempt's error when
+// an address does not accept a connection within the bound. say, when set,
+// reports each wait before it begins.
+func waitProxyConnects(engine string, routes []Route, within time.Duration, say func(string)) error {
+	for _, r := range routes {
+		if say != nil {
+			say(fmt.Sprintf("%s: connecting to %s for %s, up to %s", ProxyName, r.Address, r.Domain, within))
+		}
+		host, port, err := net.SplitHostPort(r.Address)
+		if err != nil {
+			return fmt.Errorf("route %s has no address to connect to: %w", r.Domain, err)
+		}
+		deadline := time.Now().Add(within)
+		for {
+			_, err = runEngineWithin(proxyConnectAttempt, engine,
+				"exec", ProxyName, "nc", "-z", "-w", "2", host, port)
+			if err == nil {
+				break
+			}
+			if time.Now().After(deadline) {
+				return fmt.Errorf("%s did not open a connection to %s for %s within %s: %w",
+					ProxyName, r.Address, r.Domain, within, err)
+			}
+			time.Sleep(250 * time.Millisecond)
+		}
+	}
+	return nil
+}
+
+// proxyConnectAttempt bounds one connection attempt run inside the proxy: the
+// two seconds nc waits for the connection and the time the engine takes to run
+// the command.
+const proxyConnectAttempt = 10 * time.Second
 
 // peerRoutesFor returns the domains approved peers serve that this machine does
 // not serve itself. Every one of them is answered here, with a certificate this

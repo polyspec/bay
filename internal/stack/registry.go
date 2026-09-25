@@ -140,13 +140,14 @@ func routesFrom(instances []ServiceInstance) ([]Route, []DomainConflict) {
 			}
 			claimed[d] = in
 			routes = append(routes, Route{
-				Domain:  d,
-				Address: in.Addr(),
-				Backend: in.Backend(),
-				Scheme:  in.Scheme,
-				Engine:  in.Engine,
-				ipv4:    in.IPv4,
-				started: in.Started,
+				Domain:    d,
+				Address:   in.Addr(),
+				Backend:   in.Backend(),
+				Scheme:    in.Scheme,
+				Engine:    in.Engine,
+				container: in.Container,
+				ipv4:      in.IPv4,
+				started:   in.Started,
 			})
 		}
 	}

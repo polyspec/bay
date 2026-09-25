@@ -5,6 +5,24 @@ the day the change was made.
 
 ## 2026-09-25
 
+### The route of a started service is published after the proxy connects to it
+
+Before `up`, `start` and `restart` give a running proxy the route of a service
+they started, they run `nc -z -w 2` to the service's address inside the proxy
+container every 250 milliseconds until it succeeds, for at most 60 seconds,
+report the wait before it begins, and fail with the last attempt's error when it does not; the proxy then keeps its
+previous configuration. A proxy the command creates starts with the route, and
+the command returns after the same attempt succeeds. A healthcheck runs inside
+the service's container and the readiness report connects from the host, so
+the first request through the proxy to a new container could time out after
+both had passed.
+
+Verification: `go test ./internal/stack -run
+'TestARouteIsPublishedAfterTheProxyConnectsToIt|TestAProxyThatCannotConnectPublishesNothing|TestACreatedProxyIsReturnedAfterItConnects|TestOnlyTheStartedContainersAreConnectedTo'`
+(the first three failed before the change); `make check`; `go test -count=1
+./...`. `TestTheFirstRequestToANewContainerIsAnswered` requires
+`BAY_E2E=1` and was not run.
+
 ### An initializer completes when the runtime reports it stopped
 
 After the attached start of a one-shot service returns, `up`, `start` and

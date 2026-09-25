@@ -187,6 +187,18 @@ Unchanged route and instance metadata retain the same generation. `up`, `down`,
 `start`, `stop` and `restart` return only after the proxy serves the new
 configuration.
 
+A healthcheck runs inside the service's container and the readiness report
+connects from the host, so neither shows that the proxy reaches the service.
+Before `up`, `start` and `restart` give a running proxy the route of a service
+they started, they run `nc -z -w 2 <address> <port>` inside the proxy
+container, as a healthcheck runs inside a service's container, every 250
+milliseconds until it succeeds, for at most 60 seconds, and report each wait
+before it begins. The first connection
+the proxy opens to the new container is then this attempt, not a request. When
+no attempt succeeds, the command fails with the last attempt's error and the
+proxy keeps its previous configuration. A proxy the command creates starts with
+the route, and the command returns only after the same attempt succeeds.
+
 ## Certificates
 
 A certificate authority is created in the state directory on first use and

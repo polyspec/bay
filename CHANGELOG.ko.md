@@ -4,6 +4,22 @@
 
 ## 2026-09-25
 
+### 시작한 서비스의 라우트는 프록시가 연결한 뒤 게시
+
+`up`·`start`·`restart`는 시작한 서비스의 라우트를 실행 중인 프록시에 주기 전에
+프록시 컨테이너 안에서 서비스 주소로 `nc -z -w 2`를 250밀리초마다 성공할 때까지
+최대 60초 동안 실행하고, 대기를 시작하기 전에 보고하며, 성공하지 않으면 마지막 시도의 오류로 실패한다. 이때
+프록시는 이전 설정을 유지한다. 명령이 만드는 프록시는 라우트를 가지고 시작하며,
+명령은 같은 시도가 성공한 뒤 반환한다. healthcheck는 서비스 컨테이너 안에서
+실행되고 준비 상태 보고는 호스트에서 연결하므로, 둘 다 통과한 뒤에도 프록시를
+거친 새 컨테이너로의 첫 요청이 시간 초과될 수 있었다.
+
+검증: `go test ./internal/stack -run
+'TestARouteIsPublishedAfterTheProxyConnectsToIt|TestAProxyThatCannotConnectPublishesNothing|TestACreatedProxyIsReturnedAfterItConnects|TestOnlyTheStartedContainersAreConnectedTo'`
+(앞의 세 테스트는 변경 전에 실패); `make check`; `go test -count=1 ./...`.
+`TestTheFirstRequestToANewContainerIsAnswered`는 `BAY_E2E=1`이 필요하며
+실행하지 않았다.
+
 ### 초기화는 런타임이 중지를 보고할 때 완료
 
 일회성 서비스의 attach한 start가 반환된 뒤 `up`·`start`·`restart`는 일회성 제한
