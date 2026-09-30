@@ -13,15 +13,15 @@ REGION ?=
 .PHONY: all check clean test e2e docs-check docs-generate install uninstall window
 all: $(BIN)/bay $(BIN)/bayd $(APP)
 
-$(BIN)/bay: $(shell find cmd/bay internal -name '*.go')
+$(BIN)/bay: $(shell find cmd/bay internal \( -name '*.go' -o -name '*.c' -o -name '*.h' \))
 	$(GO) build -o $@ ./cmd/bay
 
-$(BIN)/bayd: $(shell find cmd/bayd internal -name '*.go')
+$(BIN)/bayd: $(shell find cmd/bayd internal \( -name '*.go' -o -name '*.c' -o -name '*.h' \))
 	$(GO) build -o $@ ./cmd/bayd
 
 # The menu bar app has to be a bundle: LSUIElement is what keeps it out of the
 # Dock and the app switcher, and only Info.plist can say so.
-$(APP): $(BIN)/bay $(BIN)/bayd $(shell find cmd/baybar -type f) $(shell find internal -name '*.go')
+$(APP): $(BIN)/bay $(BIN)/bayd $(shell find cmd/baybar -type f) $(shell find internal \( -name '*.go' -o -name '*.c' -o -name '*.h' \))
 	mkdir -p $(APP)/Contents/MacOS
 	$(GO) build -o $(APP)/Contents/MacOS/baybar ./cmd/baybar
 	printf '%s\n' \

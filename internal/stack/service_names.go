@@ -2,6 +2,7 @@ package stack
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/netip"
 	"slices"
@@ -10,9 +11,23 @@ import (
 
 const serviceNameTimeout = 60 * time.Second
 
+type nameEvent struct {
+	address netip.Addr
+	added   bool
+	more    bool
+	err     error
+}
+
+type nameSubscription struct {
+	events <-chan nameEvent
+	close  func() error
+}
+
+type nameSubscriber func(context.Context, string, []netip.Addr) (*nameSubscription, error)
+
 func (e *serviceEngine) waitServiceName(name string) error {
-	if e.resolveName == nil {
-		return fmt.Errorf("%s has no hostname resolver", name)
+	if e.subscribeName == nil {
+		return fmt.Errorf("%s has no hostname subscriber", name)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), min(serviceNameTimeout, e.timeout))
 	defer cancel()
@@ -23,12 +38,10 @@ func (e *serviceEngine) waitServiceName(name string) error {
 	if !found || in.State != "running" {
 		return fmt.Errorf("%s is unavailable for hostname readiness", name)
 	}
-	return waitServiceName(ctx, in, e.resolveName, e.progress)
+	return waitServiceName(ctx, in, e.subscribeName, e.progress)
 }
 
-func waitServiceName(ctx context.Context, in Instance,
-	resolve func(context.Context, string, string) ([]netip.Addr, error), say func(string),
-) error {
+func waitServiceName(ctx context.Context, in Instance, subscribe nameSubscriber, say func(string)) (result error) {
 	host := in.Name + "." + BackendDomain
 	expected := make([]netip.Addr, 0, 2)
 	for _, value := range []string{in.IPv4, in.IPv6} {
@@ -46,43 +59,69 @@ func waitServiceName(ctx context.Context, in Instance,
 	}
 	slices.SortFunc(expected, netip.Addr.Compare)
 	expected = slices.Compact(expected)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	started := time.Now()
 	if say != nil {
-		say(fmt.Sprintf("%s: waiting for hostname addresses %v", host, expected))
+		deadline, bounded := ctx.Deadline()
+		if bounded {
+			say(fmt.Sprintf("%s: subscribing to hostname addresses %v, up to %s", host, expected, time.Until(deadline).Round(time.Millisecond)))
+		} else {
+			say(fmt.Sprintf("%s: subscribing to hostname addresses %v", host, expected))
+		}
 	}
-	var last error
+	subscription, err := subscribe(ctx, host, expected)
+	if err != nil {
+		return err
+	}
+	if subscription == nil || subscription.close == nil {
+		return errors.New("invalid hostname subscription")
+	}
+	defer func() {
+		if err := subscription.close(); err != nil {
+			result = errors.Join(result, err)
+		}
+	}()
+	if subscription.events == nil {
+		return errors.New("invalid hostname event channel")
+	}
+	addresses := make(map[netip.Addr]bool)
+	var actual []netip.Addr
 	for {
-		if err := ctx.Err(); err != nil {
-			return fmt.Errorf("%s hostname readiness failed: %w; last lookup: %v", host, err, last)
-		}
-		actual, err := resolve(ctx, "ip", host)
-		if failure := ctx.Err(); failure != nil {
-			return fmt.Errorf("%s hostname readiness failed: %w; last lookup: %v", host, failure, err)
-		}
-		if err == nil {
-			for i, address := range actual {
-				actual[i] = address.Unmap()
-			}
-			slices.SortFunc(actual, netip.Addr.Compare)
-			actual = slices.Compact(actual)
-			if slices.Equal(actual, expected) {
-				if say != nil {
-					say(fmt.Sprintf("%s: hostname addresses ready after %s", host, time.Since(started).Round(time.Millisecond)))
-				}
-				return nil
-			}
-			err = fmt.Errorf("resolved %v, expected %v", actual, expected)
-		}
-		last = err
-		if say != nil {
-			say(fmt.Sprintf("%s: hostname not ready after %s: %v", host, time.Since(started).Round(time.Millisecond), last))
-		}
-		timer := time.NewTimer(250 * time.Millisecond)
 		select {
 		case <-ctx.Done():
-			timer.Stop()
-			return fmt.Errorf("%s hostname readiness failed: %w; last lookup: %v", host, ctx.Err(), last)
-		case <-timer.C:
+			return fmt.Errorf("%s hostname readiness failed: %w; received %v, expected %v", host, ctx.Err(), actual, expected)
+		case event, open := <-subscription.events:
+			if err := ctx.Err(); err != nil {
+				return err
+			}
+			if !open {
+				return fmt.Errorf("%s hostname subscription stopped before readiness", host)
+			}
+			if event.err != nil {
+				return fmt.Errorf("%s hostname event: %w", host, event.err)
+			}
+			if !event.address.IsValid() {
+				return fmt.Errorf("%s hostname event has an invalid address", host)
+			}
+			address := event.address.Unmap()
+			if event.added {
+				addresses[address] = true
+			} else {
+				delete(addresses, address)
+			}
+			actual = actual[:0]
+			for address := range addresses {
+				actual = append(actual, address)
+			}
+			slices.SortFunc(actual, netip.Addr.Compare)
+			if say != nil {
+				say(fmt.Sprintf("%s: hostname addresses %v after %s", host, actual, time.Since(started).Round(time.Millisecond)))
+			}
+			if !event.more && slices.Equal(actual, expected) {
+				return nil
+			}
 		}
 	}
 }

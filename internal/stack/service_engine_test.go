@@ -37,8 +37,11 @@ func fakeEngine(t *testing.T) (*serviceEngine, *fakeServices) {
 	f := &fakeServices{instances: map[string]Instance{}, images: map[string]string{}}
 	return &serviceEngine{
 		command: f.command, dir: t.TempDir(), timeout: time.Second, engine: AppleEngine,
-		resolveName: func(context.Context, string, string) ([]netip.Addr, error) {
-			return []netip.Addr{netip.MustParseAddr("192.0.2.1")}, nil
+		subscribeName: func(context.Context, string, []netip.Addr) (*nameSubscription, error) {
+			events := make(chan nameEvent, 1)
+			events <- nameEvent{address: netip.MustParseAddr("192.0.2.1"), added: true}
+			close(events)
+			return &nameSubscription{events: events, close: func() error { return nil }}, nil
 		},
 	}, f
 }

@@ -5,6 +5,20 @@ the day the change was made.
 
 ## 2026-10-01
 
+### Subscribe to service address changes
+
+Apple hostname readiness subscribes once to DNSServiceGetAddrInfo and
+processes address additions and removals. Readiness requires the complete
+declared address set. Success, error and deadline cancel the subscription
+and collect the socket worker. Native address callbacks report changes, so
+repeated lookups were unnecessary.
+
+CLI build prerequisites include native C sources and headers. Tracked tests
+failed when repeated lookups were accepted and when changed native inputs
+did not require a rebuild. The event, build-input and native cancellation
+cases pass, and actual address and HTTPS verification after two service
+replacements passes without restarting the consuming edge or DNS.
+
 ### Validate service replacement
 
 Replacement stops an owned running service before removing it without force.
@@ -13,9 +27,7 @@ Stopped services do not receive another stop command. Forced removal had
 bypassed the application shutdown procedure.
 
 Apple services must resolve to their declared IPv4 and IPv6 addresses before
-dependants start and before lifecycle success. Readiness checks report each
-mismatch and fail with the last lookup error after at most 60 seconds. Native
-DNS exposes no change event, so these checks use bounded lookups. Commands
+dependants start and before lifecycle success. Readiness requires the exact address set within 60 seconds. Commands
 had returned success while DNS still returned the removed service addresses.
 Document requests are not retried.
 
