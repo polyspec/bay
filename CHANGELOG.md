@@ -5,6 +5,13 @@ the day the change was made.
 
 ## 2026-10-01
 
+### Install native address event support
+
+The CLI at `/opt/homebrew/bin/bay` records clean source `95d73d4`.
+Installed CLI address equality and HTTPS cases pass after replacing both
+services without restarting the consuming edge or DNS. The DNS executable
+and menu application were not updated.
+
 ### Subscribe to service address changes
 
 Apple hostname readiness subscribes once to DNSServiceGetAddrInfo and
@@ -35,7 +42,7 @@ Verification: tracked stop/removal and dependent-startup cases failed before
 their changes and pass afterward. Address equality, incomplete or obsolete
 IPv6, invalid declarations and lookup failure cases pass. `make check` passes.
 Actual HTTPS requests after each of two service replacements pass without
-restarting the consuming edge or DNS. The CLI is built but not installed.
+restarting the consuming edge or DNS. The CLI was installed from clean source `052e567`.
 
 ## 2026-09-25
 
