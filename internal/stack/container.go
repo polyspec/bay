@@ -35,6 +35,7 @@ type Instance struct {
 	Name        string
 	State       string
 	IPv4        string
+	IPv6        string
 	Gateway     string
 	Labels      map[string]string
 	Created     string
@@ -67,6 +68,7 @@ func decodeInstances(out []byte) ([]Instance, error) {
 			StartedDate string `json:"startedDate"`
 			Networks    []struct {
 				IPv4Address string `json:"ipv4Address"`
+				IPv6Address string `json:"ipv6Address"`
 				IPv4Gateway string `json:"ipv4Gateway"`
 			} `json:"networks"`
 		} `json:"status"`
@@ -88,6 +90,7 @@ func decodeInstances(out []byte) ([]Instance, error) {
 		if len(c.Status.Networks) > 0 {
 			// ipv4Address carries a prefix length, e.g. "192.168.64.61/24".
 			in.IPv4, _, _ = strings.Cut(c.Status.Networks[0].IPv4Address, "/")
+			in.IPv6, _, _ = strings.Cut(c.Status.Networks[0].IPv6Address, "/")
 			in.Gateway = c.Status.Networks[0].IPv4Gateway
 		}
 		list = append(list, in)

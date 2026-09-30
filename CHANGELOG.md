@@ -3,6 +3,28 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-10-01
+
+### Validate service replacement
+
+Replacement stops an owned running service before removing it without force.
+A failed stop returns the original error and prevents removal and creation.
+Stopped services do not receive another stop command. Forced removal had
+bypassed the application shutdown procedure.
+
+Apple services must resolve to their declared IPv4 and IPv6 addresses before
+dependants start and before lifecycle success. Readiness checks report each
+mismatch and fail with the last lookup error after at most 60 seconds. Native
+DNS exposes no change event, so these checks use bounded lookups. Commands
+had returned success while DNS still returned the removed service addresses.
+Document requests are not retried.
+
+Verification: tracked stop/removal and dependent-startup cases failed before
+their changes and pass afterward. Address equality, incomplete or obsolete
+IPv6, invalid declarations and lookup failure cases pass. `make check` passes.
+Actual HTTPS requests after each of two service replacements pass without
+restarting the consuming edge or DNS. The CLI is built but not installed.
+
 ## 2026-09-25
 
 ### The route of a started service is published after the proxy connects to it

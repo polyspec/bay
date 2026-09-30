@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"reflect"
 	"strings"
@@ -34,7 +35,12 @@ type fakeServices struct {
 func fakeEngine(t *testing.T) (*serviceEngine, *fakeServices) {
 	t.Helper()
 	f := &fakeServices{instances: map[string]Instance{}, images: map[string]string{}}
-	return &serviceEngine{command: f.command, dir: t.TempDir(), timeout: time.Second}, f
+	return &serviceEngine{
+		command: f.command, dir: t.TempDir(), timeout: time.Second, engine: AppleEngine,
+		resolveName: func(context.Context, string, string) ([]netip.Addr, error) {
+			return []netip.Addr{netip.MustParseAddr("192.0.2.1")}, nil
+		},
+	}, f
 }
 func (f *fakeServices) command(ctx context.Context, args ...string) ([]byte, error) {
 	// Each fake CLI invocation owns its memory; cross-process flock is not a
@@ -173,7 +179,7 @@ func TestServiceEngineImageChangeAndConcurrentUp(t *testing.T) {
 	if err := e.start(cfg, cfg.Sorted(), false); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(f.events, []string{"exec:app-db", "rm:app-initialize", "create:app-initialize", "start:app-initialize", "rm:app-web", "create:app-web", "start:app-web"}) {
+	if !reflect.DeepEqual(f.events, []string{"exec:app-db", "rm:app-initialize", "create:app-initialize", "start:app-initialize", "stop:app-web", "rm:app-web", "create:app-web", "start:app-web"}) {
 		t.Fatalf("image change did not reconcile only selected image: %v", f.events)
 	}
 	for _, args := range f.calls {
@@ -337,7 +343,7 @@ func TestServiceEngineDependencyOrderAndUnchangedReuse(t *testing.T) {
 	if err := e.start(cfg, cfg.Sorted(), false); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(f.events, []string{"exec:app-db", "rm:app-web", "create:app-web", "start:app-web"}) {
+	if !reflect.DeepEqual(f.events, []string{"exec:app-db", "stop:app-web", "rm:app-web", "create:app-web", "start:app-web"}) {
 		t.Fatalf("changed web touched unrelated service: %v", f.events)
 	}
 }

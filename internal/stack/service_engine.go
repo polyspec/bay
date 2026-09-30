@@ -8,6 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
+	"net/netip"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,9 +19,10 @@ import (
 )
 
 type serviceEngine struct {
-	command func(context.Context, ...string) ([]byte, error)
-	dir     string
-	timeout time.Duration
+	command     func(context.Context, ...string) ([]byte, error)
+	resolveName func(context.Context, string, string) ([]netip.Addr, error)
+	dir         string
+	timeout     time.Duration
 	// engine is the engine used to create this project's containers.
 	engine string
 	// progress reports each step before it begins. A step that can take more
@@ -42,6 +45,7 @@ func newServiceEngine(dir string) *serviceEngine {
 	// The network must exist before the first service is created.
 	_ = ensureNetwork(engine)
 	return &serviceEngine{
+		resolveName: net.DefaultResolver.LookupNetIP,
 		command: func(ctx context.Context, args ...string) ([]byte, error) {
 			return serviceCommand(ctx, engine, args...)
 		},
@@ -275,7 +279,12 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 		return e.started(ctx, s)
 	}
 	if found {
-		if _, err = e.command(ctx, "rm", "--force", s.ContainerName); err != nil {
+		if in.State == "running" {
+			if _, err = e.command(ctx, "stop", s.ContainerName); err != nil {
+				return err
+			}
+		}
+		if _, err = e.command(ctx, "rm", s.ContainerName); err != nil {
 			return err
 		}
 	}
@@ -590,6 +599,11 @@ func (e *serviceEngine) startLocked(cfg *Config, targets []*Service, restart boo
 		}
 		if s.Healthcheck != nil {
 			if err = e.healthy(s); err != nil {
+				return err
+			}
+		}
+		if !s.OneShot && e.engine == AppleEngine {
+			if err = e.waitServiceName(s.ContainerName); err != nil {
 				return err
 			}
 		}
