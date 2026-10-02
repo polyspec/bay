@@ -41,7 +41,8 @@ func TestDefaults(t *testing.T) {
 	if s.ContainerName != "proj-web" {
 		t.Errorf("container name = %q, want proj-web", s.ContainerName)
 	}
-	if s.Port != 80 || s.Network != ProxyNetwork {
+	// No port is declared, so the service has none.
+	if s.Port != 0 || s.Network != ProxyNetwork {
 		t.Errorf("port/network = %d/%q", s.Port, s.Network)
 	}
 }
@@ -70,6 +71,7 @@ func TestServiceDomains(t *testing.T) {
 services:
   web:
     image: nginx
+    expose: ["80"]
     x-bay:
       domains:
         - console.site.test
@@ -123,9 +125,11 @@ func TestRejectsDuplicateDomainWithinGroup(t *testing.T) {
 	_, err := Load(write(t, `services:
   a:
     image: nginx
+    expose: ["80"]
     x-bay: {domains: [shared.test]}
   b:
     image: nginx
+    expose: ["80"]
     x-bay: {domains: [b.test, shared.test]}
 `))
 	if err == nil || !strings.Contains(err.Error(), "both claim shared.test") ||
@@ -167,6 +171,7 @@ func TestInternalServicesGetNoDomain(t *testing.T) {
 services:
   web:
     image: nginx
+    expose: ["80"]
     x-bay:
       domains: [web.test]
   db:

@@ -400,10 +400,7 @@ func groupStatus(m *Machine, g GroupRef, byContainer map[string]ServiceInstance,
 			st.Scheme = "https"
 		}
 		if in, ok := byContainer[s.ContainerName]; ok {
-			st.State, st.IPv4, st.Started = in.State, in.IPv4, in.Started
-			if in.Running() && !in.Ready() {
-				st.State = "starting"
-			}
+			st.State, st.IPv4, st.Started = runningState(in, s.Port), in.IPv4, in.Started
 		}
 		st.Routed = allRouted(s.Domains, routed) && st.Running()
 		out.Services = append(out.Services, st)
@@ -432,10 +429,8 @@ func allRouted(domains []string, routed map[string]bool) bool {
 }
 
 func serviceFromInstance(in ServiceInstance, routed map[string]bool) ServiceStatus {
-	state := in.State
-	if in.Running() && !in.Ready() {
-		state = "starting"
-	}
+	// Without the file, the port recorded on the container is all there is.
+	state := runningState(in, in.Port)
 	return ServiceStatus{
 		Name:      in.Service,
 		Container: in.Container,

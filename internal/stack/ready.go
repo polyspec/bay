@@ -17,12 +17,20 @@ const readyTimeout = 700 * time.Millisecond
 
 // Ready reports whether the service accepts a connection on its port. A service
 // that is not running is never ready.
-func (s ServiceInstance) Ready() bool {
+func (s ServiceInstance) Ready() bool { return s.acceptsOn(s.Port) }
+
+// acceptsOn reports whether a running container accepts a connection on port.
+// A service that declares no port has nothing to accept connections on, so a
+// running one is ready.
+func (s ServiceInstance) acceptsOn(port int) bool {
 	if !s.Running() || s.IPv4 == "" {
 		return false
 	}
+	if port == 0 {
+		return true
+	}
 	conn, err := net.DialTimeout("tcp",
-		net.JoinHostPort(s.IPv4, strconv.Itoa(s.Port)), readyTimeout)
+		net.JoinHostPort(s.IPv4, strconv.Itoa(port)), readyTimeout)
 	if err != nil {
 		return false
 	}
@@ -59,4 +67,15 @@ func WaitReady(containers []string, timeout time.Duration) ([]string, error) {
 		}
 		time.Sleep(300 * time.Millisecond)
 	}
+}
+
+// runningState is the state a service's container shows: its engine state, or
+// "starting" when it runs and does not accept connections on the port its file
+// declares. The declared port is used rather than the one recorded on the
+// container, which can hold a port that was assumed when none was declared.
+func runningState(in ServiceInstance, declared int) string {
+	if in.Running() && !in.acceptsOn(declared) {
+		return "starting"
+	}
+	return in.State
 }

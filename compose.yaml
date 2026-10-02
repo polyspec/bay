@@ -11,6 +11,8 @@ name: platform
 services:
   platform1:
     image: node:26.8.1-trixie-slim
+    # The server below listens on 80, so that is the port declared.
+    expose: ["80"]
     # served at https://platform1.test/
     x-bay:
       domains: [platform1.test]
@@ -22,6 +24,8 @@ services:
 
   platform2:
     image: node:26.8.1-trixie-slim
+    # The server below listens on 80, so that is the port declared.
+    expose: ["80"]
     x-bay:
       domains: [platform2.test]
     command:
@@ -32,6 +36,8 @@ services:
 
   platform3:
     image: node:26.8.1-trixie-slim
+    # The server below listens on 80, so that is the port declared.
+    expose: ["80"]
     # one container served at two names
     x-bay:
       domains: [api.platform3.test, admin.platform3.test]

@@ -317,6 +317,11 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 			return nil, fmt.Errorf("service %q: x-bay.domains: %w", name, err)
 		}
 	}
+	// A domain is forwarded to a port, and a port is never assumed.
+	if s.Port == 0 && len(s.Domains) > 0 {
+		return nil, fmt.Errorf("service %s serves %s and declares no port for the proxy to forward to; "+
+			"declare it with expose, ports or the %s label", name, strings.Join(s.Domains, ", "), LabelKeyPort)
+	}
 	return s, nil
 }
 
@@ -361,9 +366,11 @@ func (c *Config) serviceDomains(list yaml.Node) ([]string, error) {
 // issues no certificate for it.
 func (s *Service) Internal() bool { return len(s.Domains) == 0 }
 
-// servicePort returns the port the container listens on. It reads the
-// bay.port label, then `expose`, then the container side of `ports`,
-// and returns 80 when none is set.
+// servicePort returns the port the Compose file declares for the container: the
+// bay.port label, then `expose`, then the container side of `ports`.
+// It returns 0 when none is declared. A port is never assumed: assuming 80 had
+// a container running `sleep infinity` reported as not accepting connections on
+// a port it never declared.
 func servicePort(label string, cs *composeService) int {
 	if n, err := strconv.Atoi(strings.TrimSpace(label)); err == nil && n > 0 {
 		return n
@@ -379,7 +386,7 @@ func servicePort(label string, cs *composeService) int {
 			return n
 		}
 	}
-	return 80
+	return 0
 }
 
 // portNumber strips a protocol suffix such as "5432/tcp".

@@ -12,6 +12,7 @@ x-bay:
 services:
   web:
     image: nginx
+    expose: ["80"]
     x-bay:
       domains: [console.site.test, example.site.test, admin.example.site.test]
   db:

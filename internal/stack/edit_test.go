@@ -24,6 +24,7 @@ services:
         - admin.web.test
   api:
     image: nginx
+    expose: ["80"]
     x-bay:
       domains: [api.lab.internal]
 `

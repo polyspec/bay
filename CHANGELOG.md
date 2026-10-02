@@ -5,6 +5,27 @@ the day the change was made.
 
 ## 2026-10-03
 
+### A port is never assumed
+
+A service that declared no port was given port 80. `node` in
+`soksakim-hyper-test` runs `sleep infinity`, declared no port, and was checked
+on 80, never accepted a connection there, and was shown orange as not accepting
+connections on its port. The screen reported a fault from a value bay
+had made up.
+
+A service's port is now the one its file declares, and a service that declares
+none has none: it is not checked for connections and is running when its
+container runs. A service with a domain still needs a port for the proxy, so one
+that declares none is refused when the file is read, naming the service and the
+domain. Whether a running service accepts connections is checked on the port
+its file declares now, since a container created earlier can carry the assumed
+80 on its label. This repository's own example services listen on 80 and
+declared nothing; they declare `expose: ["80"]` now, and the test fixtures that
+served a domain without a port declare the port their image listens on.
+
+Verification: `make check`. On this machine `node` reads `running` and the
+project shows green at `4/4 실행 중`.
+
 ### A dot, a count and a button follow one rule
 
 Orange meant two things. On a service it meant running and not working as
