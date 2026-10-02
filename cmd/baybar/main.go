@@ -64,6 +64,9 @@ type app struct {
 	snap     stack.Snapshot
 	message  string
 	kind     string
+	// messageAt is the screen the message belongs to: the one its action was
+	// started from. Other screens do not show it.
+	messageAt string
 }
 
 func main() {
@@ -137,11 +140,12 @@ func (a *app) openWindow() {
 
 func (a *app) currentPanel() panel {
 	a.mu.Lock()
-	snap, busy, message, kind := a.snap, a.busy, a.message, a.kind
+	snap, busy := a.snap, a.busy
 	if a.selected == "" {
 		a.selected = viewDashboard
 	}
 	selected := a.selected
+	message, kind := messageFor(selected, a.messageAt, a.message, a.kind)
 	a.mu.Unlock()
 
 	// The service screen shows the tail of its container's output, so it is
@@ -183,9 +187,28 @@ func (a *app) setLanguageChoice(index string) {
 // report writes the outcome of an action to the window. Notifications require
 // a signed application and are not used.
 func (a *app) report(kind, format string, args ...any) {
+	a.mu.Lock()
+	view := a.selected
+	a.mu.Unlock()
+	a.reportOn(view, kind, format, args...)
+}
+
+// messageFor returns the message a screen shows: the message when it belongs
+// to that screen, and nothing otherwise.
+func messageFor(selected, at, message, kind string) (string, string) {
+	if at != selected {
+		return "", ""
+	}
+	return message, kind
+}
+
+// reportOn writes an outcome to the screen it belongs to. An action reports on
+// the screen it was started from, because the reader may have opened another
+// screen while it ran, and that screen's subject did not fail.
+func (a *app) reportOn(view, kind, format string, args ...any) {
 	line := fmt.Sprintf(format, args...)
 	a.mu.Lock()
-	a.message, a.kind = line, kind
+	a.message, a.kind, a.messageAt = line, kind, view
 	a.mu.Unlock()
 	if windowVisible() {
 		updateWindow(a.currentPanel())
@@ -346,6 +369,7 @@ func (a *app) handle(id string) {
 		return
 	}
 	a.busy, a.message, a.kind = true, "", ""
+	origin := a.selected
 	a.mu.Unlock()
 	a.refreshWindowOnly()
 
@@ -362,14 +386,14 @@ func (a *app) handle(id string) {
 
 	if err := a.run(&rt, parts); err != nil {
 		if errors.Is(err, errCancelled) {
-			a.report("info", "%s", text.T("cancelled"))
+			a.reportOn(origin, "info", "%s", text.T("cancelled"))
 			return
 		}
-		a.report("error", "%s", text.T("%s failed: %v", parts[0], err))
+		a.reportOn(origin, "error", "%s", text.T("%s failed: %v", parts[0], err))
 		return
 	}
 	if last != "" {
-		a.report("info", "%s", last)
+		a.reportOn(origin, "info", "%s", last)
 	}
 }
 

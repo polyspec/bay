@@ -5,6 +5,17 @@ the day the change was made.
 
 ## 2026-10-03
 
+### An action's outcome stays on the screen it was started from
+
+The window kept one message for all its screens. A Stop that failed on `crudui`
+was shown on every screen opened afterwards, including the `platform-sdk-local`
+registry screen, where it read as that service's failure. An outcome now
+belongs to the screen its action was started from, and other screens do not
+show it. Returning to that screen shows it again until the next action.
+
+Verification: `make check`, including a test over another screen and the
+action's own. It was not observed on screen after the change.
+
 ### Stopping a project does not need its Compose file
 
 The window's Stop reported `down 실패: stat …/compose.yaml: no such file or

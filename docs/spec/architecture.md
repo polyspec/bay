@@ -275,6 +275,12 @@ them in points. Two things differ from that file on purpose:
 - A key and value line runs its text together, so its spacing is zero and the
   controls at its trailing edge are set apart one by one.
 
+An action's outcome is shown on the screen the action was started from, and on
+no other. A Stop pressed on one project reported its failure on every screen the
+reader opened afterwards, so another project's service appeared to have failed.
+The outcome stays on its screen until the next action, so returning to that
+screen shows it again.
+
 ## Language
 
 The window is written in English and shown in Korean when the language setting
