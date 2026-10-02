@@ -625,11 +625,9 @@ func TestStartingIsDistinctFromRunning(t *testing.T) {
 			}
 		}
 	}
-	if status.State != "starting" {
-		t.Fatalf("state = %q, want starting", status.State)
-	}
-	if status.Running() {
-		t.Error("a starting service reported as running")
+	// The state is the engine's; the closed port is measured beside it.
+	if status.State != "running" || !status.Closed() {
+		t.Fatalf("state = %q, closed = %v; want running with its port closed", status.State, status.Closed())
 	}
 	if !status.Live() {
 		t.Error("a starting service reported as not live")

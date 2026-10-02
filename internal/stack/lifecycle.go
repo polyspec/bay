@@ -125,7 +125,7 @@ func (r *Runtime) reportReady(containers []string) {
 		r.say("all services accept connections")
 		return
 	}
-	r.say("still starting after %s: %s", ReadyTimeout, strings.Join(pending, ", "))
+	r.say("port not accepting connections after %s: %s", ReadyTimeout, strings.Join(pending, ", "))
 }
 
 // checkDomainsFree reports an error when another running project already serves

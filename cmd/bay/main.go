@@ -672,8 +672,10 @@ func printSnapshot(snap stack.Snapshot) {
 			if s.Internal {
 				route, where = "internal", "reachable at "+s.Container+"."+stack.BackendDomain
 			}
-			if s.State == "starting" {
-				where += " · not accepting connections yet"
+			// The state is the engine's. A closed declared port is a measurement
+			// beside it, named with its number.
+			if s.Closed() {
+				where += fmt.Sprintf(" · port %d does not accept connections", s.Port)
 			}
 			fmt.Printf("  %-8s %-8s %-16s %-16s %s\n", s.State, route, s.Name, s.IPv4, where)
 		}

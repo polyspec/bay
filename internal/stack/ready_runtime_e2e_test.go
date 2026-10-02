@@ -67,9 +67,10 @@ func TestReadinessActualRuntime(t *testing.T) {
 	if !current.Running() || current.Ready() {
 		t.Fatal("running process must remain unready until it listens")
 	}
+	// Without the file the declared port is unknown, so nothing is measured.
 	status := serviceFromInstance(current, nil)
-	if status.State != "starting" || status.Running() || !status.Live() {
-		t.Fatalf("unready process status = %+v", status)
+	if status.State != "running" || status.Accepting != nil || !status.Live() {
+		t.Fatalf("unready process status without its file = %+v", status)
 	}
 	cfg, err := Load(write(t, fmt.Sprintf("name: %s\nservices:\n  web:\n    image: node\n    expose: ['8080']\n", group)))
 	if err != nil {
@@ -78,7 +79,8 @@ func TestReadinessActualRuntime(t *testing.T) {
 	machine := NewMachine(t.TempDir())
 	byContainer := map[string]ServiceInstance{svc.ContainerName: current}
 	configured := groupStatus(machine, cfg.Ref(), byContainer, nil)
-	if len(configured.Services) != 1 || configured.Services[0].State != "starting" || configured.Services[0].Running() || !configured.Services[0].Live() {
+	// With the file the declared port is measured beside the engine's state.
+	if len(configured.Services) != 1 || configured.Services[0].State != "running" || !configured.Services[0].Closed() || !configured.Services[0].Live() {
 		t.Fatalf("configured unready process status = %+v", configured)
 	}
 	pending, err := WaitReady([]string{svc.ContainerName}, 100*time.Millisecond)
@@ -93,10 +95,10 @@ func TestReadinessActualRuntime(t *testing.T) {
 	if pending, err := WaitReady([]string{svc.ContainerName}, 10*time.Second); err != nil || len(pending) != 0 {
 		t.Fatalf("listening process remains pending: %v, %v", pending, err)
 	}
-	if status := serviceFromInstance(current, nil); !status.Running() || !status.Live() {
+	if status := serviceFromInstance(current, nil); status.State != "running" || !status.Live() {
 		t.Fatalf("listening process status = %+v", status)
 	}
-	if configured := groupStatus(machine, cfg.Ref(), byContainer, nil); len(configured.Services) != 1 || !configured.Services[0].Running() || !configured.Services[0].Live() {
+	if configured := groupStatus(machine, cfg.Ref(), byContainer, nil); len(configured.Services) != 1 || configured.Services[0].Closed() || !configured.Services[0].Live() {
 		t.Fatalf("configured listening process status = %+v", configured)
 	}
 }

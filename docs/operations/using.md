@@ -105,24 +105,26 @@ A restarted service takes a few seconds to become reachable by name again.
 Connections from other services fail with a timeout until the runtime publishes
 the new address.
 
-## Starting and running
+## Running and accepting connections
 
-A container reports as running as soon as the runtime starts it, which is before
-the process inside listens on its port. During that window the proxy returns 502
-and a connection from another service fails.
-
-`status` reports such a service as `starting` and states that it is not
-accepting connections yet:
+A service's state is the state its container is in: `running`, `stopped`, or
+`absent` when there is no container. A running container is not the same as a
+process that accepts connections, so a service that declares a port is also
+checked on that port, and `status` says when the port does not accept
+connections, naming it:
 
 ```
 running  routed   web    192.168.64.89   web.test
-starting -        api    192.168.64.74   api.test · not accepting connections yet
+running  -        api    192.168.64.74   api.test · port 8080 does not accept connections
 ```
 
-`up`, `start` and `restart` wait up to 20 seconds for the processes to accept
-connections. A service that takes longer is named in the output and the command
-returns; the containers are running and the service becomes available on its
-own.
+This is a measurement and does not say why. A process still starting, a process
+stopped by its own supervisor and a process listening on another port all read
+the same. A service that declares no port is not checked.
+
+`up`, `start` and `restart` wait up to 20 seconds for the declared ports to
+accept connections. A service whose port does not in that time is named in the
+output and the command returns; the containers are running.
 
 ## Ports
 
@@ -130,8 +132,11 @@ The container port is read from the first of:
 
 1. the `bay.port` label;
 2. the first entry of `expose`;
-3. the container side of the first entry of `ports`;
-4. 80.
+3. the container side of the first entry of `ports`.
+
+A service that declares none of these has no port. It is not checked for
+connections, and a service with a domain is refused, because the proxy needs a
+port to forward to.
 
 The host side of `ports` is ignored.
 

@@ -5,6 +5,30 @@ the day the change was made.
 
 ## 2026-10-03
 
+### A service's state is the engine's state
+
+A running container whose declared port refused connections was reported as
+`starting · not accepting connections yet`. `php` in `soksakim-hyper` was shown
+that way while its supervisor had stopped php-fpm: nothing was starting, and the
+word named a state that was not measured. The state is now the engine's
+(`running`, `stopped`, `absent`), and the port measurement is reported apart
+from it and with the port: `bay status` adds
+`port 9000 does not accept connections`, the window writes the same sentence,
+and `bay status --json` has `accepting`, absent for a service with no
+port or one that is not running.
+
+A failure now says what became of the service's log: the log's last lines,
+`its log is empty`, or `its log could not be read` with the engine's reason.
+Both of the latter were left out without a word.
+
+`make install` copied over the installed binaries in place, and the kernel then
+killed `bay` with SIGKILL (exit 137). It removes them before copying.
+
+Verification: `make check`; `make install PREFIX=/opt/homebrew` twice; on this
+machine `bay status --json` and `nc -z` on port 9000, and the window
+captured with `make window`. A closed port was not present on this machine to
+observe. The end-to-end tests were changed and not run.
+
 ### No port is written for a service without one
 
 The previous change gave a service that declares no port the value 0 and wrote

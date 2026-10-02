@@ -19,16 +19,18 @@ func soksakimHyper() stack.GroupStatus {
 		off("libraries"), on("node"), on("node-web"), on("php"), off("php-libraries"), on("php-web"), off("runtime")}}
 }
 
-// soksakimHyperTest is the project as the machine reported it: every container
-// running, node not accepting connections on its port.
+// soksakimHyperTest is a project with every container running and one declared
+// port closed, as php in soksakim-hyper was measured: running, port 9000
+// declared, and closed because its supervisor had stopped php-fpm.
 func soksakimHyperTest() stack.GroupStatus {
 	on := func(n string) stack.ServiceStatus {
 		return stack.ServiceStatus{Name: n, State: "running", Internal: true, IPv4: "192.168.65.1"}
 	}
-	node := on("node")
-	node.State = "starting"
+	php := on("php")
+	php.Port = 9000
+	php.Accepting = closed()
 	return stack.GroupStatus{Name: "soksakim-hyper-test", Services: []stack.ServiceStatus{
-		node, on("node-web"), on("php"), on("php-web")}}
+		on("node"), on("node-web"), php, on("php-web")}}
 }
 
 // Stopped is not a fault, so a project with stopped services and nothing else

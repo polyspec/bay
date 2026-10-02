@@ -65,6 +65,9 @@ e2e:
 # bay.
 install: all
 	mkdir -p "$(PREFIX)/bin"
+	# A binary overwritten in place keeps the file the kernel validated, and the
+	# kernel kills the new contents with SIGKILL; a new file is validated afresh.
+	rm -f "$(PREFIX)/bin/bay" "$(PREFIX)/bin/bayd"
 	cp $(BIN)/bay $(BIN)/bayd "$(PREFIX)/bin/"
 	rm -rf "$(APPDIR)/baybar.app"
 	cp -R $(APP) "$(APPDIR)/"

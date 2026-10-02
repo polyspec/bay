@@ -104,11 +104,14 @@ type ServiceStatus struct {
 	// Port is the port the service declares, absent when it declares none.
 	Port   int    `json:"port,omitempty"`
 	Scheme string `json:"scheme"`
-	// State is "running", "starting", "stopped", or "absent" when no container
-	// exists. "starting" means the container runs but does not yet accept a
-	// connection on its port.
+	// State is the container's state as the engine reports it: "running",
+	// "stopped", or "absent" when no container exists.
 	State string `json:"state"`
-	IPv4  string `json:"ipv4"`
+	// Accepting says whether the declared port accepted a connection when the
+	// machine was read. It is absent when nothing was measured: the container
+	// is not running or the service declares no port.
+	Accepting *bool  `json:"accepting,omitempty"`
+	IPv4      string `json:"ipv4"`
 	// Routed says the proxy currently forwards every domain of this service to
 	// it.
 	Routed bool `json:"routed"`
@@ -140,12 +143,12 @@ func (s ServiceStatus) Uptime() time.Duration {
 	return 0
 }
 
-// Running reports that the service accepts connections. A starting service is
-// not counted, because nothing can use it yet.
-func (s ServiceStatus) Running() bool { return s.State == "running" }
+// Live reports that the service's container is running.
+func (s ServiceStatus) Live() bool { return s.State == "running" }
 
-// Live reports that the container is running, whether or not it is ready.
-func (s ServiceStatus) Live() bool { return s.State == "running" || s.State == "starting" }
+// Closed reports that the service declares a port, its container runs, and the
+// port did not accept a connection when it was measured.
+func (s ServiceStatus) Closed() bool { return s.Accepting != nil && !*s.Accepting }
 
 // Take reads the machine's current state. addr is the address bayd
 // listens on.
@@ -401,9 +404,10 @@ func groupStatus(m *Machine, g GroupRef, byContainer map[string]ServiceInstance,
 			st.Scheme = "https"
 		}
 		if in, ok := byContainer[s.ContainerName]; ok {
-			st.State, st.IPv4, st.Started = runningState(in, s.Port), in.IPv4, in.Started
+			st.State, st.IPv4, st.Started = in.State, in.IPv4, in.Started
+			st.Accepting = accepting(in, s.Port)
 		}
-		st.Routed = allRouted(s.Domains, routed) && st.Running()
+		st.Routed = allRouted(s.Domains, routed) && st.Live()
 		out.Services = append(out.Services, st)
 	}
 	return out
@@ -429,22 +433,23 @@ func allRouted(domains []string, routed map[string]bool) bool {
 	return len(domains) > 0
 }
 
+// serviceFromInstance describes a container whose project file could not be
+// read. Its declared port is then unknown: the port recorded on the container
+// can be one that was assumed when none was declared, so no port is given and
+// no connection is measured.
 func serviceFromInstance(in ServiceInstance, routed map[string]bool) ServiceStatus {
-	// Without the file, the port recorded on the container is all there is.
-	state := runningState(in, in.Port)
 	return ServiceStatus{
 		Name:      in.Service,
 		Container: in.Container,
 		Domains:   in.Domains,
-		Port:      in.Port,
 		Scheme:    in.Scheme,
-		State:     state,
+		State:     in.State,
 		IPv4:      in.IPv4,
 		Started:   in.Started,
 		Routed:    allRouted(in.Domains, routed) && in.Running(),
 		Internal:  len(in.Domains) == 0,
 		URLs:      domainURLs(in.Domains),
-		Address:   serviceAddress(in.Container, in.Port),
+		Address:   serviceAddress(in.Container, 0),
 	}
 }
 

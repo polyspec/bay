@@ -1024,8 +1024,6 @@ func serviceState(s stack.ServiceStatus) string {
 			return text.T("running for %s", humanDuration(d))
 		}
 		return text.T("running")
-	case "starting":
-		return text.T("running, not listening yet")
 	case "absent":
 		return text.T("no container")
 	default:
@@ -1105,8 +1103,8 @@ func notWorking(s stack.ServiceStatus) string {
 	switch {
 	case !s.Live():
 		return ""
-	case s.State == "starting":
-		return text.T("not accepting connections on its port")
+	case s.Closed():
+		return text.T("port %d does not accept connections", s.Port)
 	case !s.Internal && !s.Routed:
 		return text.T("not forwarded by the proxy")
 	}
@@ -1115,7 +1113,7 @@ func notWorking(s stack.ServiceStatus) string {
 
 func serviceDot(s stack.ServiceStatus) string {
 	switch {
-	case s.Running() && (s.Routed || s.Internal):
+	case s.Live() && !s.Closed() && (s.Routed || s.Internal):
 		return "on"
 	case s.Live():
 		return "warn"

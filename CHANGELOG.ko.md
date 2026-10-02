@@ -4,6 +4,25 @@
 
 ## 2026-10-03
 
+### 서비스 상태는 엔진의 상태다
+
+선언한 포트가 연결을 거부하는 실행 중 컨테이너를 `starting · 아직 연결을 받지 않음`으로 보고했다.
+`soksakim-hyper`의 `php`가 감독 프로세스가 php-fpm을 정지시킨 동안 그렇게 표시됐다. 시작 중인
+것은 없었고, 그 단어는 측정하지 않은 상태를 나타냈다. 이제 상태는 엔진의 상태(`running`,
+`stopped`, `absent`)이고, 포트 측정은 상태와 따로 포트 번호와 함께 보고한다. `bay status`는
+`port 9000 does not accept connections`를 덧붙이고, 창은 같은 문장을 쓰며,
+`bay status --json`에는 `accepting`이 있다. 포트가 없거나 실행 중이 아닌 서비스에는 없다.
+
+이제 실패는 서비스 로그가 어떻게 되었는지 보고한다. 로그의 마지막 줄들, `its log is empty`, 또는
+엔진의 이유와 함께 `its log could not be read`다. 뒤의 둘은 아무 말 없이 빠졌다.
+
+`make install`이 설치된 바이너리를 제자리에서 덮어썼고, 그 뒤 커널이 `bay`을 SIGKILL로
+종료했다(종료 코드 137). 이제 복사하기 전에 지운다.
+
+검증: `make check`, `make install PREFIX=/opt/homebrew` 두 번, 이 기계에서 `bay status --json`과
+포트 9000에 대한 `nc -z`, 그리고 `make window`로 캡처한 창. 이 기계에 닫힌 포트가 없어 그 경우는
+관찰하지 못했다. 종단 테스트는 바꿨고 실행하지 않았다.
+
 ### 포트 없는 서비스에는 포트를 쓰지 않는다
 
 직전 변경이 포트를 선언하지 않은 서비스에 값 0을 주고 그대로 내보냈다. 서비스 화면에 "Compose

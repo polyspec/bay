@@ -52,21 +52,30 @@ func TestADomainWithNoDeclaredPortIsRefused(t *testing.T) {
 	}
 }
 
-// A running service with no port is running; it is not checked for
-// connections.
-func TestARunningServiceWithNoPortIsRunning(t *testing.T) {
+// A running service with no port is running, and nothing is said about
+// connections because nothing was checked.
+func TestARunningServiceWithNoPortIsNotChecked(t *testing.T) {
 	in := ServiceInstance{State: "running", IPv4: "192.0.2.10"}
-	if got := runningState(in, 0); got != "running" {
-		t.Errorf("state %q, want running", got)
+	if got := accepting(in, 0); got != nil {
+		t.Errorf("accepting %v for a service with no port, want nothing measured", *got)
 	}
 }
 
-// With a declared port the check stands: nothing listens on this address, so
-// the service is running and not accepting connections.
-func TestARunningServiceIsCheckedOnItsDeclaredPort(t *testing.T) {
+// With a declared port the measurement is recorded beside the state, and the
+// state stays the container's own: the engine says running.
+func TestARunningServiceIsMeasuredOnItsDeclaredPort(t *testing.T) {
 	in := ServiceInstance{State: "running", IPv4: "127.0.0.1", Port: 80}
-	if got := runningState(in, 1); got != "starting" {
-		t.Errorf("state %q, want the service reported as not accepting connections", got)
+	got := accepting(in, 1)
+	if got == nil || *got {
+		t.Errorf("accepting %v, want false: nothing listens on port 1", got)
+	}
+}
+
+// A stopped container is not measured.
+func TestAStoppedServiceIsNotMeasured(t *testing.T) {
+	in := ServiceInstance{State: "stopped", IPv4: "", Port: 9000}
+	if got := accepting(in, 9000); got != nil {
+		t.Errorf("accepting %v for a stopped container", *got)
 	}
 }
 

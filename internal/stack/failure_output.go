@@ -21,7 +21,7 @@ const FailureLogLines = 30
 func failureWithLog(reason, log string) error {
 	tail := lastLines(log, FailureLogLines)
 	if tail == "" {
-		return fmt.Errorf("%s", reason)
+		return fmt.Errorf("%s\n\nits log is empty", reason)
 	}
 	return fmt.Errorf("%s\n\nwhat it said last:\n%s", reason, tail)
 }
@@ -47,13 +47,13 @@ func lastLines(s string, n int) string {
 	return b.String()
 }
 
-// serviceLog returns what a container has said, for a failure to carry. A log
-// that cannot be read returns empty: the failure is reported either way, and
-// the reason it could not be read is not the failure being reported.
-func (e *serviceEngine) serviceLog(name string) string {
+// failureWithLogOf reads a container's log and attaches it to the failure. A
+// log that cannot be read is reported as unreadable with the engine's reason,
+// so a failure always says what became of its log.
+func (e *serviceEngine) failureWithLogOf(reason, name string) error {
 	var out bytes.Buffer
 	if err := Logs(name, false, FailureLogLines, &out); err != nil {
-		return ""
+		return fmt.Errorf("%s\n\nits log could not be read: %v", reason, err)
 	}
-	return out.String()
+	return failureWithLog(reason, out.String())
 }

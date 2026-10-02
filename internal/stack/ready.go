@@ -69,13 +69,19 @@ func WaitReady(containers []string, timeout time.Duration) ([]string, error) {
 	}
 }
 
-// runningState is the state a service's container shows: its engine state, or
-// "starting" when it runs and does not accept connections on the port its file
-// declares. The declared port is used rather than the one recorded on the
-// container, which can hold a port that was assumed when none was declared.
-func runningState(in ServiceInstance, declared int) string {
-	if in.Running() && !in.acceptsOn(declared) {
-		return "starting"
+// accepting reports whether a running container accepts a connection on the
+// port its file declares. It returns nothing when there is nothing to measure:
+// the container is not running, or the service declares no port. The declared
+// port is used rather than the one recorded on the container, which can hold a
+// port that was assumed when none was declared.
+//
+// It is a measurement and says nothing about why a port is closed: a process
+// still starting, one stopped by its own supervisor and one listening elsewhere
+// read the same.
+func accepting(in ServiceInstance, declared int) *bool {
+	if !in.Running() || in.IPv4 == "" || declared == 0 {
+		return nil
 	}
-	return in.State
+	ok := in.acceptsOn(declared)
+	return &ok
 }

@@ -24,12 +24,12 @@ func TestAFailureCarriesTheServicesOwnOutput(t *testing.T) {
 	}
 }
 
-// A service that said nothing leaves the failure as it was, with no empty
-// section pretending there is something to read.
-func TestAFailureWithNoOutputIsLeftAsItIs(t *testing.T) {
+// A service that said nothing is reported as having an empty log. A failure
+// with no word about its log cannot be told from one whose log was not read.
+func TestAFailureWithNoOutputSaysTheLogIsEmpty(t *testing.T) {
 	err := failureWithLog("service web stopped during healthcheck", "   \n\n")
-	if err.Error() != "service web stopped during healthcheck" {
-		t.Errorf("an empty log was added to the failure: %v", err)
+	if err.Error() != "service web stopped during healthcheck\n\nits log is empty" {
+		t.Errorf("an empty log is not named: %q", err)
 	}
 }
 

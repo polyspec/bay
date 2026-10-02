@@ -317,8 +317,7 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 				return fmt.Errorf("initializer %s timed out and stopping it failed: %w", s.Name, check)
 			}
 		}
-		return failureWithLog(fmt.Sprintf("service %s start: %v", s.Name, err),
-			e.serviceLog(s.ContainerName))
+		return e.failureWithLogOf(fmt.Sprintf("service %s start: %v", s.Name, err), s.ContainerName)
 	}
 	if s.OneShot {
 		after, err := e.waitStopped(ctx, s.ContainerName, created.Created)
@@ -392,8 +391,7 @@ func (e *serviceEngine) waitRunning(ctx context.Context, name string) error {
 	defer cancel()
 	err := e.waitFor(deadline, name, func(in Instance, ok bool) (bool, error) {
 		if ok && in.State == "stopped" {
-			return false, failureWithLog(fmt.Sprintf("service %s stopped before becoming ready", name),
-				e.serviceLog(name))
+			return false, e.failureWithLogOf(fmt.Sprintf("service %s stopped before becoming ready", name), name)
 		}
 		return ok && in.State == "running" && in.IPv4 != "", nil
 	})
@@ -494,8 +492,7 @@ func (e *serviceEngine) healthy(s *Service) error {
 			return err
 		}
 		if !ok || in.State != "running" {
-			return failureWithLog(fmt.Sprintf("service %s stopped during healthcheck", s.Name),
-				e.serviceLog(s.ContainerName))
+			return e.failureWithLogOf(fmt.Sprintf("service %s stopped during healthcheck", s.Name), s.ContainerName)
 		}
 		args := []string{"exec", s.ContainerName}
 		if h.Test[0] == "CMD-SHELL" {
@@ -516,12 +513,10 @@ func (e *serviceEngine) healthy(s *Service) error {
 		e.say("%s: not healthy yet after %s (%d of %d attempts)",
 			s.Name, time.Since(started).Round(time.Second), failures, h.Retries)
 		if failures >= h.Retries {
-			return failureWithLog(fmt.Sprintf("service %s failed its healthcheck after %d attempts", s.Name, failures),
-				e.serviceLog(s.ContainerName))
+			return e.failureWithLogOf(fmt.Sprintf("service %s failed its healthcheck after %d attempts", s.Name, failures), s.ContainerName)
 		}
 		if err = sleepContext(ctx, h.Interval); err != nil {
-			return failureWithLog(fmt.Sprintf("service %s healthcheck timed out", s.Name),
-				e.serviceLog(s.ContainerName))
+			return e.failureWithLogOf(fmt.Sprintf("service %s healthcheck timed out", s.Name), s.ContainerName)
 		}
 	}
 }
