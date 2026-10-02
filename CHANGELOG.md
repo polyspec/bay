@@ -5,6 +5,27 @@ the day the change was made.
 
 ## 2026-10-03
 
+### Stop stops a project, Remove removes it, and both say what they did
+
+The project's Stop sent `down`. Pressed on `crudui`, it removed the container
+and the registration, and the project left the sidebar with no Start to bring
+it back. While it ran the screen showed nothing but disabled buttons, and when
+it ended it showed `proxy reloaded with 11 route(s)`.
+
+Stop now stops the project's services and leaves the containers and the
+registration in place. Remove is a separate control that asks first and says
+what goes with the containers and what is kept. While an action runs its screen
+shows each step as it is reached, and when it ends it states what was done to
+what: `aa-probe을(를) 정지했습니다`. When an action removes the subject of its
+screen, the window shows the dashboard and the outcome there.
+
+The steps are the command line's own lines and are shown in English in a
+Korean window. That is not corrected here.
+
+Verification: `make check`, including tests over the controls, the outcomes and
+the selection. On this machine Stop and Remove were pressed on a probe project
+and behaved as above.
+
 ### Projects in the sidebar open and close on their own, and the sidebar scrolls
 
 A project's services were listed only while that project was selected, and

@@ -282,6 +282,21 @@ them in points. Two things differ from that file on purpose:
 - A key and value line runs its text together, so its spacing is zero and the
   controls at its trailing edge are set apart one by one.
 
+A control names what it does. Stop stops a project's services and leaves their
+containers and the project's registration in place, so Start brings the project
+back. Remove removes the containers and takes the project off the list. It asks
+first, and says that each container's own filesystem goes with it while volumes
+and the project's files are kept. The project's Stop sent `down`: pressing it on
+`crudui` removed the container and the registration, and the project left the
+sidebar with no Start to return it.
+
+While an action runs, its screen shows each step as the action reaches it, the
+same lines the command line prints. When it ends, the screen states what was
+done to what: `Stopped crudui`, `Removed crudui`. A step's own line is not an
+outcome; the window used to end a Stop on `proxy reloaded with 11 route(s)`.
+When an action removes the subject of its screen, the window shows the
+dashboard and the outcome moves there with it.
+
 An action's outcome is shown on the screen the action was started from, and on
 no other. A Stop pressed on one project reported its failure on every screen the
 reader opened afterwards, so another project's service appeared to have failed.

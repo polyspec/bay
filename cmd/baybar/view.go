@@ -518,13 +518,13 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 		switch state {
 		case stateRunning:
 			detail = text.T("%d of %d running", running, len(g.Services))
-			action = quiet("down:"+g.Name, text.T("Stop"), busy)
+			action = quiet("stop:"+g.Name, text.T("Stop"), busy)
 		case statePartial:
 			detail = text.T("%d of %d running", running, len(g.Services))
 			if live < len(g.Services) {
 				action = hero("up:"+g.Name, text.T("Start the rest"), busy)
 			} else {
-				action = quiet("down:"+g.Name, text.T("Stop"), busy)
+				action = quiet("stop:"+g.Name, text.T("Stop"), busy)
 			}
 		}
 		dots := make([]string, 0, len(g.Services))
@@ -579,8 +579,12 @@ func projectView(p *panel, g stack.GroupStatus, busy bool) {
 	if live > 0 {
 		p.Header.Buttons = append(p.Header.Buttons,
 			quiet("restart:"+g.Name, text.T("Restart all"), busy),
-			button{ID: "down:" + g.Name, Title: text.T("Stop"), Disabled: busy})
+			quiet("stop:"+g.Name, text.T("Stop"), busy))
 	}
+	// Remove takes the containers and the registration away, so it asks first;
+	// the button only opens the question.
+	p.Header.Buttons = append(p.Header.Buttons,
+		quiet("project-remove:"+g.Name, text.T("Remove"), busy))
 
 	p.Verdict = projectVerdict(g, state, running)
 
@@ -1097,4 +1101,48 @@ func dotFor(ok bool) string {
 		return "on"
 	}
 	return "warn"
+}
+
+// lifecycleOutcome states what a lifecycle action did to what, for the screen to
+// show when it ends. A step's own line is not an outcome: the window used to end
+// a Stop on "proxy reloaded with 11 route(s)". It reports whether the action is
+// a lifecycle action.
+func lifecycleOutcome(parts []string) (string, bool) {
+	if len(parts) < 2 {
+		return "", false
+	}
+	subject := parts[1]
+	if len(parts) > 2 && parts[2] != "" {
+		subject = parts[2]
+	}
+	switch parts[0] {
+	case "up", "start":
+		return text.T("Started %s", subject), true
+	case "stop":
+		return text.T("Stopped %s", subject), true
+	case "restart":
+		return text.T("Restarted %s", subject), true
+	case "down", "do-project-remove":
+		return text.T("Removed %s", subject), true
+	}
+	return "", false
+}
+
+// resolveSelection replaces a selection whose project no longer exists with the
+// dashboard, and moves the message with it, so an action that removed its own
+// subject reports where the reader is left.
+func resolveSelection(snap stack.Snapshot, selected, at string) (string, string) {
+	group, _ := expandedProject(selected)
+	if group == "" {
+		return selected, at
+	}
+	for _, g := range snap.Groups {
+		if g.Name == group {
+			return selected, at
+		}
+	}
+	if at == selected {
+		at = viewDashboard
+	}
+	return viewDashboard, at
 }

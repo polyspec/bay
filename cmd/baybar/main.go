@@ -146,6 +146,7 @@ func (a *app) currentPanel() panel {
 	if a.selected == "" {
 		a.selected = viewDashboard
 	}
+	a.selected, a.messageAt = resolveSelection(snap, a.selected, a.messageAt)
 	selected := a.selected
 	open := a.open
 	message, kind := messageFor(selected, a.messageAt, a.message, a.kind)
@@ -385,8 +386,13 @@ func (a *app) handle(id string) {
 	}()
 
 	rt := *a.rt
+	// Each step is shown on the action's screen as it is reached, the lines the
+	// command line prints, so a long action is not a screen that does nothing.
 	var last string
-	rt.Progress = func(line string) { last = line }
+	rt.Progress = func(line string) {
+		last = line
+		a.reportOn(origin, "progress", "%s", line)
+	}
 
 	if err := a.run(&rt, parts); err != nil {
 		if errors.Is(err, errCancelled) {
@@ -394,6 +400,12 @@ func (a *app) handle(id string) {
 			return
 		}
 		a.reportOn(origin, "error", "%s", text.T("%s failed: %v", parts[0], err))
+		return
+	}
+	// A lifecycle action states what it did to what. Other actions report their
+	// outcome themselves as their last line.
+	if outcome, ok := lifecycleOutcome(parts); ok {
+		a.reportOn(origin, "info", "%s", outcome)
 		return
 	}
 	if last != "" {
@@ -421,6 +433,12 @@ func (a *app) ask(parts []string) bool {
 		prompt("do-machine-domain-default", text.T("Default domain"),
 			text.T("Projects without a domain of their own use it. It has to be one of the "+
 				"domains this machine already delegates."), "test", "")
+	case "project-remove":
+		confirm("do-project-remove:"+parts[1], text.T("Remove %s?", parts[1]),
+			text.T("Its containers are removed and the project leaves the list. Each "+
+				"container's own filesystem goes with it; volumes and the project's files "+
+				"are kept, and Start from its Compose file brings it back."),
+			text.T("Remove"), true)
 	case "machine-uninstall":
 		confirm("do-machine-uninstall", text.T("Remove the machine setup?"),
 			text.T("The resolver entries and the DNS agent are removed, so names under the "+
@@ -592,7 +610,7 @@ func (a *app) run(rt *stack.Runtime, parts []string) error {
 	// the project's name. They run before the file is read, so a project whose
 	// file is gone still stops.
 	switch parts[0] {
-	case "down":
+	case "down", "do-project-remove":
 		_, err := rt.Down(parts[1])
 		return err
 	case "stop":
