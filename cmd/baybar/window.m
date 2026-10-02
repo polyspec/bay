@@ -942,17 +942,13 @@ static void hug(NSTextField *t) {
   // URL and muted text otherwise.
   NSString *link = row[@"link"];
   NSString *linkText = row[@"linkText"] ?: link;
+  // A service serving several domains is drawn as an ordinary row holding its
+  // first address, with the others placed under that address afterwards.
+  NSArray *links = row[@"links"];
+  if (links.count > 1) link = linkText = links[0];
   NSView *reach = nil;
   if (link.length) {
-    NSButton *l = [NSButton buttonWithTitle:linkText target:self action:@selector(clicked:)];
-    l.bezelStyle = NSBezelStyleInline;
-    l.bordered = NO;
-    l.contentTintColor = [NSColor linkColor];
-    l.font = [NSFont systemFontOfSize:12];
-    l.alignment = NSTextAlignmentLeft;
-    [l.cell setHighlightsBy:NSContentsCellMask];
-    l.tag = [self claim:link];
-    reach = l;
+    reach = [self linkButton:link title:linkText];
   } else {
     NSTextField *t = [NSTextField labelWithString:linkText ?: @""];
     t.font = [NSFont systemFontOfSize:12];
@@ -979,7 +975,67 @@ static void hug(NSTextField *t) {
   [line addArrangedSubview:detail];
 
   for (NSDictionary *b in row[@"buttons"]) [line addArrangedSubview:[self buttonFor:b]];
+  if (links.count > 1) return [self row:line addresses:links under:reach];
   return line;
+}
+
+// kLinkPitch is the distance from one address's centre to the next in a row
+// that lists several.
+static const CGFloat kLinkPitch = 19;
+
+// row:addresses:under: places a row's further addresses under its first one.
+// The first line stays exactly the line a row with one address draws, so its
+// dot, name, address and controls share one centre line, and each further
+// address keeps the first one's left edge. The space from the last address to
+// the bottom is held equal to the space from the top to the first address, so
+// the row's padding is the same above and below.
+- (NSView *)row:(NSStackView *)line addresses:(NSArray *)links under:(NSView *)first {
+  NSView *box = [NSView new];
+  box.translatesAutoresizingMaskIntoConstraints = NO;
+  line.translatesAutoresizingMaskIntoConstraints = NO;
+  [box addSubview:line];
+  [NSLayoutConstraint activateConstraints:@[
+    [line.topAnchor constraintEqualToAnchor:box.topAnchor],
+    [line.leadingAnchor constraintEqualToAnchor:box.leadingAnchor],
+    [line.trailingAnchor constraintEqualToAnchor:box.trailingAnchor],
+    [box.bottomAnchor constraintGreaterThanOrEqualToAnchor:line.bottomAnchor],
+  ]];
+  NSView *previous = first;
+  for (NSUInteger i = 1; i < links.count; i++) {
+    NSButton *l = [self linkButton:links[i] title:links[i]];
+    l.translatesAutoresizingMaskIntoConstraints = NO;
+    [box addSubview:l];
+    [NSLayoutConstraint activateConstraints:@[
+      [l.leadingAnchor constraintEqualToAnchor:first.leadingAnchor],
+      [l.trailingAnchor constraintLessThanOrEqualToAnchor:box.trailingAnchor],
+      [l.centerYAnchor constraintEqualToAnchor:previous.centerYAnchor constant:kLinkPitch],
+    ]];
+    previous = l;
+  }
+  NSLayoutGuide *above = [NSLayoutGuide new], *below = [NSLayoutGuide new];
+  [box addLayoutGuide:above];
+  [box addLayoutGuide:below];
+  [NSLayoutConstraint activateConstraints:@[
+    [above.topAnchor constraintEqualToAnchor:box.topAnchor],
+    [above.bottomAnchor constraintEqualToAnchor:first.centerYAnchor],
+    [below.topAnchor constraintEqualToAnchor:previous.centerYAnchor],
+    [below.bottomAnchor constraintEqualToAnchor:box.bottomAnchor],
+    [below.heightAnchor constraintEqualToAnchor:above.heightAnchor],
+  ]];
+  return box;
+}
+
+// linkButton draws an address that opens when pressed.
+- (NSButton *)linkButton:(NSString *)link title:(NSString *)title {
+  NSButton *l = [NSButton buttonWithTitle:title target:self action:@selector(clicked:)];
+  l.bezelStyle = NSBezelStyleInline;
+  l.bordered = NO;
+  l.contentTintColor = [NSColor linkColor];
+  l.font = [NSFont systemFontOfSize:12];
+  l.alignment = NSTextAlignmentLeft;
+  [l.cell setHighlightsBy:NSContentsCellMask];
+  l.tag = [self claim:link];
+  return l;
 }
 
 // logPane draws the tail of a container's output on the code background.

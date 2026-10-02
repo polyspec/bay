@@ -619,13 +619,12 @@ func projectView(p *panel, g stack.GroupStatus, busy bool, uses map[string]servi
 			continue
 		}
 		first.Link, first.LinkText = s.URLs[0], s.URLs[0]
-		services.Rows = append(services.Rows, first)
-		for _, u := range s.URLs[1:] {
-			services.Rows = append(services.Rows, row{
-				Text: s.Name, Dot: serviceDot(s), Link: u, LinkText: u, Detail: detail,
-				ID: "select:" + viewService + g.Name + ":" + s.Name,
-			})
+		// Every domain of the service is in its one row. A row per domain read
+		// as several services.
+		if len(s.URLs) > 1 {
+			first.Links = s.URLs
 		}
+		services.Rows = append(services.Rows, first)
 	}
 	p.Sections = append(p.Sections, services)
 

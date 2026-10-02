@@ -24,10 +24,17 @@ func multiDomainGroup() stack.GroupStatus {
 	}
 }
 
+// links returns the links of the row that names a service.
 func links(s section, name string) []string {
 	var out []string
 	for _, r := range s.Rows {
-		if r.Text == name && r.Link != "" {
+		if r.Text != name {
+			continue
+		}
+		// A service serving several domains lists them all in its one row.
+		if len(r.Links) > 0 {
+			out = append(out, r.Links...)
+		} else if r.Link != "" {
 			out = append(out, r.Link)
 		}
 	}

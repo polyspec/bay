@@ -169,3 +169,31 @@ func TestARowBeforeTheSecondReadingGivesMemoryOnly(t *testing.T) {
 		}
 	}
 }
+
+// A service serving several domains is one row, and its domains are listed in
+// that row.
+func TestAServiceWithSeveralDomainsIsOneRow(t *testing.T) {
+	s := stack.ServiceStatus{Name: "node-web", State: "running", IPv4: "192.168.65.88", Routed: true,
+		Container: "soksakim-hyper-node-web",
+		Domains:   []string{"node.soksakim.test", "console.node.soksakim.test", "example.node.soksakim.test"},
+		URLs: []string{"https://node.soksakim.test/", "https://console.node.soksakim.test/",
+			"https://example.node.soksakim.test/"}}
+	g := stack.GroupStatus{Name: "soksakim-hyper", Services: []stack.ServiceStatus{s}}
+	p := panel{}
+	projectView(&p, g, false, map[string]serviceUse{s.Container: measuredUse()})
+	var rows []row
+	for _, sec := range p.Sections {
+		if sec.Header == text.T("SERVICES") {
+			rows = sec.Rows
+		}
+	}
+	if len(rows) != 1 {
+		t.Fatalf("%d rows, want one for the service", len(rows))
+	}
+	if strings.Join(rows[0].Links, " ") != strings.Join(s.URLs, " ") {
+		t.Errorf("links %v, want %v", rows[0].Links, s.URLs)
+	}
+	if !strings.Contains(rows[0].Detail, "192.168.65.88") {
+		t.Errorf("the row lost its address: %q", rows[0].Detail)
+	}
+}

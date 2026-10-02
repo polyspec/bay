@@ -98,6 +98,9 @@ type row struct {
 	Dot      string   `json:"dot,omitempty"` // on, warn, bad or empty
 	Link     string   `json:"link,omitempty"`
 	LinkText string   `json:"linkText,omitempty"`
+	// Links lists several addresses one under another in the address column,
+	// for a service serving more than one domain. It replaces Link.
+	Links []string `json:"links,omitempty"`
 	// Wide widens the name column, for a list of certificate names.
 	Wide bool `json:"wide,omitempty"`
 	// Faint is a tertiary suffix after a kv row's value.

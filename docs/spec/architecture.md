@@ -288,6 +288,19 @@ from and written to disk, bytes received and sent, and its process count. CPU
 is the change in the container's CPU time between two readings divided by the
 time between them, so the first reading shows that it is measuring.
 
+A service is one row in its project's list. A service serving several domains
+lists them one under another inside that row, beside its name, state, address
+and use, which are written once. A row for each domain read as several
+services: with the name and the address repeated, and with the use on the first
+row alone, the rows looked different when they were one container, and lines
+of their own with nothing but a link still read as separate items. The row's first
+line is the line a row with one domain draws, so its dot, name, address and
+controls share one centre line; each further domain keeps the first one's left
+edge, a fixed distance apart, and the space below the last is the space above
+the first. Measured in the window, the first line sat on three centre lines up
+to 7.5 points apart and the last domain touched the divider while the row was
+aligned to its top.
+
 A project's screen lists each running service's CPU and memory in its row, and
 a service's screen shows them in full. One `container stats` call reads every
 running container of the project in about two seconds, whether it names one

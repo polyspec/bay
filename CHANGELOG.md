@@ -5,6 +5,23 @@ the day the change was made.
 
 ## 2026-10-03
 
+### A service serving several domains is one row
+
+The project's list drew a row for each domain, repeating the service's name,
+dot and address, so one container read as three services, and the use shown on
+the first row alone made the rows look different. A service is now one row that
+lists its domains one under another. Its first line is the line a single
+domain's row draws; further domains keep the first one's left edge, 19 points
+apart, and the space below the last equals the space above the first.
+
+A first attempt aligned the whole row to its top. Measured in the window, the
+first line's dot, name and button then sat on three centre lines up to 7.5
+points apart and the last domain touched the divider.
+
+Verification: `make check`, and `tools/window.swift` on the `node-web` row: the
+first line at 35.5 to 37.5 pixels below the divider like a single domain's row,
+further domains 38 pixels apart, and equal space above and below.
+
 ### The window shows what each running container uses
 
 A service's screen showed its route, its container and its output, and nothing
