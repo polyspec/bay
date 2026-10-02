@@ -173,7 +173,7 @@ func iconFor(snap stack.Snapshot) fill {
 // the tail of the selected service's output, and is empty on every other
 // screen.
 func buildPanel(snap stack.Snapshot, busy bool, selected string, open map[string]bool,
-	message, kind string, log []string, found []stack.Beacon) panel {
+	message, kind string, log []string, found []stack.Beacon, uses map[string]serviceUse) panel {
 	p := panel{
 		Sidebar:     sidebar(snap, selected, open),
 		Message:     message,
@@ -192,7 +192,7 @@ func buildPanel(snap stack.Snapshot, busy bool, selected string, open map[string
 		group, name, _ := strings.Cut(strings.TrimPrefix(selected, viewService), ":")
 		if g, ok := findGroup(snap, group); ok {
 			if s, ok := findService(g, name); ok {
-				serviceView(&p, snap, g, s, busy, log)
+				serviceView(&p, snap, g, s, busy, log, uses[s.Container])
 				return p
 			}
 		}
@@ -200,7 +200,7 @@ func buildPanel(snap stack.Snapshot, busy bool, selected string, open map[string
 	case strings.HasPrefix(selected, viewProject):
 		name := strings.TrimPrefix(selected, viewProject)
 		if g, ok := findGroup(snap, name); ok {
-			projectView(&p, g, busy)
+			projectView(&p, g, busy, uses)
 			return p
 		}
 		fallthrough
@@ -569,7 +569,7 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 	}
 }
 
-func projectView(p *panel, g stack.GroupStatus, busy bool) {
+func projectView(p *panel, g stack.GroupStatus, busy bool, uses map[string]serviceUse) {
 	state, running, live := stateOf(g)
 	p.Header = header{Title: g.Name, Subtitle: g.Domain + " · " + shortPath(filepath.Dir(g.StackPath))}
 	if live < len(g.Services) {
@@ -602,8 +602,14 @@ func projectView(p *panel, g stack.GroupStatus, busy bool) {
 		if !s.Internal && s.Live() && !s.Routed {
 			detail = s.State
 		}
+		// A running service's row gives its CPU and memory before its address,
+		// from the same reading as its own screen.
+		rowDetail := detail
+		if use := rowUse(uses[s.Container]); use != "" && s.Live() {
+			rowDetail = use + " · " + detail
+		}
 		first := row{
-			Text: s.Name, Dot: serviceDot(s), Detail: detail,
+			Text: s.Name, Dot: serviceDot(s), Detail: rowDetail,
 			ID:      "select:" + viewService + g.Name + ":" + s.Name,
 			Buttons: []button{quiet("logs:"+g.Name+":"+s.Name, text.T("Logs"), s.State == "absent")},
 		}
@@ -683,7 +689,7 @@ func projectVerdict(g stack.GroupStatus, state groupState, running int) *verdict
 		Subline: strings.Join(why, " · ")}
 }
 
-func serviceView(p *panel, snap stack.Snapshot, g stack.GroupStatus, s stack.ServiceStatus, busy bool, log []string) {
+func serviceView(p *panel, snap stack.Snapshot, g stack.GroupStatus, s stack.ServiceStatus, busy bool, log []string, use serviceUse) {
 	p.Header = header{
 		Title:    s.Name,
 		Subtitle: g.Name + " · " + serviceState(s),
@@ -734,6 +740,9 @@ func serviceView(p *panel, snap stack.Snapshot, g stack.GroupStatus, s stack.Ser
 			Faint: text.T("from the other services in this project")},
 	}}
 	p.Sections = append(p.Sections, container)
+	if s.Live() {
+		p.Sections = append(p.Sections, resourcesSection(use))
+	}
 
 	note := text.P("last %d line", "last %d lines", logTail, logTail)
 	if s.State == "absent" {
@@ -1145,4 +1154,69 @@ func resolveSelection(snap stack.Snapshot, selected, at string) (string, string)
 		at = viewDashboard
 	}
 	return viewDashboard, at
+}
+
+// serviceUse is what the open service's container uses: the last two readings
+// and the reason a reading failed.
+type serviceUse struct {
+	Prev, Cur stack.ContainerStats
+	Err       string
+}
+
+// resourcesSection shows what a running container uses. CPU needs two readings,
+// so the first one says it is measuring.
+func resourcesSection(u serviceUse) section {
+	sec := section{Header: text.T("RESOURCES"),
+		Note: text.T("read while this screen is open")}
+	if u.Err != "" {
+		sec.Note = u.Err
+		return sec
+	}
+	if u.Cur.At.IsZero() {
+		sec.Rows = []row{{Text: text.T("CPU"), Kind: "kv", Detail: text.T("measuring")}}
+		return sec
+	}
+	cpu := text.T("measuring")
+	if share, ok := stack.CPUShare(u.Prev, u.Cur, u.Cur.CPUs); ok {
+		cpu = text.T("%s of %d cores", fmt.Sprintf("%.0f%%", share), u.Cur.CPUs)
+	}
+	sec.Rows = []row{
+		{Text: text.T("CPU"), Kind: "kv", Detail: cpu},
+		{Text: text.T("Memory"), Kind: "kv", Detail: text.T("%s of %s", ibytes(u.Cur.MemoryUsage), ibytes(u.Cur.MemoryLimit))},
+		{Text: text.T("Disk I/O"), Kind: "kv", Detail: text.T("%s read · %s written", ibytes(u.Cur.BlockRead), ibytes(u.Cur.BlockWrite))},
+		{Text: text.T("Network"), Kind: "kv", Detail: text.T("%s received · %s sent", ibytes(u.Cur.NetRx), ibytes(u.Cur.NetTx))},
+		{Text: text.T("Processes"), Kind: "kv", Detail: fmt.Sprint(u.Cur.Processes)},
+	}
+	return sec
+}
+
+// ibytes writes a byte count in binary units. A container's memory limit is
+// set in them, so a limit of 1 GiB reads as 1.0 GiB rather than 1.1 GB.
+func ibytes(n uint64) string {
+	const unit = 1024
+	if n < unit {
+		return fmt.Sprintf("%d B", n)
+	}
+	value, suffix := float64(n)/unit, "KiB"
+	for _, next := range []string{"MiB", "GiB", "TiB"} {
+		if value < unit {
+			break
+		}
+		value, suffix = value/unit, next
+	}
+	return fmt.Sprintf("%.1f %s", value, suffix)
+}
+
+// rowUse writes a reading in the few words a list row has room for: CPU and
+// memory. CPU needs two readings, and a row before the second gives memory
+// alone instead of a word that says CPU is missing.
+func rowUse(u serviceUse) string {
+	if u.Err != "" || u.Cur.At.IsZero() {
+		return ""
+	}
+	memory := ibytes(u.Cur.MemoryUsage)
+	if share, ok := stack.CPUShare(u.Prev, u.Cur, u.Cur.CPUs); ok {
+		return text.T("%s CPU · %s", fmt.Sprintf("%.0f%%", share), memory)
+	}
+	return memory
 }

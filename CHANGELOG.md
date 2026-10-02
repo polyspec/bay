@@ -5,6 +5,32 @@ the day the change was made.
 
 ## 2026-10-03
 
+### The window shows what each running container uses
+
+A service's screen showed its route, its container and its output, and nothing
+of what it used. A running service's screen now shows CPU as a share of the
+cores it was given, memory against its limit, disk I/O, network and processes,
+read from `container stats`, and a project's list gives CPU and memory in each
+running service's row. CPU is the change in CPU time between two readings, so
+it appears from the second one.
+
+One `container stats` call took about two seconds whether it named one
+container, four or ten, so a project's running containers are read together in
+one call, for the project whose screen is open and apart from the machine's
+refresh. A first reading of every container took forty-three seconds with
+twenty running; it was not reproduced and is not what the design rests on.
+
+Disk space per container is not shown. No command reports it, and the only
+figure is the size of a file in the engine's own storage directory, whose
+layout the engine does not publish. A row saying the figure is missing was
+shown at first and removed: it told the reader nothing. Docker statistics are
+not read; a Docker service's screen says so. Sizes are in binary units, because
+a container's memory limit is set in them.
+
+Verification: `make check`, including tests over readings taken from measured
+output, the CPU share, a counter that went back, and the rows. On this machine
+the `soksakim-hyper` list and its services' screens showed the figures.
+
 ### Stop stops a project, Remove removes it, and both say what they did
 
 The project's Stop sent `down`. Pressed on `crudui`, it removed the container

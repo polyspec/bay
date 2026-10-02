@@ -36,7 +36,7 @@ func links(s section, name string) []string {
 
 func TestProjectViewLinksEveryDomainOfAService(t *testing.T) {
 	p := &panel{}
-	projectView(p, multiDomainGroup(), false)
+	projectView(p, multiDomainGroup(), false, nil)
 	services := p.Sections[0]
 	if got := links(services, "web"); !reflect.DeepEqual(got, siteLinks) {
 		t.Fatalf("web links = %v, want %v", got, siteLinks)
@@ -75,7 +75,7 @@ func TestServiceViewStatesEveryDomainAndCertificate(t *testing.T) {
 	g := multiDomainGroup()
 	snap := stack.Snapshot{Groups: []stack.GroupStatus{g}}
 	p := &panel{}
-	serviceView(p, snap, g, g.Services[0], false, nil)
+	serviceView(p, snap, g, g.Services[0], false, nil, serviceUse{})
 	var addresses, certificates []string
 	for _, s := range p.Sections {
 		for _, r := range s.Rows {

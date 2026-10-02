@@ -261,7 +261,7 @@ Screens:
 | --- | --- |
 | Dashboard | The whole machine: one verdict line, every project, every address the proxy serves |
 | Project | One project: its services, its domain and its Compose file, which opens in a text window |
-| Service | One service: its route, its container and the tail of its output |
+| Service | One service: its route, its container, what it uses and the tail of its output |
 | Domains | The domains delegated on this machine, and what delegating one writes |
 | Certificates | The authority and what it issued |
 | Settings | The application's own settings, the machine's, and the maintenance actions |
@@ -281,6 +281,28 @@ them in points. Two things differ from that file on purpose:
   disclosure triangle, and its status dot is drawn at a third of the size.
 - A key and value line runs its text together, so its spacing is zero and the
   controls at its trailing edge are set apart one by one.
+
+A running service's screen shows what it uses, read from `container stats`:
+CPU as a share of the cores it was given, memory against its limit, bytes read
+from and written to disk, bytes received and sent, and its process count. CPU
+is the change in the container's CPU time between two readings divided by the
+time between them, so the first reading shows that it is measuring.
+
+A project's screen lists each running service's CPU and memory in its row, and
+a service's screen shows them in full. One `container stats` call reads every
+running container of the project in about two seconds, whether it names one
+container or ten, so a project's containers are read together in one call, and
+apart from the machine's refresh. Only the project whose screen is open is
+read.
+
+How much disk a container occupies is not shown, and the screen has no row for
+it: a row that says a figure is missing tells the reader nothing. No
+`container` command reports it per container. The figure exists only as the
+size of a file inside the engine's own storage directory, whose layout the
+engine does not publish, and reading it would break without notice when that
+layout changes.
+Docker reports its statistics in another form, and reading them is not
+implemented; a Docker service's screen says so.
 
 A control names what it does. Stop stops a project's services and leaves their
 containers and the project's registration in place, so Start brings the project

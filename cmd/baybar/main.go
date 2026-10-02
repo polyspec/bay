@@ -69,6 +69,10 @@ type app struct {
 	messageAt string
 	// open holds the projects whose services the sidebar lists.
 	open map[string]bool
+	// uses holds the readings of the open project's containers, keyed by
+	// container, and usesFor names that project.
+	uses    map[string]serviceUse
+	usesFor string
 }
 
 func main() {
@@ -111,6 +115,7 @@ func (a *app) onReady() {
 
 	go a.watch(quit)
 	go a.loop()
+	go a.sampleResources()
 	if *show || showAtLaunch() {
 		go func() {
 			a.refresh()
@@ -150,6 +155,10 @@ func (a *app) currentPanel() panel {
 	selected := a.selected
 	open := a.open
 	message, kind := messageFor(selected, a.messageAt, a.message, a.kind)
+	var uses map[string]serviceUse
+	if group, _ := expandedProject(selected); group != "" && group == a.usesFor {
+		uses = a.uses
+	}
 	a.mu.Unlock()
 
 	// The service screen shows the tail of its container's output, so it is
@@ -159,7 +168,61 @@ func (a *app) currentPanel() panel {
 		group, service, _ := strings.Cut(rest, ":")
 		log = a.serviceLogTail(group, service, logTail)
 	}
-	return buildPanel(snap, busy, selected, open, message, kind, log, a.watcher.List())
+	return buildPanel(snap, busy, selected, open, message, kind, log, a.watcher.List(), uses)
+}
+
+// openContainers names the running containers of the project whose screen, or
+// whose service's screen, is selected, and that project.
+func openContainers(snap stack.Snapshot, selected string) (string, []string) {
+	group, _ := expandedProject(selected)
+	if group == "" {
+		return "", nil
+	}
+	var names []string
+	for _, g := range snap.Groups {
+		if g.Name != group {
+			continue
+		}
+		for _, s := range g.Services {
+			if s.Live() && s.Container != "" {
+				names = append(names, s.Container)
+			}
+		}
+	}
+	return group, names
+}
+
+// sampleResources reads what the open project's containers use. One reading
+// covers every running container of the project in about two seconds, so they
+// are read together, and apart from the machine's refresh.
+func (a *app) sampleResources() {
+	for {
+		a.mu.Lock()
+		group, names := openContainers(a.snap, a.selected)
+		a.mu.Unlock()
+		if len(names) == 0 {
+			time.Sleep(time.Second)
+			continue
+		}
+		got, err := stack.ReadStats(names...)
+		a.mu.Lock()
+		if a.usesFor != group {
+			a.uses, a.usesFor = map[string]serviceUse{}, group
+		}
+		for _, name := range names {
+			u := a.uses[name]
+			if err != nil {
+				u.Err = err.Error()
+			} else if cur, ok := got[name]; ok {
+				u.Err = ""
+				u.Prev, u.Cur = u.Cur, cur
+			}
+			a.uses[name] = u
+		}
+		a.mu.Unlock()
+		a.refreshWindowOnly()
+		time.Sleep(time.Second)
+	}
 }
 
 // showAtLaunch reports whether the window opens with the application. The

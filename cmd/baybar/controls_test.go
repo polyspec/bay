@@ -28,7 +28,7 @@ func TestNoStopButtonRemovesAnything(t *testing.T) {
 	g := runningProject("crudui")
 	snap := stack.Snapshot{Groups: []stack.GroupStatus{g}}
 	for _, view := range []string{viewDashboard, viewProject + "crudui"} {
-		p := buildPanel(snap, false, view, nil, "", "", nil, nil)
+		p := buildPanel(snap, false, view, nil, "", "", nil, nil, nil)
 		for _, b := range everyButton(p) {
 			if b.Title == text.T("Stop") && strings.HasPrefix(b.ID, "down:") {
 				t.Errorf("%s: a button titled Stop sends %q, which removes the containers", view, b.ID)
@@ -40,7 +40,7 @@ func TestNoStopButtonRemovesAnything(t *testing.T) {
 func TestStopStopsTheProjectAndRemoveAsksFirst(t *testing.T) {
 	g := runningProject("crudui")
 	snap := stack.Snapshot{Groups: []stack.GroupStatus{g}}
-	p := buildPanel(snap, false, viewProject+"crudui", nil, "", "", nil, nil)
+	p := buildPanel(snap, false, viewProject+"crudui", nil, "", "", nil, nil, nil)
 	ids := map[string]string{}
 	for _, b := range p.Header.Buttons {
 		ids[b.Title] = b.ID
