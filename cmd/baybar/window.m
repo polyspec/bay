@@ -411,12 +411,30 @@ static NSColor *hex(uint32_t rgb) {
   sideBg.material = NSVisualEffectMaterialSidebar;
   sideBg.blendingMode = NSVisualEffectBlendingModeBehindWindow;
   sideBg.translatesAutoresizingMaskIntoConstraints = NO;
-  [sideBg addSubview:self.sidebar];
+  // The sidebar scrolls when its rows are taller than the window. A project with
+  // twelve services pushed the rows below it out of the window with no way to
+  // reach them.
+  NSScrollView *sideScroll = [NSScrollView new];
+  sideScroll.hasVerticalScroller = YES;
+  sideScroll.autohidesScrollers = YES;
+  sideScroll.drawsBackground = NO;
+  sideScroll.translatesAutoresizingMaskIntoConstraints = NO;
+  NSView *sideDoc = [FlippedView new];
+  sideDoc.translatesAutoresizingMaskIntoConstraints = NO;
+  [sideDoc addSubview:self.sidebar];
+  sideScroll.documentView = sideDoc;
+  [sideBg addSubview:sideScroll];
   [NSLayoutConstraint activateConstraints:@[
     [sideBg.widthAnchor constraintEqualToConstant:kSidebarWidth],
-    [self.sidebar.topAnchor constraintEqualToAnchor:sideBg.topAnchor],
-    [self.sidebar.leadingAnchor constraintEqualToAnchor:sideBg.leadingAnchor],
-    [self.sidebar.trailingAnchor constraintEqualToAnchor:sideBg.trailingAnchor],
+    [sideScroll.topAnchor constraintEqualToAnchor:sideBg.topAnchor],
+    [sideScroll.leadingAnchor constraintEqualToAnchor:sideBg.leadingAnchor],
+    [sideScroll.trailingAnchor constraintEqualToAnchor:sideBg.trailingAnchor],
+    [sideScroll.bottomAnchor constraintEqualToAnchor:sideBg.bottomAnchor],
+    [self.sidebar.topAnchor constraintEqualToAnchor:sideDoc.topAnchor],
+    [self.sidebar.leadingAnchor constraintEqualToAnchor:sideDoc.leadingAnchor],
+    [self.sidebar.trailingAnchor constraintEqualToAnchor:sideDoc.trailingAnchor],
+    [self.sidebar.bottomAnchor constraintEqualToAnchor:sideDoc.bottomAnchor],
+    [sideDoc.widthAnchor constraintEqualToAnchor:sideScroll.contentView.widthAnchor],
   ]];
 
   // Detail header.

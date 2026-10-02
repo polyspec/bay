@@ -5,6 +5,22 @@ the day the change was made.
 
 ## 2026-10-03
 
+### Projects in the sidebar open and close on their own, and the sidebar scrolls
+
+A project's services were listed only while that project was selected, and
+pressing the project again did nothing. The sidebar did not scroll either, so a
+project with twelve services pushed the rows below it out of the window with no
+way to reach them.
+
+Each project is now open or closed on its own. Pressing a project that is not
+selected selects it and opens it; pressing the selected project opens or closes
+it; selecting a service opens its project. A project stays open when another is
+selected. The sidebar is in a scroll view.
+
+Verification: `make check`, including tests over each case. On this machine
+pressing `platform-project` listed its twelve services, pressing it again closed
+them, and scrolling the sidebar reached the rows that had been below the window.
+
 ### An action's outcome stays on the screen it was started from
 
 The window kept one message for all its screens. A Stop that failed on `crudui`

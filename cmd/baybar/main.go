@@ -67,6 +67,8 @@ type app struct {
 	// messageAt is the screen the message belongs to: the one its action was
 	// started from. Other screens do not show it.
 	messageAt string
+	// open holds the projects whose services the sidebar lists.
+	open map[string]bool
 }
 
 func main() {
@@ -145,6 +147,7 @@ func (a *app) currentPanel() panel {
 		a.selected = viewDashboard
 	}
 	selected := a.selected
+	open := a.open
 	message, kind := messageFor(selected, a.messageAt, a.message, a.kind)
 	a.mu.Unlock()
 
@@ -155,7 +158,7 @@ func (a *app) currentPanel() panel {
 		group, service, _ := strings.Cut(rest, ":")
 		log = a.serviceLogTail(group, service, logTail)
 	}
-	return buildPanel(snap, busy, selected, message, kind, log, a.watcher.List())
+	return buildPanel(snap, busy, selected, open, message, kind, log, a.watcher.List())
 }
 
 // showAtLaunch reports whether the window opens with the application. The
@@ -267,6 +270,7 @@ func (a *app) handle(id string) {
 	// Selecting a sidebar row changes the detail pane only.
 	if rest, ok := strings.CutPrefix(id, "select:"); ok {
 		a.mu.Lock()
+		a.open = nextOpen(a.open, a.selected, rest)
 		a.selected = rest
 		a.mu.Unlock()
 		if windowVisible() {
@@ -744,6 +748,7 @@ func (a *app) addProject(rt *stack.Runtime, path string) error {
 		return err
 	}
 	a.mu.Lock()
+	a.open = nextOpen(a.open, a.selected, viewProject+cfg.Name)
 	a.selected = viewProject + cfg.Name
 	a.mu.Unlock()
 	return nil

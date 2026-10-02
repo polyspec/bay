@@ -10,6 +10,7 @@
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
+| 사이드바 프로젝트마다 따로 열고 닫히며 사이드바가 스크롤됨 | 구현됨 | `go test ./cmd/baybar -run 'TestPressing\|TestSelectingAService\|TestOpenProjects\|TestAClosedSelected'`가 선택되지 않은 프로젝트 열기, 선택된 프로젝트 토글, 서비스가 프로젝트 열기, 여러 개 동시에 열기, 닫힌 프로젝트는 아무것도 나열하지 않음을 검사. 이 기계에서 `platform-project`를 누르니 서비스 열두 개가 나열됐고 다시 누르니 닫혔으며, 사이드바를 스크롤해 창 아래에 있던 `render-2`와 `soksakim-hyper-test`에 닿았다 | 예 |
 | 동작의 결과는 그 동작을 시작한 화면에만 보임 | 구현됨 | `go test ./cmd/baybar -run TestAnOutcomeIsShown`가 다른 화면과 동작 자신의 화면을 검사. 창이 모든 화면에 메시지 하나만 들고 있어서, `crudui`의 정지 실패가 `platform-sdk-local` registry 화면에 그 서비스가 실패한 것처럼 보였다. 테스트로 확인했고 변경 후 화면에서는 확인하지 않았다 | 예 |
 | Compose 파일 없이도 프로젝트를 멈추고 지움 | 구현됨 | `go test ./internal/stack -run 'TestAProjectIsRemoved\|TestAContainerTheFile\|TestContainersStop\|TestStoppingNamed\|TestOnlyServiceContainers\|TestServiceEngineStopAndRemove\|TestAProjectWhoseFileIsGone\|TestAReadableFileNames\|TestAPathNothing'`가 프로젝트 레이블로 지우기, 파일에 더는 없는 컨테이너, 시작 순서의 역순, 지정한 서비스, 다른 역할, 다른 프로젝트 레이블의 컨테이너, 등록부에서 이름 찾기를 검사. 컨테이너가 실행 중인데 창의 정지가 `stat …/compose.yaml: no such file or directory`로 실패했다. 이 기계에서 프로젝트를 시작하고 파일을 지운 뒤 `down`이 컨테이너와 등록 항목을 지웠다 | 예 |
 | 터미널 밖에서 macOS가 시작한 프로그램도 엔진을 찾음 | 구현됨 | `go test ./internal/stack -run 'TestAnEngineInAnInstalled\|TestTheVariableIsAsked\|TestTheAgentsSearchPath'`가 검색 경로 `/usr/bin:/bin:/usr/sbin:/sbin`에서 설치 디렉터리에 있는 엔진, 변수 우선, 에이전트 잡이 모든 설치 디렉터리를 담는지를 검사. Finder에서 연 창이 `no container engine found`를 보고했고 같은 때 터미널에서는 `container`가 응답했다. 변경 후 그 검색 경로로 시작한 창이 머신 상태를 읽었고 `bay status`도 응답했다 | 예 |

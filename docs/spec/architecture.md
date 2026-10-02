@@ -244,9 +244,16 @@ pins.
 
 `baybar` shows one window with a source list: MACHINE holds Dashboard,
 Domains, Certificates and Settings; PROJECTS holds one row per registered
-project. Selecting a project lists its services under it, indented, so a service
-can be opened without leaving the sidebar. There is no disclosure control: the
-list follows the selection, so a mark would name an action that does not exist.
+project. An open project lists its services under it, indented, so a service
+can be opened without leaving the sidebar. Each project is open or closed on its
+own. Pressing a project that is not selected selects it and opens it; pressing
+the selected project opens or closes it. Selecting a service opens its project.
+A project stays open when another is selected, so several can be open at once.
+The row itself is the control, and there is no separate disclosure mark.
+
+The sidebar scrolls when its rows are taller than the window. A project with
+twelve services pushed the rows below it out of the window with no way to reach
+them.
 
 Screens:
 

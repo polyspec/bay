@@ -172,10 +172,10 @@ func iconFor(snap stack.Snapshot) fill {
 // because an action already changing containers should not be raced. log holds
 // the tail of the selected service's output, and is empty on every other
 // screen.
-func buildPanel(snap stack.Snapshot, busy bool, selected, message, kind string, log []string,
-	found []stack.Beacon) panel {
+func buildPanel(snap stack.Snapshot, busy bool, selected string, open map[string]bool,
+	message, kind string, log []string, found []stack.Beacon) panel {
 	p := panel{
-		Sidebar:     sidebar(snap, selected),
+		Sidebar:     sidebar(snap, selected, open),
 		Message:     message,
 		MessageKind: kind,
 	}
@@ -241,7 +241,33 @@ func expandedProject(selected string) (group, service string) {
 	return "", ""
 }
 
-func sidebar(snap stack.Snapshot, selected string) []sideGroup {
+// nextOpen returns which projects are open after pressed is selected while
+// current was. Pressing a project that is not selected opens it; pressing the
+// selected project opens or closes it; selecting a service opens its project.
+// Nothing else changes, so an open project stays open when another is
+// selected.
+func nextOpen(open map[string]bool, current, pressed string) map[string]bool {
+	next := make(map[string]bool, len(open)+1)
+	for name, isOpen := range open {
+		if isOpen {
+			next[name] = true
+		}
+	}
+	if name, ok := strings.CutPrefix(pressed, viewProject); ok {
+		if pressed == current && next[name] {
+			delete(next, name)
+		} else {
+			next[name] = true
+		}
+		return next
+	}
+	if group, _ := expandedProject(pressed); group != "" {
+		next[group] = true
+	}
+	return next
+}
+
+func sidebar(snap stack.Snapshot, selected string, open map[string]bool) []sideGroup {
 	machine := sideGroup{Title: text.T("MACHINE"), Items: []sideItem{
 		{ID: "select:" + viewDashboard, Label: text.T("Dashboard"),
 			Dot: dashboardDot(snap), Selected: selected == viewDashboard},
@@ -258,7 +284,7 @@ func sidebar(snap stack.Snapshot, selected string) []sideGroup {
 			Dot: "on", Selected: selected == viewSettings},
 	}}
 
-	expanded, selectedService := expandedProject(selected)
+	selectedGroup, selectedService := expandedProject(selected)
 	down := proxyDown(snap)
 	projects := sideGroup{Title: text.T("PROJECTS")}
 	for _, g := range snap.Groups {
@@ -275,7 +301,7 @@ func sidebar(snap stack.Snapshot, selected string) []sideGroup {
 			Selected: selected == viewProject+g.Name,
 		}
 		projects.Items = append(projects.Items, item)
-		if g.Name != expanded {
+		if !open[g.Name] {
 			continue
 		}
 		for _, s := range g.Services {
@@ -284,7 +310,7 @@ func sidebar(snap stack.Snapshot, selected string) []sideGroup {
 				Label:    s.Name,
 				Dot:      serviceDot(s),
 				Sub:      true,
-				Selected: s.Name == selectedService,
+				Selected: g.Name == selectedGroup && s.Name == selectedService,
 			})
 		}
 	}
