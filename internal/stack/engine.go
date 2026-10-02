@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -82,7 +83,27 @@ func engineBin(engine string) string {
 	if path, err := exec.LookPath(engine); err == nil {
 		return path
 	}
+	for _, dir := range installedDirs {
+		path := filepath.Join(dir, engine)
+		if info, err := os.Stat(path); err == nil && !info.IsDir() && info.Mode()&0o111 != 0 {
+			return path
+		}
+	}
 	return ""
+}
+
+// installedDirs are the directories the engines' installers write their
+// commands to. They are searched after the search path, because a program macOS
+// starts outside a terminal, the window from Finder or the DNS agent from
+// launchd, receives /usr/bin:/bin:/usr/sbin:/sbin and finds neither engine on
+// it.
+var installedDirs = []string{"/opt/homebrew/bin", "/usr/local/bin"}
+
+// agentSearchPath is the search path the DNS agent's job runs with: the
+// installed directories, then the system ones. It is built from installedDirs
+// so the agent and the lookup cannot disagree on where an engine is.
+func agentSearchPath() string {
+	return strings.Join(append(append([]string{}, installedDirs...), "/usr/bin", "/bin"), ":")
 }
 
 // runEngine runs one command against an engine and returns its output. On

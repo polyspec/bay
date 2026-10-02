@@ -10,6 +10,7 @@
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
+| 터미널 밖에서 macOS가 시작한 프로그램도 엔진을 찾음 | 구현됨 | `go test ./internal/stack -run 'TestAnEngineInAnInstalled\|TestTheVariableIsAsked\|TestTheAgentsSearchPath'`가 검색 경로 `/usr/bin:/bin:/usr/sbin:/sbin`에서 설치 디렉터리에 있는 엔진, 변수 우선, 에이전트 잡이 모든 설치 디렉터리를 담는지를 검사. Finder에서 연 창이 `no container engine found`를 보고했고 같은 때 터미널에서는 `container`가 응답했다. 변경 후 그 검색 경로로 시작한 창이 머신 상태를 읽었고 `bay status`도 응답했다 | 예 |
 | 네이티브 주소 이벤트와 바인딩 빌드 입력 | 구현됨 | `go test ./internal/stack -run '^TestServiceName|^TestReplacement|^TestCLIPrerequisites|^TestNativeNameSubscription'` 한 번의 구독, 주소 추가·삭제, 완전한 이벤트 묶음, 실패·기한 만료 정리, 네이티브 소켓 대기 취소 사례가 통과한다. 네이티브 소스·헤더 빌드 입력 사례는 빌드 규칙 변경 전에 실패했다. 실제 두 서비스 주소·HTTPS 검증이 통과한다 | CLI 설치: `95d73d4` |
 | Apple 서비스 호스트 이름 준비 검사 | 구현됨 | `TestServiceNameFailureStopsDependants`는 준비 검사 없이 실패하며 주소 일치, 누락되거나 이전 IPv6, 조회 실패, 잘못된 선언 사례가 통과한다. 최종 위치에서 두 서비스 교체 후 실제 HTTPS 요청이 엣지나 DNS 재시작 없이 통과한다 | CLI 설치: `95d73d4` |
 | 실행 중인 서비스를 교체 전에 중지 | 구현됨 | `TestReplacementStopsBeforeRemoving`가 실행 중인 서비스와 중지된 서비스를 검사하고 `TestReplacementPreservesServiceAfterStopFailure`가 중지 실패의 원래 오류와 서비스 보존을 검사 | 설치됨: `95d73d4` |

@@ -32,6 +32,16 @@ An engine runs containers. Two are supported and neither is preferred: Apple
 may run on either. An engine is identified by the command that speaks to it, so
 anything answering the Docker socket is the Docker engine here.
 
+An engine's command is found the same way by every program that uses it: the
+variable that names it (`CONTAINER_BIN`, `DOCKER_BIN`), then the search path,
+then the directories the engines' installers write to, `/opt/homebrew/bin` and
+`/usr/local/bin`. The installed directories are searched because a program
+macOS starts outside a terminal, the window from Finder or the DNS agent from
+launchd, receives the search path `/usr/bin:/bin:/usr/sbin:/sbin` and finds
+neither engine on it. The window launched from Finder reported that no engine
+was installed while `container` answered from a terminal. The DNS agent's job
+carries the same directories in its environment, taken from the same list.
+
 An engine that is absent, or present with nothing answering its socket,
 contributes no containers and is not an error. A machine with one engine
 behaves as it did before the other was supported.

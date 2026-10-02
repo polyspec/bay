@@ -19,6 +19,9 @@ func TestUpRegistersTheProjectBeforeAnyWork(t *testing.T) {
 	t.Setenv("PATH", "")
 	t.Setenv("CONTAINER_BIN", "/nonexistent/container")
 	t.Setenv("DOCKER_BIN", "")
+	old := installedDirs
+	installedDirs = nil
+	t.Cleanup(func() { installedDirs = old })
 	if _, err := rt.Up(cfg); err == nil {
 		t.Fatal("up succeeded with no engine")
 	}

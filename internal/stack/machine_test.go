@@ -157,9 +157,12 @@ func TestMachinePaths(t *testing.T) {
 // machine running both, or neither, can be tested where only one is installed.
 func withEngines(t *testing.T, names ...string) {
 	t.Helper()
-	// An empty PATH leaves LookPath nothing to find, so an engine is present
-	// only when its variable names a program.
+	// An empty PATH and no installed directories leave nothing to find, so an
+	// engine is present only when its variable names a program.
 	t.Setenv("PATH", "")
+	old := installedDirs
+	installedDirs = nil
+	t.Cleanup(func() { installedDirs = old })
 	t.Setenv("CONTAINER_BIN", "")
 	t.Setenv("DOCKER_BIN", "")
 	for _, name := range names {

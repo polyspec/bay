@@ -157,9 +157,9 @@ func buildPlist(label string, args []string, stdout, stderr string) string {
 	b.WriteString("\t<key>KeepAlive</key>\n\t<true/>\n")
 	fmt.Fprintf(&b, "\t<key>StandardOutPath</key>\n\t<string>%s</string>\n", esc(stdout))
 	fmt.Fprintf(&b, "\t<key>StandardErrorPath</key>\n\t<string>%s</string>\n", esc(stderr))
-	// launchd starts jobs with a minimal PATH.
+	// launchd starts jobs with a search path that holds neither engine.
 	b.WriteString("\t<key>EnvironmentVariables</key>\n\t<dict>\n" +
-		"\t\t<key>PATH</key>\n\t\t<string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>\n\t</dict>\n")
+		"\t\t<key>PATH</key>\n\t\t<string>" + esc(agentSearchPath()) + "</string>\n\t</dict>\n")
 	b.WriteString("</dict>\n</plist>\n")
 	return b.String()
 }

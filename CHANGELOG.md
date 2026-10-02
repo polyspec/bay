@@ -3,6 +3,26 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-10-03
+
+### The window finds an engine when it is not started from a terminal
+
+The window reported `머신 상태를 읽지 못함 - no container engine found: install
+Apple container or docker` while `container` answered from a terminal. A program
+macOS starts outside a terminal, the window from Finder or the Dock, receives the
+search path `/usr/bin:/bin:/usr/sbin:/sbin`, and the engines are installed in
+`/opt/homebrew/bin` and `/usr/local/bin`. The DNS agent already carried those
+directories in its launchd job; the window had no equivalent.
+
+An engine's command is now looked up by its variable, then the search path, then
+the installed directories. The agent's job takes its search path from the same
+list, so the two cannot disagree on where an engine is.
+
+Verification: `make check`, including tests over an engine found in an installed
+directory under that search path, the variable taking precedence, and the agent's
+search path. The window started with `/usr/bin:/bin:/usr/sbin:/sbin` read the
+machine, and `bay status` answered with the same environment.
+
 ## 2026-10-01
 
 ### Install native address event support
