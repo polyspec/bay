@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"syscall"
 	"time"
@@ -609,42 +610,74 @@ func (e *serviceEngine) startLocked(cfg *Config, targets []*Service, restart boo
 	return nil
 }
 
-func (e *serviceEngine) stop(cfg *Config, targets []*Service, remove bool) error {
-	return e.locked(cfg.Name, func() error {
-		if err := e.preflight(cfg.Name, targets); err != nil {
-			return err
+// projectContainers returns the service containers carrying a project's label,
+// most recently started first. What to stop is read from the containers rather
+// than from the Compose file: the file says what to start, and a project whose
+// file is gone, or a service removed from the file after it started, still has
+// containers running under the label.
+//
+// Services start in dependency order, so the most recently started is stopped
+// first and a service stops before the services it depends on. The runtime
+// reports start times to the second, so containers started in the same second
+// keep no defined order between themselves.
+func (e *serviceEngine) projectContainers(ctx context.Context, group string) ([]Instance, error) {
+	list, err := e.list(ctx)
+	if err != nil {
+		return nil, err
+	}
+	var out []Instance
+	for _, in := range list {
+		if in.Labels[LabelGroup] == group && in.Labels[LabelRole] == roleService {
+			out = append(out, in)
 		}
-		order, err := dependencyOrder(cfg, targets)
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].Started > out[j].Started })
+	return out, nil
+}
+
+// removeProject removes every service container of a project.
+func (e *serviceEngine) removeProject(group string) error {
+	return e.locked(group, func() error {
+		ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
+		defer cancel()
+		containers, err := e.projectContainers(ctx, group)
 		if err != nil {
 			return err
 		}
-		selected := map[string]bool{}
-		for _, s := range targets {
-			selected[s.Name] = true
+		for _, in := range containers {
+			e.say("%s: removing its container", in.Labels[LabelService])
+			if _, err := e.command(ctx, "rm", "--force", in.Name); err != nil {
+				return err
+			}
 		}
+		return nil
+	})
+}
+
+// stopProject stops a project's running service containers, or only the named
+// services when names are given, and leaves the containers in place.
+func (e *serviceEngine) stopProject(group string, names []string) error {
+	return e.locked(group, func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 		defer cancel()
-		for i := len(order) - 1; i >= 0; i-- {
-			s := order[i]
-			if !selected[s.Name] {
+		containers, err := e.projectContainers(ctx, group)
+		if err != nil {
+			return err
+		}
+		wanted := map[string]bool{}
+		for _, n := range names {
+			wanted[n] = true
+		}
+		for _, in := range containers {
+			service := in.Labels[LabelService]
+			if len(names) > 0 && !wanted[service] {
 				continue
 			}
-			in, ok, err := e.lookup(ctx, s.ContainerName)
-			if err != nil {
-				return err
-			}
-			if !ok {
+			if in.State != "running" {
 				continue
 			}
-			if err = owns(cfg.Name, s, in); err != nil {
-				return err
-			}
-			if remove {
-				_, err = e.command(ctx, "rm", "--force", s.ContainerName)
-			} else if in.State == "running" {
-				_, err = e.command(ctx, "stop", s.ContainerName)
-			}
-			if err != nil {
+			e.say("%s: stopping it", service)
+			if _, err := e.command(ctx, "stop", in.Name); err != nil {
 				return err
 			}
 		}

@@ -41,7 +41,7 @@ volumes:
 	v := cfg.Volumes["data"]
 	s := cfg.Services["store"]
 	t.Cleanup(func() {
-		if err := e.stop(cfg, cfg.Sorted(), true); err != nil {
+		if err := e.removeProject(cfg.Name); err != nil {
 			t.Error(err)
 			return
 		}
@@ -98,7 +98,7 @@ volumes:
 		}
 	}
 	read("x")
-	if err = e.stop(cfg, cfg.Sorted(), true); err != nil {
+	if err = e.removeProject(cfg.Name); err != nil {
 		t.Fatal(err)
 	}
 	after, ok, err := e.inspectVolume(context.Background(), v.Name)

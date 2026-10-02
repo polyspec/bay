@@ -88,7 +88,9 @@ func (f *fakeServices) command(ctx context.Context, args ...string) ([]byte, err
 		in := f.instances[name]
 		in.State = "running"
 		in.IPv4 = "192.0.2.1/24"
-		in.Started += "-start"
+		// The runtime reports a start time to the second, in ISO 8601.
+		f.sequence++
+		in.Started = fmt.Sprintf("2026-10-03T06:%02d:%02dZ", f.sequence/60, f.sequence%60)
 		f.instances[name] = in
 		f.events = append(f.events, "start:"+name)
 		if len(args) == 3 && args[1] == "--attach" {
@@ -238,26 +240,33 @@ func TestServiceEngineStopAndRemoveOwnershipAndOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.events = nil
-	if err := e.stop(cfg, cfg.Sorted(), false); err != nil {
+	if err := e.stopProject(cfg.Name, nil); err != nil {
 		t.Fatal(err)
 	}
+	// The reverse of the order the services started.
 	if !reflect.DeepEqual(f.events, []string{"stop:app-web", "stop:app-db"}) {
 		t.Fatalf("wrong stop order: %v", f.events)
 	}
+	// What is removed is chosen by the project's label, never by a name. A
+	// container named like a service but labelled for another project is not
+	// this project's and is left alone while the project's own are removed.
 	f.events = nil
 	foreign := f.instances["app-db"]
 	foreign.Labels[LabelGroup] = "foreign"
 	f.instances["app-db"] = foreign
-	if err := e.stop(cfg, cfg.Sorted(), true); err == nil || len(f.events) != 0 {
-		t.Fatal("down changed containers before checking every owner")
-	}
-	foreign.Labels[LabelGroup] = "app"
-	f.instances["app-db"] = foreign
-	if err := e.stop(cfg, cfg.Sorted(), true); err != nil {
+	if err := e.removeProject(cfg.Name); err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(f.events, []string{"rm:app-web", "rm:app-initialize", "rm:app-db"}) {
-		t.Fatalf("wrong removal order: %v", f.events)
+	if _, kept := f.instances["app-db"]; !kept {
+		t.Fatal("a container labelled for another project was removed")
+	}
+	for _, ev := range f.events {
+		if ev == "rm:app-db" {
+			t.Fatal("a container labelled for another project was removed")
+		}
+	}
+	if len(f.events) != 2 {
+		t.Fatalf("the project's own containers were not all removed: %v", f.events)
 	}
 }
 

@@ -146,7 +146,9 @@ func up(m *stack.Machine) error {
 }
 
 func down(m *stack.Machine) error {
-	cfg, err := stack.LoadIn(m, *file)
+	// What to remove is read from the containers, so only the project's name is
+	// needed, and it is found even when the file is gone.
+	name, err := stack.ProjectNameAt(m, *file)
 	if err != nil {
 		return err
 	}
@@ -154,26 +156,34 @@ func down(m *stack.Machine) error {
 	if err != nil {
 		return err
 	}
-	_, err = rt.Down(cfg)
+	_, err = rt.Down(name)
 	return err
 }
 
 // serviceAction starts, stops or restarts named services of this group, then
 // republishes the routes so the proxy matches what is actually running.
 func serviceAction(m *stack.Machine, action string, names []string) error {
-	cfg, err := stack.LoadIn(m, *file)
+	rt, err := newRuntime(m)
 	if err != nil {
 		return err
 	}
-	rt, err := newRuntime(m)
+	// Stopping is read from the containers and needs only the project's name;
+	// starting needs the file, because the file says what to start.
+	if action == "stop" {
+		name, err := stack.ProjectNameAt(m, *file)
+		if err != nil {
+			return err
+		}
+		_, err = rt.StopServices(name, names)
+		return err
+	}
+	cfg, err := stack.LoadIn(m, *file)
 	if err != nil {
 		return err
 	}
 	switch action {
 	case "start":
 		_, err = rt.StartServices(cfg, names)
-	case "stop":
-		_, err = rt.StopServices(cfg, names)
 	case "restart":
 		_, err = rt.RestartServices(cfg, names)
 	}

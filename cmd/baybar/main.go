@@ -556,23 +556,30 @@ func (a *app) run(rt *stack.Runtime, parts []string) error {
 	if len(parts) < 2 {
 		return fmt.Errorf("unknown action %q", strings.Join(parts, ":"))
 	}
-	cfg, err := rt.LoadGroup(parts[1])
-	if err != nil {
-		return err
-	}
 	var names []string
 	if len(parts) > 2 && parts[2] != "" {
 		names = []string{parts[2]}
 	}
+	// Stopping and removing are read from the containers' labels and need only
+	// the project's name. They run before the file is read, so a project whose
+	// file is gone still stops.
+	switch parts[0] {
+	case "down":
+		_, err := rt.Down(parts[1])
+		return err
+	case "stop":
+		_, err := rt.StopServices(parts[1], names)
+		return err
+	}
+	cfg, err := rt.LoadGroup(parts[1])
+	if err != nil {
+		return err
+	}
 	switch parts[0] {
 	case "up":
 		_, err = rt.Up(cfg)
-	case "down":
-		_, err = rt.Down(cfg)
 	case "start":
 		_, err = rt.StartServices(cfg, names)
-	case "stop":
-		_, err = rt.StopServices(cfg, names)
 	case "restart":
 		_, err = rt.RestartServices(cfg, names)
 	default:

@@ -94,7 +94,7 @@ func TestManagedVolumeCreationReuseAndDownPreservation(t *testing.T) {
 	if err := e.start(cfg, cfg.Sorted(), false); err != nil {
 		t.Fatal(err)
 	}
-	if err := e.stop(cfg, cfg.Sorted(), true); err != nil {
+	if err := e.removeProject(cfg.Name); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.start(cfg, cfg.Sorted(), false); err != nil {

@@ -5,6 +5,27 @@ the day the change was made.
 
 ## 2026-10-03
 
+### Stopping a project does not need its Compose file
+
+The window's Stop reported `down 실패: stat …/compose.yaml: no such file or
+directory` while the project's container was running. Stopping and removing read
+the Compose file to learn which services to stop, so a project whose file had
+been moved could not be stopped, and a service removed from the file after it
+started kept running after `down`.
+
+What to stop is read from the containers now: every service container carrying
+the project's `bay.group` label, chosen by label and never by name.
+They stop in the reverse of the order they started, read from each container's
+start time, which is the reverse of the dependency order they started in. The
+command line finds the project's name in the registry when the file cannot be
+read. The name-driven stop is removed.
+
+Verification: `make check`, including tests over removal by label, a container
+the file no longer names, the stop order, named services, a container labelled
+for another project left alone, and naming a project from the registry. On this
+machine a project was started, its file deleted, and `down` removed its
+container and its registry entry.
+
 ### The window finds an engine when it is not started from a terminal
 
 The window reported `머신 상태를 읽지 못함 - no container engine found: install

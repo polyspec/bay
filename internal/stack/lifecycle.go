@@ -2,6 +2,7 @@ package stack
 
 import (
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -162,15 +163,17 @@ func domainsFree(cfg *Config, instances []ServiceInstance) error {
 }
 
 // Down removes the project's containers and withdraws its routes. Other
-// projects are not changed.
-func (r *Runtime) Down(cfg *Config) (SyncResult, error) {
+// projects are not changed. It takes the project's name rather than its
+// configuration, because what to remove is read from the containers' labels and
+// a project whose file is gone still has containers to remove.
+func (r *Runtime) Down(group string) (SyncResult, error) {
 	if err := r.ownsSetup(); err != nil {
 		return SyncResult{}, err
 	}
-	if err := r.engine().stop(cfg, cfg.Sorted(), true); err != nil {
+	if err := r.engine().removeProject(group); err != nil {
 		return SyncResult{}, err
 	}
-	if err := r.Machine.Unregister(cfg.Name); err != nil {
+	if err := r.Machine.Unregister(group); err != nil {
 		return SyncResult{}, err
 	}
 	return r.sync(nil)
@@ -200,16 +203,14 @@ func (r *Runtime) StartServices(cfg *Config, names []string) (SyncResult, error)
 	return res, nil
 }
 
-// StopServices stops the named services and leaves their containers in place.
-func (r *Runtime) StopServices(cfg *Config, names []string) (SyncResult, error) {
+// StopServices stops the named services, or every service of the project when
+// no name is given, and leaves their containers in place. Like Down it reads the
+// containers' labels, so it needs no Compose file.
+func (r *Runtime) StopServices(group string, names []string) (SyncResult, error) {
 	if err := r.ownsSetup(); err != nil {
 		return SyncResult{}, err
 	}
-	targets, err := SelectServices(cfg, names)
-	if err != nil {
-		return SyncResult{}, err
-	}
-	if err := r.engine().stop(cfg, targets, false); err != nil {
+	if err := r.engine().stopProject(group, names); err != nil {
 		return SyncResult{}, err
 	}
 	return r.sync(nil)
@@ -363,4 +364,29 @@ func WaitRunning(name string, timeout time.Duration) (Instance, error) {
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
+}
+
+// ProjectNameAt returns the name of the project at path, which is a Compose file
+// or the directory holding one. The file names its project when it can be read.
+// When it cannot, the registry entry recorded for that path does, so a project
+// whose file is gone can still be stopped and removed.
+func ProjectNameAt(m *Machine, path string) (string, error) {
+	cfg, loadErr := LoadIn(m, path)
+	if loadErr == nil {
+		return cfg.Name, nil
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return "", loadErr
+	}
+	groups, err := m.Groups()
+	if err != nil {
+		return "", err
+	}
+	for _, g := range groups {
+		if g.StackPath == abs || filepath.Dir(g.StackPath) == abs {
+			return g.Name, nil
+		}
+	}
+	return "", fmt.Errorf("%w, and no project is registered for %s", loadErr, abs)
 }

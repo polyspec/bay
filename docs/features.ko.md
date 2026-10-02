@@ -10,6 +10,7 @@
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
+| Compose 파일 없이도 프로젝트를 멈추고 지움 | 구현됨 | `go test ./internal/stack -run 'TestAProjectIsRemoved\|TestAContainerTheFile\|TestContainersStop\|TestStoppingNamed\|TestOnlyServiceContainers\|TestServiceEngineStopAndRemove\|TestAProjectWhoseFileIsGone\|TestAReadableFileNames\|TestAPathNothing'`가 프로젝트 레이블로 지우기, 파일에 더는 없는 컨테이너, 시작 순서의 역순, 지정한 서비스, 다른 역할, 다른 프로젝트 레이블의 컨테이너, 등록부에서 이름 찾기를 검사. 컨테이너가 실행 중인데 창의 정지가 `stat …/compose.yaml: no such file or directory`로 실패했다. 이 기계에서 프로젝트를 시작하고 파일을 지운 뒤 `down`이 컨테이너와 등록 항목을 지웠다 | 예 |
 | 터미널 밖에서 macOS가 시작한 프로그램도 엔진을 찾음 | 구현됨 | `go test ./internal/stack -run 'TestAnEngineInAnInstalled\|TestTheVariableIsAsked\|TestTheAgentsSearchPath'`가 검색 경로 `/usr/bin:/bin:/usr/sbin:/sbin`에서 설치 디렉터리에 있는 엔진, 변수 우선, 에이전트 잡이 모든 설치 디렉터리를 담는지를 검사. Finder에서 연 창이 `no container engine found`를 보고했고 같은 때 터미널에서는 `container`가 응답했다. 변경 후 그 검색 경로로 시작한 창이 머신 상태를 읽었고 `bay status`도 응답했다 | 예 |
 | 네이티브 주소 이벤트와 바인딩 빌드 입력 | 구현됨 | `go test ./internal/stack -run '^TestServiceName|^TestReplacement|^TestCLIPrerequisites|^TestNativeNameSubscription'` 한 번의 구독, 주소 추가·삭제, 완전한 이벤트 묶음, 실패·기한 만료 정리, 네이티브 소켓 대기 취소 사례가 통과한다. 네이티브 소스·헤더 빌드 입력 사례는 빌드 규칙 변경 전에 실패했다. 실제 두 서비스 주소·HTTPS 검증이 통과한다 | CLI 설치: `95d73d4` |
 | Apple 서비스 호스트 이름 준비 검사 | 구현됨 | `TestServiceNameFailureStopsDependants`는 준비 검사 없이 실패하며 주소 일치, 누락되거나 이전 IPv6, 조회 실패, 잘못된 선언 사례가 통과한다. 최종 위치에서 두 서비스 교체 후 실제 HTTPS 요청이 엣지나 DNS 재시작 없이 통과한다 | CLI 설치: `95d73d4` |

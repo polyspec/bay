@@ -64,7 +64,7 @@ func TestUpStopsBeforeChangingAnythingWhenItOwnsNothing(t *testing.T) {
 
 func TestDownStopsBeforeRemovingAnythingWhenItOwnsNothing(t *testing.T) {
 	rt := ownedElsewhere(t)
-	if _, err := rt.Down(oneService(t)); err == nil {
+	if _, err := rt.Down(oneService(t).Name); err == nil {
 		t.Fatal("down ran against a machine this state directory does not own")
 	} else if !strings.Contains(err.Error(), "belongs to the state directory") {
 		t.Fatalf("down failed for another reason: %v", err)
@@ -74,7 +74,7 @@ func TestDownStopsBeforeRemovingAnythingWhenItOwnsNothing(t *testing.T) {
 func TestServiceActionsStopWhenTheyOwnNothing(t *testing.T) {
 	for name, run := range map[string]func(*Runtime, *Config) (SyncResult, error){
 		"start":   func(r *Runtime, c *Config) (SyncResult, error) { return r.StartServices(c, nil) },
-		"stop":    func(r *Runtime, c *Config) (SyncResult, error) { return r.StopServices(c, nil) },
+		"stop":    func(r *Runtime, c *Config) (SyncResult, error) { return r.StopServices(c.Name, nil) },
 		"restart": func(r *Runtime, c *Config) (SyncResult, error) { return r.RestartServices(c, nil) },
 	} {
 		t.Run(name, func(t *testing.T) {
