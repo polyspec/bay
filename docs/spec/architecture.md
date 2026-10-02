@@ -331,6 +331,11 @@ layout of rows not on the screen. A shorter list is drawn as a stack of its
 rows, which costs less than a table at that length. Both draw a row the same
 way, so a row looks and responds the same in either.
 
+The buttons at the end of a list's rows share one width per position, the width
+of the widest, so the text before them lines up down the list. Each button was
+as wide as its label, so a row offering Start the rest moved its status left of
+the rows offering Stop or Start.
+
 A control names what it does. Stop stops a project's services and leaves their
 containers and the project's registration in place, so Start brings the project
 back. Remove removes the containers and takes the project off the list. It asks

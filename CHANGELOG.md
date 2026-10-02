@@ -5,6 +5,16 @@ the day the change was made.
 
 ## 2026-10-03
 
+### The buttons at the end of a list's rows share one width
+
+Each button was as wide as its label, so a row offering Start the rest moved its
+status left of the rows offering Stop or Start, and the list's text did not line
+up. The buttons in one position at the end of a list's rows now share the width
+of the widest.
+
+Verification: `make check`, and the dashboard's project list captured with the
+window active.
+
 ### A long list lays out only the rows on the screen
 
 Opening the certificates screen still took 2.5 seconds after unchanged screens

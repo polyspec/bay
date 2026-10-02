@@ -293,6 +293,9 @@ static NSColor *hex(uint32_t rgb) {
 // is not built again: rebuilding an unchanged screen on every reading of the
 // machine kept the main thread on layout and the screen did not scroll.
 @property(copy) NSString *rendered;
+// rowButtons holds the buttons of the status row built last, for its card to
+// give the buttons in one position down the list one width.
+@property(strong) NSArray<NSView *> *rowButtons;
 // lists holds the data sources of the long lists on screen. A table holds its
 // data source weakly.
 @property(strong) NSMutableArray<LongList *> *lists;
@@ -1047,7 +1050,13 @@ static void hug(NSTextField *t) {
                                    forOrientation:NSLayoutConstraintOrientationHorizontal];
   [line addArrangedSubview:detail];
 
-  for (NSDictionary *b in row[@"buttons"]) [line addArrangedSubview:[self buttonFor:b]];
+  NSMutableArray<NSView *> *built = [NSMutableArray array];
+  for (NSDictionary *b in row[@"buttons"]) {
+    NSView *v = [self buttonFor:b];
+    [line addArrangedSubview:v];
+    [built addObject:v];
+  }
+  self.rowButtons = built;
   if (links.count > 1) return [self row:line addresses:links under:reach];
   return line;
 }
@@ -1244,6 +1253,10 @@ static const CGFloat kLinkPitch = 19;
     rows = @[];
   }
   NSView *previous = nil;
+  // columns[k] holds the buttons k places from the end of each row. A list's
+  // buttons in one position share the width of the widest, so the text before
+  // them lines up down the list.
+  NSMutableArray<NSMutableArray<NSView *> *> *columns = [NSMutableArray array];
   for (NSUInteger i = 0; i < rows.count; i++) {
     if (i > 0) {
       BOOL rule = named ? [rows[i][@"kind"] isEqualToString:@"label"] : YES;
@@ -1270,9 +1283,20 @@ static const CGFloat kLinkPitch = 19;
       m[@"halfPad"] = @YES;
       r = m;
     }
+    self.rowButtons = nil;
     NSView *v = [self clickableRow:r];
     [inner addArrangedSubview:v];
     previous = v;
+    NSArray<NSView *> *buttons = self.rowButtons ?: @[];
+    for (NSUInteger k = 0; k < buttons.count; k++) {
+      if (columns.count <= k) [columns addObject:[NSMutableArray array]];
+      [columns[k] addObject:buttons[buttons.count - 1 - k]];
+    }
+  }
+  for (NSArray<NSView *> *column in columns) {
+    for (NSUInteger k = 1; k < column.count; k++) {
+      [column[k].widthAnchor constraintEqualToAnchor:column[0].widthAnchor].active = YES;
+    }
   }
 
   // A log section carries the tail of a container's output and a strip naming
