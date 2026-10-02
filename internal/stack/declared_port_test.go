@@ -69,3 +69,13 @@ func TestARunningServiceIsCheckedOnItsDeclaredPort(t *testing.T) {
 		t.Errorf("state %q, want the service reported as not accepting connections", got)
 	}
 }
+
+// A service without a port is addressed by its name alone.
+func TestAnAddressHasNoPortWhenTheServiceHasNone(t *testing.T) {
+	if got := serviceAddress("soksakim-hyper-test-node", 0); got != "soksakim-hyper-test-node.container.test" {
+		t.Errorf("address %q", got)
+	}
+	if got := serviceAddress("soksakim-hyper-php", 9000); got != "soksakim-hyper-php.container.test:9000" {
+		t.Errorf("address %q", got)
+	}
+}

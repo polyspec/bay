@@ -202,7 +202,7 @@ func PortOrder() []string {
 		"the bay.port label",
 		"the first entry of `expose`",
 		"the container side of the first entry of `ports`",
-		"80",
+		"none: the service has no port and is not checked for connections; a service with a domain is refused",
 	}
 }
 

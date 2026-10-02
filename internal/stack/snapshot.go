@@ -101,8 +101,9 @@ type ServiceStatus struct {
 	// x-bay.domains.
 	Domains []string `json:"domains"`
 	Image   string   `json:"image"`
-	Port    int      `json:"port"`
-	Scheme  string   `json:"scheme"`
+	// Port is the port the service declares, absent when it declares none.
+	Port   int    `json:"port,omitempty"`
+	Scheme string `json:"scheme"`
 	// State is "running", "starting", "stopped", or "absent" when no container
 	// exists. "starting" means the container runs but does not yet accept a
 	// connection on its port.
@@ -394,7 +395,7 @@ func groupStatus(m *Machine, g GroupRef, byContainer map[string]ServiceInstance,
 			State:     "absent",
 			Internal:  s.Internal(),
 			URLs:      domainURLs(s.Domains),
-			Address:   fmt.Sprintf("%s.%s:%d", s.ContainerName, BackendDomain, s.Port),
+			Address:   serviceAddress(s.ContainerName, s.Port),
 		}
 		if s.TLS {
 			st.Scheme = "https"
@@ -443,6 +444,16 @@ func serviceFromInstance(in ServiceInstance, routed map[string]bool) ServiceStat
 		Routed:    allRouted(in.Domains, routed) && in.Running(),
 		Internal:  len(in.Domains) == 0,
 		URLs:      domainURLs(in.Domains),
-		Address:   fmt.Sprintf("%s.%s:%d", in.Container, BackendDomain, in.Port),
+		Address:   serviceAddress(in.Container, in.Port),
 	}
+}
+
+// serviceAddress is how the other services reach a container: its name, and
+// its port when it declares one. A service without a port is reached by name
+// alone; writing ":0" would name a port it does not have.
+func serviceAddress(container string, port int) string {
+	if port == 0 {
+		return container + "." + BackendDomain
+	}
+	return fmt.Sprintf("%s.%s:%d", container, BackendDomain, port)
 }

@@ -5,6 +5,19 @@ the day the change was made.
 
 ## 2026-10-03
 
+### No port is written for a service without one
+
+The previous change gave a service that declares no port the value 0 and wrote
+it out: `0` on its screen beside "read from the Compose file", an address ending
+`:0`, and `"port": 0` in `bay status --json`. 0 is not a port. The
+service's screen has no port row for it now, its address is its name alone, and
+the JSON has no `port` field. `bay brief` and `schema` still ended the
+port order with 80; they end it with none, and that the service is not checked
+and a service with a domain is refused.
+
+Verification: `make check`, and the JSON and `bay schema` on this
+machine.
+
 ### A port is never assumed
 
 A service that declared no port was given port 80. `node` in

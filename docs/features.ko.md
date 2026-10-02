@@ -10,6 +10,7 @@
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
+| 포트 없는 서비스에는 포트를 쓰지 않음 | 구현됨 | `go test ./internal/stack -run TestAnAddressHasNoPort`와 `go test ./cmd/baybar -run 'TestAServiceWithoutAPort\|TestAServiceWithAPort'`가 주소와 포트 행을 검사. 포트 없는 서비스에 "Compose 파일에서 읽음" 옆 `0`, `:0`으로 끝나는 주소, `"port": 0`이 나왔다. 이 기계에서 `bay status --json`이 `node`에 `port` 없이 주소 `soksakim-hyper-test-node.container.test`를 주고, `bay schema`의 포트 순서가 80 대신 없음으로 끝난다 | 예 |
 | 포트는 가정하지 않음 | 구현됨 | `go test ./internal/stack -run 'TestAServiceThatDeclaresNoPort\|TestADeclaredPort\|TestADomainWithNoDeclared\|TestARunningServiceWith\|TestARunningServiceIsChecked'`가 선언 없음, 선언 있음, 포트 없는 도메인, 선언한 포트로의 확인을 검사. 선언이 없으면 포트 80으로 가정했고, `sleep infinity`를 실행하는 `soksakim-hyper-test`의 `node`가 그 포트로 연결을 받지 않는다며 주황으로 보고됐다. 이 기계에서 이제 `bay status`가 그것을 `running`으로 읽고 창은 프로젝트를 초록, `4/4 실행 중`으로 보여준다 | 예 |
 | 점, 개수, 버튼이 한 규칙을 따름 | 구현됨 | `go test ./cmd/baybar -run 'TestAProjectWith\|TestTheCountAndTheButton\|TestTheSidebarCounts'`가 이 기계가 보고한 그대로의 두 프로젝트를 검사. 주황이 서비스에서는 고장을, 프로젝트에서는 덜 시작됨을 뜻했고, 개수는 연결을 받는 서비스를 세는데 버튼은 실행 중인 컨테이너를 셌다. 이 기계에서 이제 `soksakim-hyper`는 초록, `4/7 실행 중`, 나머지 시작이고, `soksakim-hyper-test`는 주황, `4/4 실행 중`, 정지이며 그 화면에 `node: 자기 포트로 연결을 받지 않음`이 나온다 | 예 |
 | 목록 행 끝의 버튼은 폭 하나를 함께 씀 | 구현됨 | 대시보드 프로젝트 목록에서 시작, 나머지 시작, 정지가 한 폭이고 `정지됨`과 `4/7 실행 중`이 줄을 맞춘다. 창을 `screencapture -o -l`로 찍어 확인했다. 버튼마다 라벨만큼의 폭이어서 나머지 시작을 보여주는 행은 상태 글자가 왼쪽으로 밀렸다 | 예 |

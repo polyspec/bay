@@ -721,9 +721,12 @@ func serviceView(p *panel, snap stack.Snapshot, g stack.GroupStatus, s stack.Ser
 		route.Rows = append(route.Rows, row{Text: text.T("Forwarding"), Kind: "kv",
 			Detail: dotWord(s.Routed), Faint: reach})
 	}
-	route.Rows = append(route.Rows, row{Text: text.T("Container port"), Kind: "kv",
-		Detail: fmt.Sprint(s.Port),
-		Faint:  text.T("read from the Compose file, no host port published")})
+	// A service that declares no port has none, and no row says otherwise.
+	if s.Port > 0 {
+		route.Rows = append(route.Rows, row{Text: text.T("Container port"), Kind: "kv",
+			Detail: fmt.Sprint(s.Port),
+			Faint:  text.T("read from the Compose file, no host port published")})
+	}
 	p.Sections = append(p.Sections, route)
 
 	container := section{Header: text.T("CONTAINER"), Rows: []row{

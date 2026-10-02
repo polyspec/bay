@@ -43,7 +43,7 @@ First match wins.
 1. the bay.port label
 2. the first entry of `expose`
 3. the container side of the first entry of `ports`
-4. 80
+4. none: the service has no port and is not checked for connections; a service with a domain is refused
 
 ## Standard Compose keys applied
 

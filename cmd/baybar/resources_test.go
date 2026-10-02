@@ -197,3 +197,37 @@ func TestAServiceWithSeveralDomainsIsOneRow(t *testing.T) {
 		t.Errorf("the row lost its address: %q", rows[0].Detail)
 	}
 }
+
+// A service without a port shows no port row. Its absence was written as 0
+// beside "read from the Compose file", and 0 is not a port.
+func TestAServiceWithoutAPortShowsNoPortRow(t *testing.T) {
+	g, s := runningService()
+	s.Port = 0
+	p := panel{}
+	serviceView(&p, stack.Snapshot{}, g, s, false, nil, serviceUse{})
+	for _, sec := range p.Sections {
+		for _, r := range sec.Rows {
+			if r.Text == text.T("Container port") {
+				t.Fatalf("a service without a port shows %q", r.Detail)
+			}
+		}
+	}
+}
+
+func TestAServiceWithAPortShowsIt(t *testing.T) {
+	g, s := runningService()
+	s.Port = 8080
+	p := panel{}
+	serviceView(&p, stack.Snapshot{}, g, s, false, nil, serviceUse{})
+	found := false
+	for _, sec := range p.Sections {
+		for _, r := range sec.Rows {
+			if r.Text == text.T("Container port") && r.Detail == "8080" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Error("the declared port is not shown")
+	}
+}
