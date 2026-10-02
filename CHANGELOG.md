@@ -5,6 +5,24 @@ the day the change was made.
 
 ## 2026-10-03
 
+### An unchanged screen is not rebuilt
+
+The certificates screen did not scroll. The window re-reads the machine every
+three seconds and rebuilt the whole screen each time; with 283 certificates a
+rebuild took 2.8 to 3.6 seconds, measured by forcing its layout, so the main
+thread was rebuilding without a pause. Sampling the window found 95% of the main
+thread in Auto Layout's solver. Turning off the certificate list's wide name
+column changed nothing, so the cost is the number of rows, not one constraint.
+
+A panel equal to the one the window was last built from is not built again.
+Over fifteen seconds on the certificates screen the window built it once, in 2.5
+seconds, and skipped every reading after, and the screen scrolls. Opening the
+screen still takes that one build; drawing a long list so that only its visible
+rows are laid out is the remaining change.
+
+Verification: `make check`, and the timing above, taken with a temporary log
+that was removed.
+
 ### A service serving several domains is one row
 
 The project's list drew a row for each domain, repeating the service's name,

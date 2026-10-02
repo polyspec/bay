@@ -317,6 +317,13 @@ layout changes.
 Docker reports its statistics in another form, and reading them is not
 implemented; a Docker service's screen says so.
 
+The window rebuilds a screen only when what the screen shows has changed. It
+re-reads the machine every three seconds, and rebuilding an unchanged screen on
+each reading spent the main thread on layout: the certificates screen, with 283
+certificates, took 2.8 to 3.6 seconds to rebuild, so it was rebuilt without a
+pause and did not scroll. A screen whose content is unchanged keeps its views,
+its scroll position and its selection.
+
 A control names what it does. Stop stops a project's services and leaves their
 containers and the project's registration in place, so Start brings the project
 back. Remove removes the containers and takes the project off the list. It asks

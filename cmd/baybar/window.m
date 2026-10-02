@@ -288,6 +288,10 @@ static NSColor *hex(uint32_t rgb) {
 // the reference is dropped on every render.
 @property(weak) NSSegmentedControl *bodyAppearance;
 @property(strong) NSMutableArray<NSString *> *actionIds;
+// rendered is the panel the window was last built from. A panel equal to it
+// is not built again: rebuilding an unchanged screen on every reading of the
+// machine kept the main thread on layout and the screen did not scroll.
+@property(copy) NSString *rendered;
 - (void)fire:(NSInteger)index;
 @end
 
@@ -1301,6 +1305,8 @@ static const CGFloat kLinkPitch = 19;
 
 - (void)render:(NSString *)json {
   [self build];
+  if ([json isEqualToString:self.rendered]) return;
+  self.rendered = json;
   NSError *err = nil;
   NSDictionary *model = [NSJSONSerialization
       JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:&err];
