@@ -75,32 +75,32 @@ const (
 // stateOf returns a project's state, how many of its services accept
 // connections, and how many have a container running. The two differ while a
 // container is up but not yet listening.
-func stateOf(g stack.GroupStatus) (state groupState, running, live int) {
+// stateOf reports a project's state and how many of its services have a
+// running container. That one count is what the project's count shows and what
+// its button follows; whether a running service works as declared is its dot.
+func stateOf(g stack.GroupStatus) (state groupState, live int) {
 	for _, s := range g.Services {
-		if s.Running() {
-			running++
-		}
 		if s.Live() {
 			live++
 		}
 	}
 	switch {
 	case live == 0:
-		return stateStopped, running, live
-	case running == len(g.Services):
-		return stateRunning, running, live
+		return stateStopped, live
+	case live == len(g.Services):
+		return stateRunning, live
 	default:
-		return statePartial, running, live
+		return statePartial, live
 	}
 }
 
 func groupLine(g stack.GroupStatus) string {
-	state, running, _ := stateOf(g)
+	state, live := stateOf(g)
 	switch state {
 	case stateStopped:
 		return text.T("%s - stopped", g.Name)
 	case statePartial:
-		return text.T("%s - %d of %d running", g.Name, running, len(g.Services))
+		return text.T("%s - %d of %d running", g.Name, live, len(g.Services))
 	default:
 		return text.T("%s - running", g.Name)
 	}
@@ -161,7 +161,7 @@ func iconFor(snap stack.Snapshot) fill {
 	}
 	for _, g := range snap.Groups {
 		// A partly running project differs from its Compose file.
-		if state, _, _ := stateOf(g); state == statePartial {
+		if state, _ := stateOf(g); state == statePartial {
 			return fillHalf
 		}
 	}
@@ -288,8 +288,8 @@ func sidebar(snap stack.Snapshot, selected string, open map[string]bool) []sideG
 	down := proxyDown(snap)
 	projects := sideGroup{Title: text.T("PROJECTS")}
 	for _, g := range snap.Groups {
-		state, running, _ := stateOf(g)
-		dot := sideDot(state)
+		_, live := stateOf(g)
+		dot := projectDot(g)
 		if down && dot == "on" {
 			dot = "bad"
 		}
@@ -297,7 +297,7 @@ func sidebar(snap stack.Snapshot, selected string, open map[string]bool) []sideG
 			ID:       "select:" + viewProject + g.Name,
 			Label:    g.Name,
 			Dot:      dot,
-			Count:    fmt.Sprintf("%d/%d", running, len(g.Services)),
+			Count:    fmt.Sprintf("%d/%d", live, len(g.Services)),
 			Selected: selected == viewProject+g.Name,
 		}
 		projects.Items = append(projects.Items, item)
@@ -445,7 +445,7 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 
 	running, total := 0, 0
 	for _, g := range snap.Groups {
-		if state, _, _ := stateOf(g); state != stateStopped {
+		if state, _ := stateOf(g); state != stateStopped {
 			running++
 		}
 		total += len(g.Services)
@@ -510,29 +510,27 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 
 	projects := section{Header: text.T("PROJECTS")}
 	for _, g := range snap.Groups {
-		state, running, live := stateOf(g)
+		state, live := stateOf(g)
 		detail := text.T("stopped")
 		// Nothing can start before the resolver entries and the authority are
 		// in place, so the action is offered but not enabled.
 		action := hero("up:"+g.Name, text.T("Start"), busy || needsSetup)
+		// The count and the button follow one measure: whether each service's
+		// container runs. Start the rest while one does not, Stop when all do.
 		switch state {
 		case stateRunning:
-			detail = text.T("%d of %d running", running, len(g.Services))
+			detail = text.T("%d of %d running", live, len(g.Services))
 			action = quiet("stop:"+g.Name, text.T("Stop"), busy)
 		case statePartial:
-			detail = text.T("%d of %d running", running, len(g.Services))
-			if live < len(g.Services) {
-				action = hero("up:"+g.Name, text.T("Start the rest"), busy)
-			} else {
-				action = quiet("stop:"+g.Name, text.T("Stop"), busy)
-			}
+			detail = text.T("%d of %d running", live, len(g.Services))
+			action = hero("up:"+g.Name, text.T("Start the rest"), busy)
 		}
 		dots := make([]string, 0, len(g.Services))
 		for _, s := range g.Services {
 			dots = append(dots, serviceDot(s))
 		}
 		projects.Rows = append(projects.Rows, row{
-			Text: g.Name, Dot: sideDot(state), Chip: g.Domain, Dots: dots,
+			Text: g.Name, Dot: projectDot(g), Chip: g.Domain, Dots: dots,
 			Detail: detail, Buttons: []button{action},
 			ID: "select:" + viewProject + g.Name,
 		})
@@ -570,7 +568,7 @@ func dashboardView(p *panel, snap stack.Snapshot, busy bool) {
 }
 
 func projectView(p *panel, g stack.GroupStatus, busy bool, uses map[string]serviceUse) {
-	state, running, live := stateOf(g)
+	state, live := stateOf(g)
 	p.Header = header{Title: g.Name, Subtitle: g.Domain + " · " + shortPath(filepath.Dir(g.StackPath))}
 	if live < len(g.Services) {
 		p.Header.Buttons = append(p.Header.Buttons,
@@ -586,7 +584,7 @@ func projectView(p *panel, g stack.GroupStatus, busy bool, uses map[string]servi
 	p.Header.Buttons = append(p.Header.Buttons,
 		quiet("project-remove:"+g.Name, text.T("Remove"), busy))
 
-	p.Verdict = projectVerdict(g, state, running)
+	p.Verdict = projectVerdict(g, state, live)
 
 	services := section{Header: text.T("SERVICES")}
 	if g.Error != "" {
@@ -653,38 +651,34 @@ func projectView(p *panel, g stack.GroupStatus, busy bool, uses map[string]servi
 
 // projectVerdict states the run count and, when it is short of the Compose
 // file, why.
-func projectVerdict(g stack.GroupStatus, state groupState, running int) *verdict {
+// projectVerdict states a project's condition. Its count is the services
+// whose container runs; a running service that does not work as declared is
+// named, and so is a service that is not running, each for what it is.
+func projectVerdict(g stack.GroupStatus, state groupState, live int) *verdict {
 	total := len(g.Services)
 	if state == stateStopped {
 		return &verdict{Dot: "", Headline: text.T("Nothing running"),
 			Subline: text.P("%d service in the Compose file",
 				"%d services in the Compose file", total, total)}
 	}
-	if state == stateRunning {
-		return &verdict{Dot: "on",
-			Headline: text.P("%d of %d service running", "%d of %d services running",
-				total, running, total)}
-	}
-	var starting, stopped []string
+	var why []string
 	for _, s := range g.Services {
-		switch {
-		case s.State == "starting":
-			starting = append(starting, s.Name)
-		case !s.Live():
-			stopped = append(stopped, s.Name)
+		if reason := notWorking(s); reason != "" {
+			why = append(why, text.T("%s: %s", s.Name, reason))
 		}
 	}
-	var why []string
-	if len(starting) > 0 {
-		why = append(why, text.T("%s: running but not listening yet, so not counted",
-			strings.Join(starting, ", ")))
+	var stopped []string
+	for _, s := range g.Services {
+		if !s.Live() {
+			stopped = append(stopped, s.Name)
+		}
 	}
 	if len(stopped) > 0 {
 		why = append(why, text.T("%s: not started", strings.Join(stopped, ", ")))
 	}
-	return &verdict{Dot: "warn",
+	return &verdict{Dot: projectDot(g),
 		Headline: text.P("%d of %d service running", "%d of %d services running",
-			total, running, total),
+			total, live, total),
 		Subline: strings.Join(why, " · ")}
 }
 
@@ -1082,15 +1076,38 @@ func orDash(s string) string {
 // sideDot and serviceDot return "off" rather than nothing, because a row with
 // no dot loses its place in the column. Nothing running is not a fault, so it
 // is neither amber nor red.
-func sideDot(state groupState) string {
-	switch state {
-	case stateRunning:
-		return "on"
-	case statePartial:
-		return "warn"
-	default:
+// projectDot follows a project's running services: orange when one of them
+// does not work as declared, green when every running service does, grey when
+// none runs. A stopped service is not a fault and does not make it orange.
+func projectDot(g stack.GroupStatus) string {
+	live := false
+	for _, s := range g.Services {
+		if !s.Live() {
+			continue
+		}
+		live = true
+		if serviceDot(s) == "warn" {
+			return "warn"
+		}
+	}
+	if !live {
 		return "off"
 	}
+	return "on"
+}
+
+// notWorking says why a running service does not work as declared, or nothing
+// when it works or is not running.
+func notWorking(s stack.ServiceStatus) string {
+	switch {
+	case !s.Live():
+		return ""
+	case s.State == "starting":
+		return text.T("not accepting connections on its port")
+	case !s.Internal && !s.Routed:
+		return text.T("not forwarded by the proxy")
+	}
+	return ""
 }
 
 func serviceDot(s stack.ServiceStatus) string {

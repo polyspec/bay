@@ -336,6 +336,20 @@ of the widest, so the text before them lines up down the list. Each button was
 as wide as its label, so a row offering Start the rest moved its status left of
 the rows offering Stop or Start.
 
+A dot means one thing wherever it is drawn. Green is running as declared.
+Orange is running and not working as declared: a container that does not accept
+connections on its port, or a service with a domain the proxy does not forward
+to. Grey is not running. Stopped is not a fault and is never orange.
+
+A project's dot follows its running services: orange when one of them is orange,
+green when every running service is green, grey when none runs. Its count is
+the number of services whose container runs, and its button follows the same
+count: Start the rest while a service has no running container, Stop when every
+container runs. The project's dot used to turn orange when a service was merely
+stopped, and its count counted only the services accepting connections, so a
+project with every container running read `3/4 실행 중` and offered Stop while a
+project with three stopped services read orange like a fault.
+
 A control names what it does. Stop stops a project's services and leaves their
 containers and the project's registration in place, so Start brings the project
 back. Remove removes the containers and takes the project off the list. It asks

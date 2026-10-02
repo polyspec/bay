@@ -5,6 +5,25 @@ the day the change was made.
 
 ## 2026-10-03
 
+### A dot, a count and a button follow one rule
+
+Orange meant two things. On a service it meant running and not working as
+declared; on a project it meant that not every service was ready, so a project
+with three services merely stopped read orange like a fault. The count counted
+the services accepting connections while the button counted running
+containers, so a project with every container running read `3/4 실행 중` and
+offered Stop, where another partly running project offered Start the rest.
+
+Orange now means running and not working as declared, wherever it is drawn. A
+project is orange when one of its running services is, green when every running
+service works, and grey when none runs; a stopped service is not a fault. The
+count is the services whose container runs and the button follows that count.
+A service that runs and does not accept connections on its port is counted and
+named for that, where it used to be left out of the count as not listening yet.
+
+Verification: `make check`, including tests over the two projects as this
+machine reported them, and both read as above in the window.
+
 ### The buttons at the end of a list's rows share one width
 
 Each button was as wide as its label, so a row offering Start the rest moved its
