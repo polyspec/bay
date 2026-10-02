@@ -324,6 +324,13 @@ certificates, took 2.8 to 3.6 seconds to rebuild, so it was rebuilt without a
 pause and did not scroll. A screen whose content is unchanged keeps its views,
 its scroll position and its selection.
 
+A list of more than forty rows is drawn as a table that creates the rows on the
+screen and reuses them as it scrolls. Laying out every row cost the
+certificates screen 2.5 seconds each time it was opened, all of it in the
+layout of rows not on the screen. A shorter list is drawn as a stack of its
+rows, which costs less than a table at that length. Both draw a row the same
+way, so a row looks and responds the same in either.
+
 A control names what it does. Stop stops a project's services and leaves their
 containers and the project's registration in place, so Start brings the project
 back. Remove removes the containers and takes the project off the list. It asks

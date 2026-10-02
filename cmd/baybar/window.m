@@ -276,6 +276,7 @@ static NSColor *hex(uint32_t rgb) {
 @property(weak) PanelController *owner;
 @end
 
+@class LongList;
 @interface PanelController : NSObject <NSWindowDelegate>
 @property(strong) NSWindow *window;
 @property(strong) NSStackView *sidebar;
@@ -292,6 +293,9 @@ static NSColor *hex(uint32_t rgb) {
 // is not built again: rebuilding an unchanged screen on every reading of the
 // machine kept the main thread on layout and the screen did not scroll.
 @property(copy) NSString *rendered;
+// lists holds the data sources of the long lists on screen. A table holds its
+// data source weakly.
+@property(strong) NSMutableArray<LongList *> *lists;
 - (void)fire:(NSInteger)index;
 @end
 
@@ -307,6 +311,71 @@ static NSColor *hex(uint32_t rgb) {
 }
 - (BOOL)allowsVibrancy { return NO; }
 - (void)viewDidChangeEffectiveAppearance { [self setNeedsDisplay:YES]; }
+@end
+
+// kLongList is the number of rows above which a list is drawn as a table. A
+// table creates only the rows on the screen; a stack lays out every row, which
+// cost the certificates screen 2.5 seconds for 283 rows.
+static const NSUInteger kLongList = 40;
+
+@interface PanelController (Rows)
+- (NSView *)clickableRow:(NSDictionary *)row;
+@end
+
+// LongList draws a long list as a table that creates the rows on the screen and
+// reuses them as it scrolls. Each row is built by the same method a short list
+// uses, so it looks and responds the same.
+@interface LongList : NSObject <NSTableViewDataSource, NSTableViewDelegate>
+@property(weak) PanelController *owner;
+@property(strong) NSArray<NSDictionary *> *rows;
+// heights holds a row's height by its shape: a row is measured once for each
+// number of addresses it lists, since that is what changes its height.
+@property(strong) NSMutableDictionary<NSNumber *, NSNumber *> *heights;
+@end
+
+@implementation LongList
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)t { return (NSInteger)self.rows.count; }
+- (CGFloat)heightOf:(NSDictionary *)row {
+  NSNumber *key = @([row[@"links"] count]);
+  NSNumber *h = self.heights[key];
+  if (!h) {
+    NSView *v = [self.owner clickableRow:row];
+    h = @(ceil(v.fittingSize.height) + 1);  // and the rule under it
+    self.heights[key] = h;
+  }
+  return h.doubleValue;
+}
+- (CGFloat)tableView:(NSTableView *)t heightOfRow:(NSInteger)i {
+  return [self heightOf:self.rows[(NSUInteger)i]];
+}
+- (NSView *)tableView:(NSTableView *)t viewForTableColumn:(NSTableColumn *)c row:(NSInteger)i {
+  return [self.owner clickableRow:self.rows[(NSUInteger)i]];
+}
+- (BOOL)tableView:(NSTableView *)t shouldSelectRow:(NSInteger)i { return NO; }
+// table builds the table for the rows and returns it with its height fixed to
+// the sum of theirs, so the page around it scrolls as it does for a stack.
+- (NSTableView *)table {
+  self.heights = [NSMutableDictionary dictionary];
+  NSTableView *t = [NSTableView new];
+  t.translatesAutoresizingMaskIntoConstraints = NO;
+  if (@available(macOS 11.0, *)) t.style = NSTableViewStylePlain;
+  t.headerView = nil;
+  t.backgroundColor = [NSColor clearColor];
+  t.intercellSpacing = NSMakeSize(0, 0);
+  t.gridStyleMask = NSTableViewSolidHorizontalGridLineMask;
+  t.gridColor = hairlineColor();
+  t.selectionHighlightStyle = NSTableViewSelectionHighlightStyleNone;
+  t.columnAutoresizingStyle = NSTableViewUniformColumnAutoresizingStyle;
+  NSTableColumn *c = [[NSTableColumn alloc] initWithIdentifier:@"row"];
+  c.resizingMask = NSTableColumnAutoresizingMask;
+  [t addTableColumn:c];
+  t.dataSource = self;
+  t.delegate = self;
+  CGFloat total = 0;
+  for (NSDictionary *r in self.rows) total += [self heightOf:r];
+  [t.heightAnchor constraintEqualToConstant:total].active = YES;
+  return t;
+}
 @end
 
 @implementation PanelController
@@ -1161,6 +1230,19 @@ static const CGFloat kLinkPitch = 19;
     if ([kind isEqualToString:@"title"] || [kind isEqualToString:@"label"]) named = YES;
   }
   if (named) inner.edgeInsets = NSEdgeInsetsMake(kCardPad / 2, 0, kCardPad / 2, 0);
+  BOOL plainRows = !named;
+  for (NSDictionary *r in rows) if ([r[@"kind"] length]) plainRows = NO;
+  if (plainRows && rows.count > kLongList) {
+    LongList *list = [LongList new];
+    list.owner = self;
+    list.rows = rows;
+    if (!self.lists) self.lists = [NSMutableArray array];
+    [self.lists addObject:list];
+    NSTableView *t = [list table];
+    [inner addArrangedSubview:t];
+    [t.widthAnchor constraintEqualToAnchor:inner.widthAnchor].active = YES;
+    rows = @[];
+  }
   NSView *previous = nil;
   for (NSUInteger i = 0; i < rows.count; i++) {
     if (i > 0) {
@@ -1306,13 +1388,13 @@ static const CGFloat kLinkPitch = 19;
 - (void)render:(NSString *)json {
   [self build];
   if ([json isEqualToString:self.rendered]) return;
-  self.rendered = json;
   NSError *err = nil;
   NSDictionary *model = [NSJSONSerialization
       JSONObjectWithData:[json dataUsingEncoding:NSUTF8StringEncoding] options:0 error:&err];
   if (!model) return;
 
   [self.actionIds removeAllObjects];
+  [self.lists removeAllObjects];
   self.bodyAppearance = nil;
   for (NSStackView *stack in @[self.sidebar, self.content, self.headerBar]) {
     for (NSView *v in [stack.arrangedSubviews copy]) {

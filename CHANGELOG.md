@@ -5,6 +5,19 @@ the day the change was made.
 
 ## 2026-10-03
 
+### A long list lays out only the rows on the screen
+
+Opening the certificates screen still took 2.5 seconds after unchanged screens
+stopped being rebuilt, all of it laying out rows that were not on the screen. A
+list of more than forty rows is now a table that creates the rows on the screen
+and reuses them as it scrolls. Its rows are built by the same method a short
+list uses, so they look and respond the same; a shorter list stays a stack of
+rows, which costs less than a table at that length.
+
+Verification: `make check`. Opening the certificates screen took 121 ms, from
+2,500 ms, measured with a temporary log that was removed, and scrolling to the
+last certificate drew every row with its rule and button.
+
 ### An unchanged screen is not rebuilt
 
 The certificates screen did not scroll. The window re-reads the machine every
