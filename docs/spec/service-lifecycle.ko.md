@@ -58,6 +58,6 @@ Compose 디렉터리의 `.env`를 읽으며 프로세스 환경이 우선한다.
 
 실행 중인 소유 서비스의 교체 전에 명령은 런타임을 통해 서비스를 중지하고 강제 옵션 없이 제거합니다. 중지가 실패하면 오류를 반환하고 제거와 생성을 실행하지 않습니다. 이미 중지된 서비스는 다시 중지하지 않습니다.
 
-Apple Container에서 `up`, `start`, `restart`는 시작한 각 장기 실행 서비스의 호스트 이름이 의존 서비스를 시작하기 전에 실행 중인 컨테이너가 선언한 IPv4·IPv6 주소와 정확히 같게 조회된 뒤에만 성공을 반환한다. 주소 추가·삭제는 macOS DNSServiceGetAddrInfo 이벤트에서 처리한다. 준비 검사는 한 번 구독하고 최대 60초 기한 내에 정확한 주소 집합을 기다리며 준비·오류·기한 만료 시 구독을 취소하고 정리를 수집한다. 이 검사는 요청을 재시도하지 않는다. Docker 네트워크 이름은 해당 네트워크 내부 이름이며 이 호스트 리졸버 검사의 범위 밖이다.
+Apple Container에서 `up`, `start`, `restart`는 시작한 각 장기 실행 서비스의 호스트 이름이 의존 서비스를 시작하기 전에 실행 중인 컨테이너가 선언한 IPv4·IPv6 주소와 정확히 같게 조회된 뒤에만 성공을 반환한다. 주소 추가·삭제는 macOS system resolver에 대한 connection 하나에서 받는다. 이 connection은 A와 AAAA 각각에 대한 long-lived DNSServiceQueryRecord query를 가진다. 컨테이너는 이 이름을 network gateway를 통해 조회하고, gateway는 호스트와 같은 system resolver cache에서 응답한다. long-lived query는 질문을 그 cache로만 답하지 않고 runtime DNS server로 보내며, server의 응답이 그 이름의 cache 항목을 대체한다. 따라서 컨테이너가 존재하기 전에 cache된 negative answer는 준비를 지연시키지 않는다. runtime DNS는 아직 없는 이름에 SOA 없는 NXDOMAIN을 반환하고, system resolver는 그 응답을 준비 기한보다 긴 77초 동안 유지한다. 준비 검사는 한 번 구독하고 최대 60초 기한 내에 정확한 주소 집합을 기다리며 준비·오류·기한 만료 시 구독을 취소하고 정리를 수집한다. 이 검사는 요청을 재시도하지 않는다. Docker 네트워크 이름은 해당 네트워크 내부 이름이며 이 호스트 리졸버 검사의 범위 밖이다.
 
 네이티브 주소 구독은 SDK 콜백과 소켓 준비 이벤트를 사용한다. 반복 주소 조회나 타이머가 구독을 구동하지 않는다. 구독 종료는 소켓 대기를 취소하고 작업 종료를 수집한 뒤 반환한다. CLI 빌드 입력에는 Go 소스와 네이티브 C 헤더·소스가 포함된다.

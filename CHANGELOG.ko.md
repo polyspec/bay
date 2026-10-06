@@ -2,6 +2,26 @@
 
 동작 변경과 각 변경에 대해 실행한 검증을 기록한다. 날짜는 변경한 날이다.
 
+## 2026-10-06
+
+### 호스트 이름 준비 검사는 cache된 negative answer를 기다리지 않는다
+
+컨테이너가 존재하기 전에 이름을 조회한 새 서비스에서 `bay up`이 60초 후 `hostname
+readiness failed: context deadline exceeded; received []`로 실패했다. runtime DNS는 아직 없는
+이름에 SOA 없는 NXDOMAIN을 반환하고, system resolver는 그 응답을 77초 동안 유지한다. 준비 검사는
+DNSServiceGetAddrInfo로 구독했는데, 이 구독은 그 항목에서 응답받고 negative answer를 받지 않으므로
+기한 전에 주소를 받지 못했다. 컨테이너는 같은 cache에서 응답하는 network gateway를 통해 조회하므로
+의존 서비스도 그 이름을 조회하지 못했다.
+
+이제 준비 검사는 system resolver에 대한 connection 하나에서 A와 AAAA 각각에 대한 long-lived
+DNSServiceQueryRecord query를 가진다. long-lived query는 질문을 runtime DNS server로 보내고,
+server의 응답이 그 이름의 cache 항목을 대체한다. 준비 기한은 변경하지 않았다.
+
+검증: `BAY_E2E=1 go test ./internal/stack -run
+TestNativeNameSubscriptionReplacesCachedNegativeAnswer`가 변경 전에는 20초 한도 후 `received []`로
+실패했고 변경 후에는 통과한다. 주소가 10ms 후 도착하고 그 뒤 system resolver가 그 주소를 반환한다.
+`make check`. 다른 end-to-end 테스트는 실행하지 않았다.
+
 ## 2026-10-03
 
 ### 서비스 상태는 엔진의 상태다

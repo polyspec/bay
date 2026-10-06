@@ -3,6 +3,31 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-10-06
+
+### Hostname readiness does not wait for a cached negative answer
+
+`bay up` failed for a new service with `hostname readiness failed:
+context deadline exceeded; received []` after 60 seconds when its name had been
+looked up before its container existed. The runtime DNS answers NXDOMAIN without
+SOA for a name that does not exist yet, and the system resolver keeps that
+answer for 77 seconds. Readiness subscribed with DNSServiceGetAddrInfo, which is
+answered from that entry and does not receive negative answers, so it received
+no address before its deadline. Containers resolve through the network gateway,
+which answers from the same cache, so dependants could not resolve the name
+either.
+
+Readiness now holds a long-lived DNSServiceQueryRecord query for A and one for
+AAAA on one connection to the system resolver. A long-lived query sends the
+question to the runtime DNS server, and the server's answer replaces the cached
+entries for the name. The readiness deadline is unchanged.
+
+Verification: `BAY_E2E=1 go test ./internal/stack -run
+TestNativeNameSubscriptionReplacesCachedNegativeAnswer` failed before the change
+after its 20-second bound with `received []`, and passes after it: the addresses
+arrive after 10 ms and the system resolver returns them afterwards. `make check`.
+The other end-to-end tests were not run.
+
 ## 2026-10-03
 
 ### A service's state is the engine's state
