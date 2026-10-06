@@ -28,6 +28,10 @@ after its 20-second bound with `received []`, and passes after it: the addresses
 arrive after 10 ms and the system resolver returns them afterwards. `make check`.
 The other end-to-end tests were not run.
 
+Deployment: `make install PREFIX=/opt/homebrew` from clean source `e57c129`;
+`/opt/homebrew/bin/bay` reports revision `e57c129` with
+`vcs.modified=false`.
+
 ## 2026-10-03
 
 ### A service's state is the engine's state

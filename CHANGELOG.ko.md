@@ -22,6 +22,9 @@ TestNativeNameSubscriptionReplacesCachedNegativeAnswer`가 변경 전에는 20�
 실패했고 변경 후에는 통과한다. 주소가 10ms 후 도착하고 그 뒤 system resolver가 그 주소를 반환한다.
 `make check`. 다른 end-to-end 테스트는 실행하지 않았다.
 
+배포: 변경 없는 소스 `e57c129`에서 `make install PREFIX=/opt/homebrew`.
+`/opt/homebrew/bin/bay`이 리비전 `e57c129`와 `vcs.modified=false`를 보고한다.
+
 ## 2026-10-03
 
 ### 서비스 상태는 엔진의 상태다
