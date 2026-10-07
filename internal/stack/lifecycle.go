@@ -93,6 +93,13 @@ func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
 	if err := r.EnsureInstalled(); err != nil {
 		return SyncResult{}, err
 	}
+	// A service that the proxy routes to may read the address of the proxy when
+	// it starts, so the proxy runs before the services start.
+	if routed(cfg) {
+		if _, err := syncProxy(r.Machine, nil, ServiceEngine(), r.Progress); err != nil {
+			return SyncResult{}, err
+		}
+	}
 	if err := engine.start(cfg, cfg.Sorted(), false); err != nil {
 		return SyncResult{}, err
 	}
@@ -253,7 +260,7 @@ func containerNames(services []*Service) []string {
 // sync republishes the routes. A route to a container in started is published
 // only after the proxy opens a connection to it.
 func (r *Runtime) sync(started []string) (SyncResult, error) {
-	res, err := syncProxy(r.Machine, started, r.Progress)
+	res, err := syncProxy(r.Machine, started, "", r.Progress)
 	if err != nil {
 		return res, err
 	}
@@ -389,4 +396,14 @@ func ProjectNameAt(m *Machine, path string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("%w, and no project is registered for %s", loadErr, abs)
+}
+
+// routed reports whether the proxy routes a domain to a service of cfg.
+func routed(cfg *Config) bool {
+	for _, s := range cfg.Sorted() {
+		if len(s.Domains) > 0 {
+			return true
+		}
+	}
+	return false
 }

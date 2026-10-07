@@ -28,7 +28,7 @@ func TestTheFirstRequestToANewContainerIsAnswered(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitRunning(t, running.ContainerName)
-	if _, err := syncProxy(m, []string{running.ContainerName}, nil); err != nil {
+	if _, err := syncProxy(m, []string{running.ContainerName}, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	proxy := waitRunning(t, ProxyName)
@@ -38,7 +38,7 @@ func TestTheFirstRequestToANewContainerIsAnswered(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitRunning(t, started.ContainerName)
-	if _, err := syncProxy(m, []string{started.ContainerName}, nil); err != nil {
+	if _, err := syncProxy(m, []string{started.ContainerName}, "", nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := get(t, client, "https://started.first.test/"); !strings.HasPrefix(got, "started ") {

@@ -657,3 +657,48 @@ func stopEveryProxy() {
 		StopProxy(engine)
 	}
 }
+
+// TestUpStartsTheProxyBeforeTheServicesItRoutesTo covers a service that reads
+// the address of the proxy when it starts, as a web server that trusts the
+// forwarded address of the proxy alone does: with the proxy stopped, up started
+// the service first, its lookup of the proxy found no address and the service
+// ended.
+func TestUpStartsTheProxyBeforeTheServicesItRoutesTo(t *testing.T) {
+	requireE2E(t)
+	stopEveryProxy()
+
+	m := NewMachine(t.TempDir())
+	rt := &Runtime{Machine: m, Addr: DefaultDNSAddr}
+	t.Cleanup(func() { Remove("e2efirst-web"); stopEveryProxy() })
+	mustRegister(t, m, GroupRef{Name: "e2efirst", Domains: []string{"first.test"}})
+
+	dir := filepath.Join(t.TempDir(), "e2efirst")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	server := fmt.Sprintf("require('dns').lookup(%q,{family:4},(e)=>{if(e){console.error('no proxy: '+e.code);process.exit(1)}"+
+		"require('http').createServer((q,s)=>s.end('first '+q.headers.host)).listen(80)})", ProxyName+"."+BackendDomain)
+	compose := filepath.Join(dir, "compose.yaml")
+	if err := os.WriteFile(compose, []byte(`name: e2efirst
+x-bay:
+  domain: first.test
+services:
+  web:
+    image: `+e2eImage+`
+    command: ["node", "-e", `+fmt.Sprintf("%q", server)+`]
+    expose: ["80"]
+    x-bay:
+      domains: [web.first.test]
+`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(compose)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := rt.Up(cfg); err != nil {
+		t.Fatal(err)
+	}
+	proxy := waitRunning(t, ProxyName)
+	waitForBody(t, caClient(t, m, proxy.IPv4), "https://web.first.test/", "first ")
+}

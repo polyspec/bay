@@ -31,13 +31,15 @@ type SyncResult struct {
 // projects share one proxy and removing a project removes its routes. The proxy
 // is removed when no route remains.
 func SyncProxy(m *Machine) (SyncResult, error) {
-	return syncProxy(m, nil, nil)
+	return syncProxy(m, nil, "", nil)
 }
 
 // syncProxy is SyncProxy for a command that started the containers in verify.
 // A route to one of them is published only after the proxy opens a connection
-// to the container's address. say, when set, reports the wait before it begins.
-func syncProxy(m *Machine, verify []string, say func(string)) (SyncResult, error) {
+// to the container's address. The proxy of the engine keep runs also without a
+// route, because a command is about to start services that it routes to. say,
+// when set, reports the wait before it begins.
+func syncProxy(m *Machine, verify []string, keep string, say func(string)) (SyncResult, error) {
 	// The proxy is one container per engine and it serves this state
 	// directory's configuration and certificates, so a state directory that
 	// does not own the machine setup does not replace it.
@@ -90,7 +92,7 @@ func syncProxy(m *Machine, verify []string, say func(string)) (SyncResult, error
 		// that publishes the link runs with no route, because it returns the
 		// document used to approve this machine.
 		own := RoutesOn(routes, engine)
-		if len(own) == 0 && len(peerRoutes) == 0 && engine != linkEngine {
+		if len(own) == 0 && len(peerRoutes) == 0 && engine != linkEngine && engine != keep {
 			if err := StopProxy(engine); err != nil {
 				return res, err
 			}
