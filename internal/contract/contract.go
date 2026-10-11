@@ -193,6 +193,7 @@ func InternalLabels() []Key {
 		{"bay.scheme", "string", "http", "Scheme the proxy uses to reach the service."},
 		{"bay.config", "string", "none", "Digest of the resolved service configuration and local image."},
 		{"bay.volume", "string", "none", "Compose declaration key of a managed named volume."},
+		{"bay.grace", "integer", "none", "Stop grace period of the service in whole seconds; set only when the Compose file sets stop_grace_period."},
 	}
 }
 
@@ -223,6 +224,7 @@ func ComposeKeys() []Key {
 		{"networks", "list or mapping", "the project network", "First entry is used."},
 		{"mem_limit", "string", "runtime default", "Memory limit."},
 		{"cpus", "string", "runtime default", "CPU count."},
+		{"stop_grace_period", "duration", "runtime default (5s)", "Time the container gets to stop before it is killed, as a whole number of seconds such as 30s or 1m30s. Stop, restart, down and replacement pass it to the runtime."},
 	}
 }
 

@@ -3,6 +3,22 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-10-11
+
+### Services stop with their `stop_grace_period`
+
+A service with `stop_grace_period` (for example `30s` or `1m30s`) stops with that
+grace period. Replacement, `stop`, `restart` and the stop of a failed initializer
+pass it to `container stop --time <seconds>`, and `down` stops a running container
+with the recorded period before it removes the container. A service without the key
+keeps the runtime default of 5 seconds. A value that is not a whole number of
+seconds, is negative or is not a duration is refused when the file is read, naming
+the service and the value.
+
+Verification: the stop-path and invalid-value tests in the feature table failed
+before the change and pass after it. `make check` passes. The
+change was not run against a real container.
+
 ## 2026-10-06
 
 ### Hostname readiness does not wait for a cached negative answer

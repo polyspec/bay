@@ -1,12 +1,14 @@
 package stack
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -50,17 +52,22 @@ type Config struct {
 type Service struct {
 	Name string
 	// ContainerName is <project>-<service> unless the file names it.
-	ContainerName      string
-	Image              string
-	Command            []string
-	Env                map[string]string
-	Volumes            []string
-	Network            string
-	CPUs               int
-	Memory             string
-	User               string
-	ReadOnly           bool
-	CapDrop            []string
+	ContainerName string
+	Image         string
+	Command       []string
+	Env           map[string]string
+	Volumes       []string
+	Network       string
+	CPUs          int
+	Memory        string
+	User          string
+	ReadOnly      bool
+	CapDrop       []string
+	// StopGrace is stop_grace_period in whole seconds. It is nil when the key is
+	// not set, and then a stop sends no --time. It is omitted from the encoded
+	// service when nil, so the configuration identity of services without the
+	// key does not change.
+	StopGrace          *int `json:",omitempty"`
 	DependsOn          map[string]string
 	Healthcheck        *Healthcheck
 	OneShot            bool
@@ -113,6 +120,7 @@ type composeService struct {
 	User          string           `yaml:"user"`
 	ReadOnly      bool             `yaml:"read_only"`
 	CapDrop       []string         `yaml:"cap_drop"`
+	StopGrace     *string          `yaml:"stop_grace_period"`
 	DependsOn     yaml.Node        `yaml:"depends_on"`
 	Healthcheck   yaml.Node        `yaml:"healthcheck"`
 	Bay  *serviceSettings `yaml:"x-bay"`
@@ -290,6 +298,13 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 	s.Memory = cs.MemLimit
 	s.User, s.ReadOnly, s.CapDrop = cs.User, cs.ReadOnly, cs.CapDrop
 	var err error
+	if cs.StopGrace != nil {
+		seconds, err := stopGraceSeconds(*cs.StopGrace)
+		if err != nil {
+			return nil, fmt.Errorf("service %q: stop_grace_period %q: %w", name, *cs.StopGrace, err)
+		}
+		s.StopGrace = &seconds
+	}
 	s.DependsOn, err = decodeDependencies(cs.DependsOn)
 	if err != nil {
 		return nil, fmt.Errorf("service %s: %w", name, err)
@@ -323,6 +338,23 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 			"declare it with expose, ports or the %s label", name, strings.Join(s.Domains, ", "), LabelKeyPort)
 	}
 	return s, nil
+}
+
+// stopGraceSeconds reads a stop_grace_period in the Compose duration syntax,
+// such as 30s or 1m30s. The container stop flag takes whole seconds, so a
+// value with a fraction of a second is refused rather than rounded.
+func stopGraceSeconds(value string) (int, error) {
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return 0, errors.New("must be a duration such as 30s or 1m30s")
+	}
+	if d < 0 {
+		return 0, errors.New("must not be negative")
+	}
+	if d%time.Second != 0 {
+		return 0, errors.New("must be a whole number of seconds")
+	}
+	return int(d / time.Second), nil
 }
 
 // serviceDomains reads a service's x-bay.domains: a non-empty list of

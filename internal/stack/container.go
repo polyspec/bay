@@ -24,6 +24,9 @@ const (
 	LabelPort    = "bay.port"
 	LabelScheme  = "bay.scheme"
 	LabelConfig  = "bay.config"
+	// LabelStopGrace holds the service's stop_grace_period in whole seconds. It
+	// is set only when the Compose file sets the key.
+	LabelStopGrace = "bay.grace"
 )
 
 const (
@@ -124,6 +127,29 @@ func Lookup(name string) (Instance, bool, error) {
 	return Instance{}, false, nil
 }
 
+// stopArguments returns the arguments that stop one container. A grace period
+// is passed as --time in whole seconds; nil leaves the runtime default.
+func stopArguments(name string, grace *int) []string {
+	if grace == nil {
+		return []string{"stop", name}
+	}
+	return []string{"stop", "--time", strconv.Itoa(*grace), name}
+}
+
+// graceOf reads the grace period recorded on a container. A container without
+// the label has none; a label that is not a whole number is an error.
+func graceOf(in Instance) (*int, error) {
+	value, ok := in.Labels[LabelStopGrace]
+	if !ok {
+		return nil, nil
+	}
+	seconds, err := strconv.Atoi(value)
+	if err != nil || seconds < 0 {
+		return nil, fmt.Errorf("%s: invalid %s label %q", in.Name, LabelStopGrace, value)
+	}
+	return &seconds, nil
+}
+
 // Remove deletes a container, ignoring the case where it does not exist.
 func Remove(name string) error {
 	engine, err := engineOf(name)
@@ -161,6 +187,9 @@ func serviceArguments(group string, s *Service, fingerprint string) []string {
 		"--label", LabelPort + "=" + strconv.Itoa(s.Port),
 		"--label", LabelScheme + "=" + scheme,
 		"--label", LabelConfig + "=" + fingerprint,
+	}
+	if s.StopGrace != nil {
+		args = append(args, "--label", LabelStopGrace+"="+strconv.Itoa(*s.StopGrace))
 	}
 	if s.User != "" {
 		args = append(args, "--user", s.User)
@@ -289,11 +318,18 @@ func StartContainer(name string) error {
 
 // StopContainer stops a running container and leaves it in place.
 func StopContainer(name string) error {
-	engine, err := engineOf(name)
+	in, found, err := Lookup(name)
 	if err != nil {
 		return err
 	}
-	_, err = runEngine(engine, "stop", name)
+	if !found {
+		return fmt.Errorf("%s: no such container", name)
+	}
+	grace, err := graceOf(in)
+	if err != nil {
+		return err
+	}
+	_, err = runEngine(in.Engine, stopArguments(name, grace)...)
 	return err
 }
 

@@ -279,7 +279,7 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	}
 	if found {
 		if in.State == "running" {
-			if _, err = e.command(ctx, "stop", s.ContainerName); err != nil {
+			if _, err = e.command(ctx, stopArguments(s.ContainerName, s.StopGrace)...); err != nil {
 				return err
 			}
 		}
@@ -307,10 +307,16 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	start = append(start, s.ContainerName)
 	if _, err = e.command(ctx, start...); err != nil {
 		if s.OneShot && ctx.Err() != nil {
-			cleanup, stop := context.WithTimeout(context.Background(), 10*time.Second)
+			// The stop waits for the grace period before it kills the container, so
+			// the cleanup deadline includes it.
+			wait := 10 * time.Second
+			if s.StopGrace != nil {
+				wait += time.Duration(*s.StopGrace) * time.Second
+			}
+			cleanup, stop := context.WithTimeout(context.Background(), wait)
 			current, ok, check := e.lookup(cleanup, s.ContainerName)
 			if check == nil && ok && owns(group, s, current) == nil && current.Labels[LabelConfig] == fingerprint && current.State == "running" {
-				_, check = e.command(cleanup, "stop", s.ContainerName)
+				_, check = e.command(cleanup, stopArguments(s.ContainerName, s.StopGrace)...)
 			}
 			stop()
 			if check != nil {
@@ -640,6 +646,18 @@ func (e *serviceEngine) removeProject(group string) error {
 			return err
 		}
 		for _, in := range containers {
+			grace, err := graceOf(in)
+			if err != nil {
+				return err
+			}
+			// A container with a recorded grace period stops gracefully before it is
+			// removed; one without a grace period is removed as before.
+			if grace != nil && in.State == "running" {
+				e.say("%s: stopping it", in.Labels[LabelService])
+				if _, err := e.command(ctx, stopArguments(in.Name, grace)...); err != nil {
+					return err
+				}
+			}
 			e.say("%s: removing its container", in.Labels[LabelService])
 			if _, err := e.command(ctx, "rm", "--force", in.Name); err != nil {
 				return err
@@ -672,7 +690,11 @@ func (e *serviceEngine) stopProject(group string, names []string) error {
 				continue
 			}
 			e.say("%s: stopping it", service)
-			if _, err := e.command(ctx, "stop", in.Name); err != nil {
+			grace, err := graceOf(in)
+			if err != nil {
+				return err
+			}
+			if _, err := e.command(ctx, stopArguments(in.Name, grace)...); err != nil {
 				return err
 			}
 		}
