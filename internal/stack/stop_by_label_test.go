@@ -55,8 +55,8 @@ func TestAProjectIsRemovedFromItsContainersWithoutItsFile(t *testing.T) {
 	if err := e.removeProject("crudui"); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Join(*ran, "\n") != "rm --force crudui-comparison" {
-		t.Errorf("ran:\n%s\nwant only the project's container removed", strings.Join(*ran, "\n"))
+	if strings.Join(*ran, "\n") != "stop crudui-comparison\nrm --force crudui-comparison" {
+		t.Errorf("ran:\n%s\nwant only the project's container stopped and removed", strings.Join(*ran, "\n"))
 	}
 }
 
@@ -117,7 +117,7 @@ func TestOnlyServiceContainersAreRemoved(t *testing.T) {
 	if err := e.removeProject("p"); err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(*ran, "\n"); got != "rm --force p-web" {
-		t.Errorf("ran %q, want only the service removed", got)
+	if got := strings.Join(*ran, "\n"); got != "stop p-web\nrm --force p-web" {
+		t.Errorf("ran %q, want only the service stopped and removed", got)
 	}
 }

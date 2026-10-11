@@ -1508,3 +1508,15 @@ It now uses the user's trust settings.
 Verification: `security add-trusted-cert -r trustRoot` on the authority
 returned success without administrator rights, and `security verify-cert`
 reported the certificate as valid.
+
+### down stops every running container first
+
+`bay down` removed a service without `stop_grace_period` with
+`container rm --force`, which kills the container. Each running container now
+stops before it is removed, as Compose does. A service with `stop_grace_period`
+stops with `container stop --time <seconds>`, and any other service stops with the
+runtime default. A failed stop returns its error and keeps the container.
+
+Verification: `TestDownStopsEveryRunningContainerBeforeRemoving` failed before the
+change with the removal of `app-cache` not preceded by a stop, and passes after it.
+`make check` passes. The change was not run against a real container.

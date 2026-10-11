@@ -120,7 +120,7 @@ func TestStopServicesPassesTheRecordedGrace(t *testing.T) {
 	}
 }
 
-func TestDownStopsAKeyedContainerBeforeRemoving(t *testing.T) {
+func TestDownStopsEveryRunningContainerBeforeRemoving(t *testing.T) {
 	cfg := graceProject(t, "30s")
 	e, f := fakeEngine(t)
 	for _, s := range cfg.Sorted() {
@@ -140,10 +140,12 @@ func TestDownStopsAKeyedContainerBeforeRemoving(t *testing.T) {
 	if stop < 0 || remove < 0 || stop > remove {
 		t.Fatalf("calls = %q, want the graceful stop of %s before its removal", f.calls, web)
 	}
-	for _, c := range stopCalls(f) {
-		if c[len(c)-1] == cfg.Services["cache"].ContainerName {
-			t.Fatalf("service without stop_grace_period was stopped by down: %q", c)
-		}
+	// A service without the key gets the runtime default: a plain stop, not a kill.
+	cache := cfg.Services["cache"].ContainerName
+	plain := callIndex(f, []string{"stop", cache})
+	cacheRemove := callIndex(f, []string{"rm", "--force", cache})
+	if plain < 0 || cacheRemove < 0 || plain > cacheRemove {
+		t.Fatalf("calls = %q, want a plain stop of %s before its removal", f.calls, cache)
 	}
 }
 

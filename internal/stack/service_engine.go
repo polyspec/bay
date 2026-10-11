@@ -650,9 +650,10 @@ func (e *serviceEngine) removeProject(group string) error {
 			if err != nil {
 				return err
 			}
-			// A container with a recorded grace period stops gracefully before it is
-			// removed; one without a grace period is removed as before.
-			if grace != nil && in.State == "running" {
+			// Every running container stops before it is removed, as Compose does. A
+			// recorded grace period is passed as --time; without one the runtime
+			// default applies. A failed stop keeps the container.
+			if in.State == "running" {
 				e.say("%s: stopping it", in.Labels[LabelService])
 				if _, err := e.command(ctx, stopArguments(in.Name, grace)...); err != nil {
 					return err

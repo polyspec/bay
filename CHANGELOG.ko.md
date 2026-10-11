@@ -1319,3 +1319,9 @@ DNS 서버는 프록시가 없을 때 NXDOMAIN을 반환했고 macOS가 이를 �
 
 검증: 관리자 권한 없이 기관에 대한 `security add-trusted-cert -r trustRoot`가
 성공했고, `security verify-cert`가 인증서를 유효하다고 보고했다.
+
+### down은 실행 중인 모든 컨테이너를 먼저 중지한다
+
+`bay down`은 `stop_grace_period`가 없는 서비스를 `container rm --force`로 제거했고, 이는 컨테이너를 강제 종료한다. 이제 실행 중인 각 컨테이너를 Compose와 같이 제거 전에 중지한다. `stop_grace_period`가 있는 서비스는 `container stop --time <초>`로 중지하고, 나머지 서비스는 런타임 기본값으로 중지한다. 중지가 실패하면 오류를 반환하고 컨테이너를 남긴다.
+
+검증: `TestDownStopsEveryRunningContainerBeforeRemoving`은 변경 전에 `app-cache` 제거 앞에 중지가 없어 실패했고, 변경 후 통과한다. `make check`가 통과한다. 변경은 실제 컨테이너에 대해 실행하지 않았다.
