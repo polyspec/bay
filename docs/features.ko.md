@@ -6,11 +6,11 @@
 이전 검증은 변경된 코드의 근거가 되지 않는다. 기능이 바뀌면 그 변경에서 실행한
 검증으로 근거를 교체한다.
 
-`make install PREFIX=/opt/homebrew`가 변경 없는 소스 `5fb0bbf`에서 CLI, DNS 실행 파일, 메뉴 앱을 설치했다. `go version -m`은 `/opt/homebrew/bin/bay`에 대해 리비전 `5fb0bbf`와 `vcs.modified=false`를 보고한다. 실행 중인 DNS agent는 재시작하지 않았다. 앞선 행은 바뀌지 않은 동작의 검증을 유지한다.
+`make install PREFIX=/opt/homebrew`가 변경 없는 소스 `f310f36`에서 CLI, DNS 실행 파일, 메뉴 앱을 설치했다. `go version -m`은 `/opt/homebrew/bin/bay`에 대해 리비전 `f310f36`와 `vcs.modified=false`를 보고한다. 실행 중인 DNS agent는 재시작하지 않았다. 앞선 행은 바뀌지 않은 동작의 검증을 유지한다.
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
-| 서비스의 `stop_grace_period`로 중지하고, down은 실행 중인 모든 컨테이너를 제거 전에 중지한다 | 구현됨 | `go test ./internal/stack -run 'TestStopGrace\|TestStopServicesPasses\|TestDownStopsEvery\|TestDownKeeps\|TestUnsetGrace'`이 교체의 초 단위 `--time`, stop의 기록된 label, down의 제거 전 중지, 실패한 중지가 컨테이너를 남기는 경우, 거부되는 잘못된 값을 검사한다. 이 장비에서 실제 컨테이너에 대해서는 실행하지 않았다 | 설치: `5fb0bbf` |
+| 서비스의 `stop_grace_period`로 중지하고, down은 실행 중인 모든 컨테이너를 제거 전에 중지한다 | 구현됨 | `go test ./internal/stack -run 'TestStopGrace\|TestStopServicesPasses\|TestDownStopsEvery\|TestDownKeeps\|TestUnsetGrace'`이 교체의 초 단위 `--time`, stop의 기록된 label, down의 제거 전 중지, 실패한 중지가 컨테이너를 남기는 경우, 거부되는 잘못된 값을 검사한다. 이 장비에서 실제 컨테이너에 대해서는 실행하지 않았다 | 설치: `f310f36` |
 | 서비스 상태는 엔진의 상태이고 닫힌 포트는 번호로 보고함 | 구현됨 | `go test ./cmd/baybar -run 'TestAClosedPort\|TestTheStateWord\|TestAProjectWith'`와 `go test ./internal/stack -run 'TestARunningServiceWith\|TestARunningServiceIsMeasured\|TestAStoppedService'`가 상태 단어, 선언한 포트로의 측정, 포트 없는 서비스, 정지된 서비스를 검사. `soksakim-hyper`의 `php`가 감독 프로세스가 php-fpm을 정지시킨 동안 `starting · 아직 연결을 받지 않음`으로 표시됐다. 시작 중인 것은 없었다. 이 기계에서 `bay status --json`이 `php`에 `state: running`, `port: 9000`, `accepting: true`를 주고 `nc -z 192.168.65.205 9000`이 이를 확인했으며, `soksakim-hyper-test`의 `node`에는 `port`와 `accepting`이 없다. 이 기계에 닫힌 포트가 없어 그 경우는 관찰하지 못했다. `TestReadinessActualRuntime`과 종단 테스트는 새 필드로 바꿨고 실행하지 않았다 | 예 |
 | 실패가 서비스 로그가 어떻게 되었는지 보고함 | 구현됨 | `go test ./internal/stack -run 'TestAFailure\|TestTheOutputCarried'`가 줄이 있는 로그와 빈 로그를 검사. 읽지 못한 로그나 줄이 없는 로그는 아무 말 없이 실패에서 빠졌다 | 예 |
 | `make install`이 바이너리를 새 파일로 교체함 | 구현됨 | `make install`이 파일을 제자리에서 덮어쓴 뒤 `/opt/homebrew/bin/bay status`가 137로 끝났고, 같은 빌드를 새 파일로 복사한 것은 실행됐다. 변경 후 `make install PREFIX=/opt/homebrew`를 연달아 두 번 실행했고 매번 `bay status`가 0으로 끝났다 | 예 |
