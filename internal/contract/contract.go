@@ -195,6 +195,7 @@ func InternalLabels() []Key {
 		{"bay.config", "string", "none", "Digest of the resolved service configuration and local image."},
 		{"bay.volume", "string", "none", "Compose declaration key of a managed named volume."},
 		{"bay.grace", "integer", "none", "Stop grace period of the service in whole seconds; set only when the Compose file sets stop_grace_period."},
+		{"bay.stop_signal", "string", "none", "Signal that stops the service, one of the names in stop_signal; set only when the Compose file sets stop_signal."},
 	}
 }
 
@@ -226,6 +227,7 @@ func ComposeKeys() []Key {
 		{"mem_limit", "string", "runtime default", "Memory limit."},
 		{"cpus", "string", "runtime default", "CPU count."},
 		{"stop_grace_period", "duration", "runtime default (5s)", "Time the container gets to stop before it is killed, as a whole number of seconds such as 30s or 1m30s. Stop, restart, down and replacement pass it to the runtime."},
+		{"stop_signal", "string", "runtime default", stopSignalDescription()},
 	}
 }
 

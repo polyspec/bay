@@ -18,6 +18,18 @@ Verification: the three undeclared-container tests failed before the change, wit
 stub in place of the removal, and pass after it. `make check` passes. The change was
 not run against the limepie-hyper containers.
 
+### `stop_signal` sets the signal that stops a service
+
+A service with `stop_signal` stops with that signal. The accepted names are SIGHUP, SIGINT,
+SIGQUIT, SIGTERM, SIGUSR1, SIGUSR2 and SIGKILL. Another value is refused when the file is read,
+naming the service and the value. The signal is recorded on the container as
+`bay.stop_signal` and passed as `container stop --signal <name>` on replacement, stop,
+restart, the stop of a failed initializer and down. A service without the key gets no
+`--signal`. `bay schema` lists the key.
+
+Verification: the stop-signal tests in the feature table failed before the change and pass after
+it. `make check` passes. The change was not run against a real container.
+
 ## 2026-10-11
 
 ### Services stop with their `stop_grace_period`

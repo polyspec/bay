@@ -5,12 +5,15 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/polyspec/bay/internal/contract"
 )
 
 // This tool reads Compose files. Settings beyond the Compose schema are stored
@@ -67,7 +70,9 @@ type Service struct {
 	// not set, and then a stop sends no --time. It is omitted from the encoded
 	// service when nil, so the configuration identity of services without the
 	// key does not change.
-	StopGrace          *int `json:",omitempty"`
+	StopGrace *int `json:",omitempty"`
+	// StopSignal is the stop_signal name. It is omitted when the key is not set.
+	StopSignal         string `json:",omitempty"`
 	DependsOn          map[string]string
 	Healthcheck        *Healthcheck
 	OneShot            bool
@@ -121,6 +126,7 @@ type composeService struct {
 	ReadOnly      bool             `yaml:"read_only"`
 	CapDrop       []string         `yaml:"cap_drop"`
 	StopGrace     *string          `yaml:"stop_grace_period"`
+	StopSignal    *string          `yaml:"stop_signal"`
 	DependsOn     yaml.Node        `yaml:"depends_on"`
 	Healthcheck   yaml.Node        `yaml:"healthcheck"`
 	Bay  *serviceSettings `yaml:"x-bay"`
@@ -304,6 +310,13 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 			return nil, fmt.Errorf("service %q: stop_grace_period %q: %w", name, *cs.StopGrace, err)
 		}
 		s.StopGrace = &seconds
+	}
+	if cs.StopSignal != nil {
+		if !slices.Contains(contract.StopSignals(), *cs.StopSignal) {
+			return nil, fmt.Errorf("service %q: stop_signal %q: must be one of %s", name, *cs.StopSignal,
+				strings.Join(contract.StopSignals(), ", "))
+		}
+		s.StopSignal = *cs.StopSignal
 	}
 	s.DependsOn, err = decodeDependencies(cs.DependsOn)
 	if err != nil {

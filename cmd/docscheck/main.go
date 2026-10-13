@@ -43,7 +43,7 @@ var (
 	// path: "x-bay.extra_domains" is a project key,
 	// "dev.bay.dns" is a bundle identifier, and
 	// "bay.git" ends a repository URL.
-	labelPattern = regexp.MustCompile(`(^|[^\w.\-/])bay\.([a-z]+)`)
+	labelPattern = regexp.MustCompile(`(^|[^\w.\-/])bay\.([a-z_]+)`)
 )
 
 // flagWords appear after "bay" in prose but are not commands.

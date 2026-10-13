@@ -10,6 +10,12 @@ Compose 파일에서 제거된 서비스는 `up`이 선언된 서비스만 시�
 
 검증: 선언되지 않은 컨테이너 테스트 3개는 제거 대신 스텁을 둔 변경 전에 실패했고, 변경 후 통과한다. `make check`가 통과한다. 변경은 limepie-hyper 컨테이너에 대해 실행하지 않았다.
 
+### `stop_signal`으로 서비스를 중지할 신호를 정한다
+
+`stop_signal`을 가진 서비스는 그 신호로 중지한다. 허용하는 이름은 SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGUSR1, SIGUSR2, SIGKILL이다. 그 밖의 값은 파일을 읽을 때 서비스와 값을 함께 보고하며 거부한다. 신호는 컨테이너에 `bay.stop_signal`로 기록하고, 교체, stop, restart, 실패한 초기화의 중지와 down에서 `container stop --signal <이름>`으로 전달한다. 키가 없는 서비스는 `--signal`을 받지 않는다. `bay schema`는 키를 나열한다.
+
+검증: 기능 표의 신호 테스트는 변경 전에 실패했고, 변경 후 통과한다. `make check`가 통과한다. 변경은 실제 컨테이너에 대해 실행하지 않았다.
+
 ## 2026-10-11
 
 ### 서비스는 `stop_grace_period`로 중지한다

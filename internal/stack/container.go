@@ -7,9 +7,12 @@ import (
 	"io"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/polyspec/bay/internal/contract"
 )
 
 // Labels carry a container's routing settings. The proxy configuration and the
@@ -27,6 +30,9 @@ const (
 	// LabelStopGrace holds the service's stop_grace_period in whole seconds. It
 	// is set only when the Compose file sets the key.
 	LabelStopGrace = "bay.grace"
+	// LabelStopSignal holds the signal that stops the service. It is set only when
+	// the Compose file sets stop_signal.
+	LabelStopSignal = "bay.stop_signal"
 )
 
 const (
@@ -127,27 +133,37 @@ func Lookup(name string) (Instance, bool, error) {
 	return Instance{}, false, nil
 }
 
-// stopArguments returns the arguments that stop one container. A grace period
-// is passed as --time in whole seconds; nil leaves the runtime default.
-func stopArguments(name string, grace *int) []string {
-	if grace == nil {
-		return []string{"stop", name}
+// stopArguments returns the arguments that stop one container. A signal is
+// passed as --signal and a grace period as --time in whole seconds; a nil grace
+// and an empty signal leave the runtime defaults.
+func stopArguments(name string, grace *int, signal string) []string {
+	args := []string{"stop"}
+	if signal != "" {
+		args = append(args, "--signal", signal)
 	}
-	return []string{"stop", "--time", strconv.Itoa(*grace), name}
+	if grace != nil {
+		args = append(args, "--time", strconv.Itoa(*grace))
+	}
+	return append(args, name)
 }
 
-// graceOf reads the grace period recorded on a container. A container without
-// the label has none; a label that is not a whole number is an error.
-func graceOf(in Instance) (*int, error) {
-	value, ok := in.Labels[LabelStopGrace]
-	if !ok {
-		return nil, nil
+// stopOf reads the stop policy recorded on a container: its grace period in
+// whole seconds and its signal. A container without a label has none of that
+// kind; a label that is not valid is an error.
+func stopOf(in Instance) (*int, string, error) {
+	var grace *int
+	if value, ok := in.Labels[LabelStopGrace]; ok {
+		seconds, err := strconv.Atoi(value)
+		if err != nil || seconds < 0 {
+			return nil, "", fmt.Errorf("%s: invalid %s label %q", in.Name, LabelStopGrace, value)
+		}
+		grace = &seconds
 	}
-	seconds, err := strconv.Atoi(value)
-	if err != nil || seconds < 0 {
-		return nil, fmt.Errorf("%s: invalid %s label %q", in.Name, LabelStopGrace, value)
+	signal := in.Labels[LabelStopSignal]
+	if signal != "" && !slices.Contains(contract.StopSignals(), signal) {
+		return nil, "", fmt.Errorf("%s: invalid %s label %q", in.Name, LabelStopSignal, signal)
 	}
-	return &seconds, nil
+	return grace, signal, nil
 }
 
 // Remove deletes a container, ignoring the case where it does not exist.
@@ -190,6 +206,9 @@ func serviceArguments(group string, s *Service, fingerprint string) []string {
 	}
 	if s.StopGrace != nil {
 		args = append(args, "--label", LabelStopGrace+"="+strconv.Itoa(*s.StopGrace))
+	}
+	if s.StopSignal != "" {
+		args = append(args, "--label", LabelStopSignal+"="+s.StopSignal)
 	}
 	if s.User != "" {
 		args = append(args, "--user", s.User)
@@ -325,11 +344,11 @@ func StopContainer(name string) error {
 	if !found {
 		return fmt.Errorf("%s: no such container", name)
 	}
-	grace, err := graceOf(in)
+	grace, signal, err := stopOf(in)
 	if err != nil {
 		return err
 	}
-	_, err = runEngine(in.Engine, stopArguments(name, grace)...)
+	_, err = runEngine(in.Engine, stopArguments(name, grace, signal)...)
 	return err
 }
 

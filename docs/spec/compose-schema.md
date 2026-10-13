@@ -64,6 +64,7 @@ First match wins.
 | `mem_limit` | string | runtime default | Memory limit. |
 | `cpus` | string | runtime default | CPU count. |
 | `stop_grace_period` | duration | runtime default (5s) | Time the container gets to stop before it is killed, as a whole number of seconds such as 30s or 1m30s. Stop, restart, down and replacement pass it to the runtime. |
+| `stop_signal` | string | runtime default | Signal sent to stop the container: one of SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGUSR1, SIGUSR2, SIGKILL. Stop, restart, down and replacement pass it to the runtime as --signal. |
 
 ## Example
 

@@ -279,7 +279,7 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	}
 	if found {
 		if in.State == "running" {
-			if _, err = e.command(ctx, stopArguments(s.ContainerName, s.StopGrace)...); err != nil {
+			if _, err = e.command(ctx, stopArguments(s.ContainerName, s.StopGrace, s.StopSignal)...); err != nil {
 				return err
 			}
 		}
@@ -316,7 +316,7 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 			cleanup, stop := context.WithTimeout(context.Background(), wait)
 			current, ok, check := e.lookup(cleanup, s.ContainerName)
 			if check == nil && ok && owns(group, s, current) == nil && current.Labels[LabelConfig] == fingerprint && current.State == "running" {
-				_, check = e.command(cleanup, stopArguments(s.ContainerName, s.StopGrace)...)
+				_, check = e.command(cleanup, stopArguments(s.ContainerName, s.StopGrace, s.StopSignal)...)
 			}
 			stop()
 			if check != nil {
@@ -651,17 +651,17 @@ func (e *serviceEngine) removeProject(group string) error {
 
 // removeContainers removes the given containers in the order given. Every
 // running container stops before it is removed, as Compose does. A recorded
-// grace period is passed as --time and a recorded stop signal as --signal;
+// stop signal is passed as --signal and a recorded grace period as --time;
 // without them the runtime defaults apply. A failed stop keeps the container.
 func (e *serviceEngine) removeContainers(ctx context.Context, containers []Instance) error {
 	for _, in := range containers {
-		grace, err := graceOf(in)
+		grace, signal, err := stopOf(in)
 		if err != nil {
 			return err
 		}
 		if in.State == "running" {
 			e.say("%s: stopping it", in.Labels[LabelService])
-			if _, err := e.command(ctx, stopArguments(in.Name, grace)...); err != nil {
+			if _, err := e.command(ctx, stopArguments(in.Name, grace, signal)...); err != nil {
 				return err
 			}
 		}
@@ -696,11 +696,11 @@ func (e *serviceEngine) stopProject(group string, names []string) error {
 				continue
 			}
 			e.say("%s: stopping it", service)
-			grace, err := graceOf(in)
+			grace, signal, err := stopOf(in)
 			if err != nil {
 				return err
 			}
-			if _, err := e.command(ctx, stopArguments(in.Name, grace)...); err != nil {
+			if _, err := e.command(ctx, stopArguments(in.Name, grace, signal)...); err != nil {
 				return err
 			}
 		}
