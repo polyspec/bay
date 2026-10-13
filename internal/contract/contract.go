@@ -31,7 +31,8 @@ func Commands() []Command {
 			Name: "up", Args: "",
 			Summary: "Start this project's services and register their routes.",
 			Effect: "Reuses unchanged owned containers and proven completed initializers; replaces changed configuration or local image digests. " +
-				"Starts dependencies in order, checks declared health, issues certificates and updates the proxy. Delegates new project domains.",
+				"Starts dependencies in order, checks declared health, issues certificates and updates the proxy. Delegates new project domains. " +
+				"Removes the containers of services the Compose file no longer declares, stopping a running one first, and withdraws their routes.",
 			Root:    true,
 			Example: "bay up",
 		},

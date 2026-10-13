@@ -3,6 +3,21 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-10-13
+
+### `up` removes the containers of undeclared services
+
+A service removed from the Compose file keeps its container, and the container keeps
+its route, because `up` started only the declared services. `up` now finds the
+project's service containers whose service label the file does not declare, stops a
+running one with its recorded grace period, removes it and reports each removal. Its
+route is withdrawn when the proxy is synchronized after the start. Other projects,
+the proxy and declared services are not changed.
+
+Verification: the three undeclared-container tests failed before the change, with the
+stub in place of the removal, and pass after it. `make check` passes. The change was
+not run against the limepie-hyper containers.
+
 ## 2026-10-11
 
 ### Services stop with their `stop_grace_period`

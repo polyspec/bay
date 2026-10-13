@@ -645,27 +645,32 @@ func (e *serviceEngine) removeProject(group string) error {
 		if err != nil {
 			return err
 		}
-		for _, in := range containers {
-			grace, err := graceOf(in)
-			if err != nil {
-				return err
-			}
-			// Every running container stops before it is removed, as Compose does. A
-			// recorded grace period is passed as --time; without one the runtime
-			// default applies. A failed stop keeps the container.
-			if in.State == "running" {
-				e.say("%s: stopping it", in.Labels[LabelService])
-				if _, err := e.command(ctx, stopArguments(in.Name, grace)...); err != nil {
-					return err
-				}
-			}
-			e.say("%s: removing its container", in.Labels[LabelService])
-			if _, err := e.command(ctx, "rm", "--force", in.Name); err != nil {
+		return e.removeContainers(ctx, containers)
+	})
+}
+
+// removeContainers removes the given containers in the order given. Every
+// running container stops before it is removed, as Compose does. A recorded
+// grace period is passed as --time and a recorded stop signal as --signal;
+// without them the runtime defaults apply. A failed stop keeps the container.
+func (e *serviceEngine) removeContainers(ctx context.Context, containers []Instance) error {
+	for _, in := range containers {
+		grace, err := graceOf(in)
+		if err != nil {
+			return err
+		}
+		if in.State == "running" {
+			e.say("%s: stopping it", in.Labels[LabelService])
+			if _, err := e.command(ctx, stopArguments(in.Name, grace)...); err != nil {
 				return err
 			}
 		}
-		return nil
-	})
+		e.say("%s: removing its container", in.Labels[LabelService])
+		if _, err := e.command(ctx, "rm", "--force", in.Name); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // stopProject stops a project's running service containers, or only the named

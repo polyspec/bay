@@ -93,6 +93,11 @@ func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
 	if err := r.EnsureInstalled(); err != nil {
 		return SyncResult{}, err
 	}
+	// A service the file no longer declares keeps its container and its route
+	// until this removes them.
+	if err := engine.removeUndeclared(cfg); err != nil {
+		return SyncResult{}, err
+	}
 	// A service that the proxy routes to may read the address of the proxy when
 	// it starts, so the proxy runs before the services start.
 	if routed(cfg) {

@@ -33,7 +33,7 @@ verifies that this file matches the code.
 
 ### `up`
 
-Reuses unchanged owned containers and proven completed initializers; replaces changed configuration or local image digests. Starts dependencies in order, checks declared health, issues certificates and updates the proxy. Delegates new project domains.
+Reuses unchanged owned containers and proven completed initializers; replaces changed configuration or local image digests. Starts dependencies in order, checks declared health, issues certificates and updates the proxy. Delegates new project domains. Removes the containers of services the Compose file no longer declares, stopping a running one first, and withdraws their routes.
 
 ### `down`
 
