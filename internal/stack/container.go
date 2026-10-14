@@ -5,11 +5,14 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/polyspec/bay/internal/contract"
@@ -379,8 +382,41 @@ func Logs(name string, follow bool, tail int, w io.Writer) error {
 	cmd.WaitDelay = time.Second
 	cmd.Stdout = w
 	cmd.Stderr = w
-	return cmd.Run()
+	return runLogs(cmd, follow)
 }
+
+// runLogs runs the log command of a container. A follower is a child of this process and stays in its process group.
+func runLogs(cmd *exec.Cmd, follow bool) error {
+	if !follow {
+		return cmd.Run()
+	}
+	// A signal that would end this process
+	// ends the follower first, so that it never outlives bay as an orphan of process 1.
+	signals := make(chan os.Signal, 1)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
+	defer signal.Stop(signals)
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		select {
+		case sig := <-signals:
+			_ = cmd.Process.Signal(sig)
+			select {
+			case <-done:
+			case <-time.After(followerGrace):
+				_ = cmd.Process.Kill()
+			}
+		case <-done:
+		}
+	}()
+	return cmd.Wait()
+}
+
+// followerGrace is the time a follower gets after the signal before it is killed.
+const followerGrace = 5 * time.Second
 
 // ProxyMounts returns the configuration and certificate directories the running
 // proxy was started with.
