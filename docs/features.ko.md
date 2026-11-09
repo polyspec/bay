@@ -6,11 +6,11 @@
 이전 검증은 변경된 코드의 근거가 되지 않는다. 기능이 바뀌면 그 변경에서 실행한
 검증으로 근거를 교체한다.
 
-`make install PREFIX=/opt/homebrew`가 변경 없는 소스 `f310f36`에서 CLI, DNS 실행 파일, 메뉴 앱을 설치했다. `go version -m`은 `/opt/homebrew/bin/bay`에 대해 리비전 `f310f36`와 `vcs.modified=false`를 보고한다. 실행 중인 DNS agent는 재시작하지 않았다. 앞선 행은 바뀌지 않은 동작의 검증을 유지한다.
+`make install PREFIX=/opt/homebrew`가 변경 없는 소스 `9ecdbf9`에서 CLI, DNS 실행 파일, 메뉴 앱을 설치했다. `go version -m`은 `/opt/homebrew/bin/bayd`에 대해 리비전 `9ecdbf9`와 `vcs.modified=false`를 보고한다. 실행 중인 DNS agent는 `launchctl kickstart -k`로 재시작했다. 앞선 행은 바뀌지 않은 동작의 검증을 유지한다.
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
-| 새 목록을 만드는 동안 DNS 질의에 컨테이너의 마지막 목록으로 답한다 | 구현됨 | `go test -race ./cmd/bayd -run 'TestIndex|TestRefresh'`: 끝나지 않는 목록으로 `TestIndexAnswersFromLastListWhileNewListRuns`가 변경 전에 `index waited for the new list for more than 100 ms`로 실패했고 변경 후 통과한다. 실패한 새 목록은 마지막 목록을 남기고, 새 목록은 마지막 목록을 바꾼다 | 아니요 |
+| 새 목록을 만드는 동안 DNS 질의에 컨테이너의 마지막 목록으로 답한다 | 구현됨 | `go test -race ./cmd/bayd -run 'TestIndex|TestRefresh'`: 끝나지 않는 목록으로 `TestIndexAnswersFromLastListWhileNewListRuns`가 변경 전에 `index waited for the new list for more than 100 ms`로 실패했고 변경 후 통과한다. 실패한 새 목록은 마지막 목록을 남기고, 새 목록은 마지막 목록을 바꾼다. 설치된 build는 `container`가 반환하지 않는 동안 질의 8개 중 8개에 답했다 | 예 |
 | 서비스의 `stop_grace_period`로 중지하고, down은 실행 중인 모든 컨테이너를 제거 전에 중지한다 | 구현됨 | `go test ./internal/stack -run 'TestStopGrace\|TestStopServicesPasses\|TestDownStopsEvery\|TestDownKeeps\|TestUnsetGrace'`이 교체의 초 단위 `--time`, stop의 기록된 label, down의 제거 전 중지, 실패한 중지가 컨테이너를 남기는 경우, 거부되는 잘못된 값을 검사한다. 이 장비에서 실제 컨테이너에 대해서는 실행하지 않았다 | 설치: `f310f36` |
 | `up`이 Compose 파일이 더 이상 선언하지 않는 서비스의 컨테이너를 제거한다 | 구현됨 | 변경 전 RED: 스텁으로 `go test ./internal/stack -run 'TestUpRemoves\|TestUpLeaves\|TestUpKeeps'`가 `the stopped undeclared container was not removed`, `the running undeclared container was not removed`, `calls = []`로 실패했다. GREEN: 같은 명령이 변경 후 `TestUpRemovesTheContainersOfUndeclaredServices`, `TestUpLeavesDeclaredAndForeignContainersAlone`, `TestUpKeepsAnUndeclaredContainerWhoseStopFails`를 통과한다. limepie-hyper 컨테이너에 대해서는 실행하지 않았다 | 설치 안 됨 |
 | Compose `stop_signal`로 중지, 재시작, 교체와 down이 보낼 신호를 정한다 | 구현됨 | 변경 전 RED: `go test ./internal/stack -run 'TestStopSignalRefuses\|TestStopSignalIsPassed\|TestDownAndStop\|TestStopSignalIsRecorded\|TestAnUnknownRecorded'`가 `stop_signal "SIGFOO" was accepted`와 `stop calls = [["stop" "--time" "30" "app-web"]]`로 실패했다. `go test ./internal/contract -run TestStopSignalIsDeclaredWithItsNames`는 `ComposeKeys has no stop_signal`로 실패했다. GREEN: 같은 명령이 변경 후 통과하며, `TestUnsetStopSignalIsNotPassedOrEncoded`와 `TestAnUnknownRecordedSignalIsRefused`를 포함한다. 실제 컨테이너에 대해서는 실행하지 않았다 | 설치 안 됨 |
