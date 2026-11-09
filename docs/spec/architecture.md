@@ -96,6 +96,15 @@ any code is written against it.
     Every proxy is configured to serve them, so any proxy is a correct answer,
     and the answer names the first engine present.
 
+11. A query never waits for a list of the containers once one list exists.
+    `bayd` answers every query from its last list; when that list is
+    older than the TTL, it starts one new list in the background and answers
+    from the last one until the new list replaces it. Only a query that arrives
+    before the first list exists waits for it. A new list that fails keeps the
+    last list and is logged. Condition: a list runs `container ls`, which waits
+    for the container service and has taken up to 15 seconds, and a resolver
+    that receives no answer fails the name.
+
 ## Request path
 
 ```

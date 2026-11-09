@@ -3,6 +3,14 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-11-09
+
+### `bayd` answers from the last container list while a new list runs
+
+`bayd` ran `container ls` under its lock when its list was older than the TTL, so every query waited for that list, which has taken up to 15 seconds, and a resolver that received no answer failed the name. Now a list older than the TTL starts one new list in the background, every query is answered from the last list until the new list replaces it, and a failed new list keeps the last list and is logged with its elapsed time. Only a query before the first list waits for it (architecture rule 11).
+
+Verification: `TestIndexAnswersFromLastListWhileNewListRuns` failed before the change with `index waited for the new list for more than 100 ms` and passes after it; `TestRefreshKeepsLastListWhenNewListFails` and `TestRefreshReplacesLastList` pass; `go test -race ./cmd/bayd` and `make check` pass.
+
 ## 2026-10-13
 
 ### `up` removes the containers of undeclared services

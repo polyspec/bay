@@ -86,7 +86,7 @@ func main() {
 		return
 	}
 
-	r := &resolver{domains: doms}
+	r := &resolver{domains: doms, list: stack.List}
 
 	pc, err := net.ListenPacket("udp", *addr)
 	if err != nil {
@@ -111,10 +111,14 @@ func main() {
 
 type resolver struct {
 	domains []string
+	// list returns the containers of every engine; stack.List outside tests.
+	list func() ([]stack.Instance, error)
 
 	mu     sync.Mutex
 	cache  *index
 	cached time.Time
+	// refreshing is true while a new list runs in the background.
+	refreshing bool
 }
 
 // index maps a served domain to the address of the proxy for the engine its
@@ -161,17 +165,50 @@ func (r *resolver) strip(name string) (string, bool) {
 	return "", false
 }
 
-// index lists running containers and caches the result for one TTL.
+// index returns the last list of running containers (architecture rule 11).
+// Only a query before the first list waits for a list; a list older than the
+// TTL starts one new list in the background and the last list answers until
+// the new one replaces it.
 func (r *resolver) index() (*index, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if r.cache != nil && time.Since(r.cached) < time.Duration(*ttl)*time.Second {
+	if r.cache == nil {
+		list, err := r.list()
+		if err != nil {
+			return nil, err
+		}
+		r.cache, r.cached = build(list), time.Now()
 		return r.cache, nil
 	}
-	list, err := stack.List()
-	if err != nil {
-		return nil, err
+	if time.Since(r.cached) >= time.Duration(*ttl)*time.Second && !r.refreshing {
+		r.refreshing = true
+		go r.refresh(r.list)
 	}
+	return r.cache, nil
+}
+
+// refresh runs one new list and replaces the last list with it. A failed list
+// keeps the last list and is logged.
+func (r *resolver) refresh(list func() ([]stack.Instance, error)) {
+	started := time.Now()
+	instances, err := list()
+	var idx *index
+	if err == nil {
+		idx = build(instances)
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.refreshing = false
+	if err != nil {
+		log.Printf("listing containers: %v after %s; answering from the list of %s", err, time.Since(started).Round(time.Millisecond), r.cached.Format(time.TimeOnly))
+		return
+	}
+	r.cache, r.cached = idx, time.Now()
+}
+
+// build maps the domains of the running containers to the proxy of their
+// engine.
+func build(list []stack.Instance) *index {
 	// The address the host reaches a proxy at differs by engine, so it is read
 	// from the proxy container of each one.
 	proxies := map[string]string{}
@@ -199,8 +236,7 @@ func (r *resolver) index() (*index, error) {
 			break
 		}
 	}
-	r.cache, r.cached = idx, time.Now()
-	return idx, nil
+	return idx
 }
 
 func serveUDP(pc net.PacketConn, r *resolver) {

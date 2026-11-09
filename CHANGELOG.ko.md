@@ -2,6 +2,14 @@
 
 동작 변경과 각 변경에 대해 실행한 검증을 기록한다. 날짜는 변경한 날이다.
 
+## 2026-11-09
+
+### `bayd`는 새 목록을 만드는 동안 컨테이너의 마지막 목록으로 답한다
+
+`bayd`는 목록이 TTL보다 오래되면 lock을 쥔 채 `container ls`를 실행했으므로, 모든 질의가 최대 15초가 걸린 그 목록을 기다렸고, 답을 받지 못한 resolver는 그 이름을 실패시켰다. 이제 TTL보다 오래된 목록은 새 목록 하나를 background에서 시작하고, 새 목록이 마지막 목록을 바꿀 때까지 모든 질의에 마지막 목록으로 답하며, 실패한 새 목록은 마지막 목록을 남기고 걸린 시간과 함께 log에 기록된다. 첫 목록이 생기기 전의 질의만 그것을 기다린다(architecture 규칙 11).
+
+검증: `TestIndexAnswersFromLastListWhileNewListRuns`가 변경 전에 `index waited for the new list for more than 100 ms`로 실패했고 변경 후 통과한다. `TestRefreshKeepsLastListWhenNewListFails`와 `TestRefreshReplacesLastList`가 통과한다. `go test -race ./cmd/bayd`와 `make check`가 통과한다.
+
 ## 2026-10-13
 
 ### `up`은 선언되지 않은 서비스의 컨테이너를 제거한다

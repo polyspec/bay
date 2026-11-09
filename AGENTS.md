@@ -86,6 +86,7 @@ code does not carry it yet.
 | One proxy per engine | `stack.SyncProxy`, `stack.EnsureProxy` |
 | One list from every engine | `stack.List`, `stack.Engines` |
 | A name answers with its engine's proxy | `bayd`'s resolver index, `stack.ProxyHostAddr` |
+| A query never waits for a list once one exists | `bayd`'s `resolver.index` |
 | The peer link on a host process | Not carried. `stack.SyncProxy` refuses the link when two engines are present |
 | Routes come from container labels | `stack.Routes`, `stack.Instances` |
 | Domains are machine state | `stack.Machine.Domains` |
