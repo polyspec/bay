@@ -121,8 +121,18 @@ func volumeFingerprint(group string, v *Volume) string {
 	return hex.EncodeToString(sum[:])
 }
 
-func (e *serviceEngine) inspectVolume(ctx context.Context, name string) (runtimeVolume, bool, error) {
-	out, err := e.command(ctx, "volume", "inspect", name)
+// volumeCommand runs one volume command under its own bound. A batch of
+// volume commands shares no deadline, because a shared deadline ends a healthy
+// command once the batch has taken longer than the deadline.
+func (e *serviceEngine) volumeCommand(wait time.Duration, args ...string) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), wait)
+	defer cancel()
+	return e.command(ctx, append([]string{"volume"}, args...)...)
+}
+
+// inspectVolume reads a volume the runtime holds, under the read bound.
+func (e *serviceEngine) inspectVolume(name string) (runtimeVolume, bool, error) {
+	out, err := e.volumeCommand(engineReadWait, "inspect", name)
 	if err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "not found") {
 			return runtimeVolume{}, false, nil
@@ -153,8 +163,6 @@ func checkVolume(group string, v *Volume, actual runtimeVolume) error {
 }
 
 func (e *serviceEngine) prepareVolumes(group string, services []*Service, create bool) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-	defer cancel()
 	selected := map[string]*Volume{}
 	order := []*Volume{}
 	for _, s := range services {
@@ -167,7 +175,7 @@ func (e *serviceEngine) prepareVolumes(group string, services []*Service, create
 	}
 	missing := []*Volume{}
 	for _, v := range order {
-		actual, found, err := e.inspectVolume(ctx, v.Name)
+		actual, found, err := e.inspectVolume(v.Name)
 		if err != nil {
 			return err
 		}
@@ -185,15 +193,16 @@ func (e *serviceEngine) prepareVolumes(group string, services []*Service, create
 		return nil
 	}
 	for _, v := range missing {
-		args := []string{"volume", "create", "--label", LabelRole + "=volume", "--label", LabelGroup + "=" + group, "--label", LabelVolume + "=" + v.Key, "--label", LabelConfig + "=" + volumeFingerprint(group, v)}
+		args := []string{"create", "--label", LabelRole + "=volume", "--label", LabelGroup + "=" + group, "--label", LabelVolume + "=" + v.Key, "--label", LabelConfig + "=" + volumeFingerprint(group, v)}
 		if v.Size > 0 {
 			args = append(args, "-s", strconv.FormatInt(v.Size, 10))
 		}
 		args = append(args, v.Name)
-		if _, err := e.command(ctx, args...); err != nil {
+		// Creating is an action of the engine and has the action bound.
+		if _, err := e.volumeCommand(engineActWait, args...); err != nil {
 			return fmt.Errorf("create volume %s: %w", v.Name, err)
 		}
-		actual, found, err := e.inspectVolume(ctx, v.Name)
+		actual, found, err := e.inspectVolume(v.Name)
 		if err != nil {
 			return err
 		}

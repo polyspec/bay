@@ -56,10 +56,14 @@ func newServiceEngine(dir string) *serviceEngine {
 
 func serviceCommand(ctx context.Context, engine string, args ...string) ([]byte, error) {
 	cmd := exec.CommandContext(ctx, engineBin(engine), args...)
+	begun := time.Now()
 	if args[0] == "create" {
 		var diagnostic creationDiagnostic
 		cmd.Stdout, cmd.Stderr = io.Discard, &diagnostic
 		if err := cmd.Run(); err != nil {
+			if ended := endedByContext(ctx, begun, args); ended != nil {
+				return nil, ended
+			}
 			return nil, fmt.Errorf("%s", creationFailure(diagnostic.text.String(), args))
 		}
 		return nil, nil
@@ -69,18 +73,39 @@ func serviceCommand(ctx context.Context, engine string, args ...string) ([]byte,
 		cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
 		err := cmd.Run()
 		if err != nil {
+			if ended := endedByContext(ctx, begun, args); ended != nil {
+				return nil, ended
+			}
 			return nil, fmt.Errorf("container %s failed: %w", args[0], err)
 		}
 		return nil, nil
 	}
 	out, err := cmd.Output()
 	if err != nil {
+		if ended := endedByContext(ctx, begun, args); ended != nil {
+			return nil, ended
+		}
 		var exited *exec.ExitError
 		if errors.As(err, &exited) {
 			return nil, fmt.Errorf("container %s: %s", args[0], strings.TrimSpace(string(exited.Stderr)))
 		}
 	}
 	return out, err
+}
+
+// endedByContext returns the error of a command that its context ended, or nil
+// when the context did not end it. The ended process has no standard error of
+// its own, so the error names the command, the context error and the time the
+// command ran.
+func endedByContext(ctx context.Context, begun time.Time, args []string) error {
+	if ctx.Err() == nil {
+		return nil
+	}
+	name := args[0]
+	if len(args) > 1 && !strings.HasPrefix(args[1], "-") {
+		name += " " + args[1]
+	}
+	return fmt.Errorf("container %s: %w after %s", name, ctx.Err(), time.Since(begun).Round(time.Millisecond))
 }
 
 // creationFailure reports a refused creation: the category, then what the

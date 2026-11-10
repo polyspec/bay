@@ -2,6 +2,14 @@
 
 동작 변경과 각 변경에 대해 실행한 검증을 기록한다. 날짜는 변경한 날이다.
 
+## 2026-11-10
+
+### `up`의 volume 명령마다 자기 bound가 있다
+
+`up`은 선택된 service의 모든 `container volume inspect`와 `container volume create`를 1분 deadline을 가진 context 하나 아래에서 실행했으므로, managed volume 약 40개의 stack이 deadline을 넘었고, 정상인 create가 끝났으며, error는 끝난 process의 빈 standard error를 가진 `container volume:`이었다. 이제 각 volume inspect는 15초의 자기 read bound 아래에서, 각 volume create는 10분의 자기 action bound 아래에서 실행된다. context가 끝낸 service 명령은 명령, context error와 경과 시간으로 실패한다.
+
+검증: `TestEachVolumeCommandHasItsOwnBound`가 변경 전에 `volume inspect runs under 1m0s, want its own bound 15s`와 `a healthy volume command was ended: container volume: context deadline exceeded after 1m0s`로, `TestServiceCommandNamesTheEndOfItsContext`가 `error = "container volume: "`로 실패했고, 변경 후 둘 다 통과한다. `make check`가 통과한다.
+
 ## 2026-11-09
 
 ### `bayd`는 새 목록을 만드는 동안 컨테이너의 마지막 목록으로 답한다

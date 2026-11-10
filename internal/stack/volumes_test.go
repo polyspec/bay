@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestManagedVolumeDeclaration(t *testing.T) {
@@ -163,5 +164,53 @@ func TestManagedVolumeDeclarationRejectsUnsupportedOptions(t *testing.T) {
 	}
 	if cfg.Volumes["data"].Name != "project-data" || cfg.Volumes["data"].Size != 0 {
 		t.Fatal("managed defaults changed")
+	}
+}
+
+// TestEachVolumeCommandHasItsOwnBound runs a batch of volume commands that
+// passes one minute while each command stays within its own bound. The fake
+// engine counts a simulated duration per command against the context it
+// receives, so the test does not wait for the durations.
+func TestEachVolumeCommandHasItsOwnBound(t *testing.T) {
+	cfg, err := Load(write(t, `name: project
+services:
+  db: {image: postgres, volumes: ['a:/a', 'b:/b', 'c:/c', 'd:/d']}
+volumes:
+  a: {}
+  b: {}
+  c: {}
+  d: {}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, _, _, creates := volumeFixture(t)
+	run := e.command
+	const each = 10 * time.Second
+	spent := map[context.Context]time.Duration{}
+	reported := map[string]bool{}
+	e.command = func(ctx context.Context, args ...string) ([]byte, error) {
+		if args[0] == "volume" {
+			deadline, ok := ctx.Deadline()
+			if !ok {
+				t.Fatalf("volume %s has no bound", args[1])
+			}
+			bound := map[string]time.Duration{"inspect": engineReadWait, "create": engineActWait}[args[1]]
+			if left := time.Until(deadline); left > bound && !reported[args[1]] {
+				reported[args[1]] = true
+				t.Errorf("volume %s runs under %s, want its own bound %s", args[1], left.Round(time.Second), bound)
+			}
+			if spent[ctx]+each > time.Until(deadline) {
+				return nil, fmt.Errorf("container volume: %w after %s", context.DeadlineExceeded, spent[ctx]+each)
+			}
+			spent[ctx] += each
+		}
+		return run(ctx, args...)
+	}
+	if err := e.prepareVolumes(cfg.Name, cfg.Sorted(), true); err != nil {
+		t.Fatalf("a healthy volume command was ended: %v", err)
+	}
+	if *creates != 4 {
+		t.Fatalf("created %d volumes, want 4", *creates)
 	}
 }

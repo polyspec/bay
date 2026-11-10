@@ -45,7 +45,7 @@ volumes:
 			t.Error(err)
 			return
 		}
-		volume, ok, err := e.inspectVolume(context.Background(), v.Name)
+		volume, ok, err := e.inspectVolume(v.Name)
 		if err != nil {
 			t.Error(err)
 		} else if ok {
@@ -73,7 +73,7 @@ volumes:
 	if err = e.start(cfg, cfg.Sorted(), false); err != nil {
 		t.Fatal(err)
 	}
-	original, ok, err := e.inspectVolume(context.Background(), v.Name)
+	original, ok, err := e.inspectVolume(v.Name)
 	if err != nil || !ok {
 		t.Fatal("created volume missing")
 	}
@@ -101,7 +101,7 @@ volumes:
 	if err = e.removeProject(cfg.Name); err != nil {
 		t.Fatal(err)
 	}
-	after, ok, err := e.inspectVolume(context.Background(), v.Name)
+	after, ok, err := e.inspectVolume(v.Name)
 	if err != nil || !ok || !reflect.DeepEqual(original, after) {
 		t.Fatal("down changed managed volume")
 	}

@@ -3,6 +3,14 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-11-10
+
+### Each volume command of `up` has its own bound
+
+`up` ran every `container volume inspect` and `container volume create` of the selected services under one context with a one-minute deadline, so a stack of about 40 managed volumes passed the deadline, a healthy create was ended, and the error was `container volume:` with the empty standard error of the ended process. Each volume inspect now runs under its own read bound of 15 seconds and each volume create under its own action bound of 10 minutes. A service command that its context ends fails with the command, the context error and the elapsed time.
+
+Verification: `TestEachVolumeCommandHasItsOwnBound` failed before the change with `volume inspect runs under 1m0s, want its own bound 15s` and `a healthy volume command was ended: container volume: context deadline exceeded after 1m0s`, and `TestServiceCommandNamesTheEndOfItsContext` with `error = "container volume: "`; both pass after it; `make check` passes.
+
 ## 2026-11-09
 
 ### `bayd` answers from the last container list while a new list runs
