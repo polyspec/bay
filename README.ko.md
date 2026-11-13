@@ -166,3 +166,7 @@ bay brief --json                          # the contract, schemaVersion 1
 
 Apple `container` 1.3 이상 또는 Docker가 설치된 macOS, Go 1.27 이상. 앱은 Xcode 명령줄
 도구도 필요하다. Linux 피어는 Docker, systemd, 그리고 `-only-from`에는 nftables가 필요하다.
+
+## 라이선스
+
+MIT. [LICENSE](LICENSE) 참고.

@@ -173,3 +173,7 @@ Korean documents carry the suffix `.ko.md`.
 macOS with Apple `container` 1.3 or later or with Docker, and Go 1.27 or later.
 The application also needs the Xcode command line tools. A Linux peer needs
 Docker, systemd and, for `-only-from`, nftables.
+
+## License
+
+MIT. See [LICENSE](LICENSE).
