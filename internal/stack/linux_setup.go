@@ -118,7 +118,7 @@ func (l LinuxSetup) Items() []SetupItem {
 	}
 	items = append(items, docker, l.trustItem(), TrustItem(l.Dir))
 	items = append(items, l.firewallItem())
-	items = append(items, l.linkItems()...)
+	items = append(items, retiredLinkItems()...)
 	items = append(items, memoryReserveItem())
 	if docker.OK {
 		items = append(items, containerSliceItem())
@@ -141,6 +141,7 @@ func (l LinuxSetup) proxyNamesItem() SetupItem {
 	want, err := HostsNames(NewMachine(l.Dir))
 	item := SetupItem{
 		Name:      "names on the " + proxyNetwork(DockerEngine) + " network (" + strings.Join(want, ", ") + ")",
+		Kept:      true,
 		SetupStep: SetupStep{Text: "rewrite the proxy so it answers to them"},
 	}
 	if err != nil {
@@ -185,6 +186,7 @@ func (l LinuxSetup) hostsItem() SetupItem {
 	item := SetupItem{
 		Name:      "names in " + hostsPath + " (" + strings.Join(names, ", ") + ")",
 		OK:        err == nil && HostsCurrent(names),
+		Kept:      true,
 		SetupStep: SetupStep{Text: "write the names the proxy serves in " + hostsPath, Asks: AsksAdministrator},
 	}
 	if len(names) == 0 {
@@ -198,7 +200,10 @@ const agentUnit = "bay-agent.service"
 func agentUnitPath() string { return filepath.Join(systemdDir, agentUnit) }
 
 // agentUnitBody is the agent's systemd unit. It restarts the agent when it
-// stops, and starts after Docker, whose proxy it rewrites.
+// stops, and starts after Docker, whose proxy it rewrites. Stopping it stops
+// the agent's own process only (KillMode=process): a job it runs is a process
+// of its own, which the next agent takes over, so an update or a restart of
+// the agent does not end a job.
 func (l LinuxSetup) agentUnitBody() string {
 	args := append(dnsAgentArgs(l.DNSBin, strings.Join(l.Domains, ","), l.Addr, l.Dir), "-hosts")
 	return "# Written by \"bay install\".\n" +
@@ -210,6 +215,7 @@ func (l LinuxSetup) agentUnitBody() string {
 		"ExecStart=" + strings.Join(args, " ") + "\n" +
 		"Restart=always\n" +
 		"RestartSec=5\n" +
+		"KillMode=process\n" +
 		"\n[Install]\n" +
 		"WantedBy=multi-user.target\n"
 }
@@ -459,7 +465,7 @@ func (l LinuxSetup) ensureRoot(helper string, elevate Elevator) error {
 }
 
 // ApplyRoot applies the steps that need root and are missing: the trust
-// store, the firewall, the link, the memory guard, the agent and the names in /etc/hosts. It runs as root.
+// store, the firewall, the retired link unit, the memory guard, the agent and the names in /etc/hosts. It runs as root.
 func (l LinuxSetup) ApplyRoot() error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("must run as root")
@@ -474,11 +480,9 @@ func (l LinuxSetup) ApplyRoot() error {
 			return err
 		}
 	}
-	for _, it := range l.linkItems() {
-		if !it.OK && it.Text != "" {
-			if err := l.applyLink(); err != nil {
-				return err
-			}
+	if len(retiredLinkItems()) > 0 {
+		if err := removeLink(); err != nil {
+			return err
 		}
 	}
 	if it := memoryReserveItem(); !it.OK && it.Text != "" {

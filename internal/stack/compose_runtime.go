@@ -148,6 +148,9 @@ func validateDependencies(c *Config) error {
 			if dep == nil {
 				return fmt.Errorf("service %s depends on missing service %s", s.Name, name)
 			}
+			if dep.Job {
+				return fmt.Errorf("service %s depends on %s, which is a job: a job runs only when one is queued, so nothing can wait for it", s.Name, name)
+			}
 			if condition == "service_healthy" && dep.Healthcheck == nil {
 				return fmt.Errorf("service %s requires a healthcheck on %s", s.Name, name)
 			}

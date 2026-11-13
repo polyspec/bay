@@ -19,6 +19,9 @@ and how each item is removed.
 | `~/.bay/logs/` | The launchd agent | No | Delete the directory |
 | `~/.bay/completions/` | Successful foreground initializers | No | Delete the record; initialization then requires an explicit retry |
 | `~/.bay/locks/` | Project lifecycle commands | No | Inactive files can remain; active locks release when the command ends |
+| `~/.bay/jobs/` | `bay job add`, `bay job schedule` and the agent | No | The agent keeps the latest 200 ended jobs; delete the directory to drop them all |
+| `/etc/systemd/system/bay.slice` | Linux: `install` | Yes | `bay uninstall` |
+| `/etc/sysctl.d/99-bay.conf` | Linux: `install` | Yes | `bay uninstall`, which reloads the remaining files |
 
 ## System state
 

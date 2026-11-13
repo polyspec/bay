@@ -245,6 +245,11 @@ func writePeerLink(b *strings.Builder, c NginxConfig) {
 		b.WriteString("        default_type application/json;\n")
 		b.WriteString("        add_header Cache-Control no-store always;\n")
 		fmt.Fprintf(b, "        alias /etc/nginx/conf.d/%s;\n    }\n", StatsName)
+		fmt.Fprintf(b, "    location = %s {\n", JobsPath)
+		b.WriteString("        if ($ssl_client_verify != SUCCESS) {\n            return 403;\n        }\n")
+		b.WriteString("        default_type application/json;\n")
+		b.WriteString("        add_header Cache-Control no-store always;\n")
+		fmt.Fprintf(b, "        alias /etc/nginx/conf.d/%s;\n    }\n", JobsName)
 	}
 	b.WriteString("    location / {\n        return 404;\n    }\n}\n\n")
 

@@ -405,7 +405,7 @@ func groupStatus(m *Machine, g GroupRef, byContainer map[string]ServiceInstance,
 	}
 
 	out.Domain, out.DomainPinned, out.Domains = cfg.Domain, cfg.DomainPinned, cfg.Domains()
-	for _, s := range cfg.Sorted() {
+	for _, s := range cfg.Serving() {
 		st := ServiceStatus{
 			Name:      s.Name,
 			Container: s.ContainerName,

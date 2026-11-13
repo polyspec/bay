@@ -310,6 +310,32 @@ func serviceFingerprint(group string, s *Service, digest string, trust []string)
 	return hex.EncodeToString(sum[:])
 }
 
+// identity reads a service's image and returns its digest, the fingerprint
+// its container is created with and how it is launched.
+func (e *serviceEngine) identity(ctx context.Context, group string, s *Service) (string, string, launch, error) {
+	e.say("%s: reading %s", s.Name, s.Image)
+	digest, err := e.image(ctx, s.Image)
+	if err != nil {
+		return "", "", launch{}, err
+	}
+	// The name a container is reached at is given when it is created, so a
+	// container named in another domain is created again.
+	if err := ensureServiceCert(e.dir, s); err != nil {
+		return "", "", launch{}, err
+	}
+	launched := e.launchOf(ctx, s)
+	identity := append(trustArguments(e.dir, s), certArguments(e.dir, s)...)
+	identity = append(identity, "domain="+BackendDomain)
+	// A container created before the slice was registered is created again in it.
+	if parent := serviceCgroupParent(); parent != "" {
+		identity = append(identity, "cgroup-parent="+parent)
+	}
+	if encoded, err := json.Marshal(launched); err == nil {
+		identity = append(identity, "launch="+string(encoded))
+	}
+	return digest, serviceFingerprint(group, s, digest, identity), launched, nil
+}
+
 func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error {
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
@@ -328,27 +354,10 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	if s.OneShot && e.dir == "" {
 		return fmt.Errorf("initializer %s requires machine completion state", s.Name)
 	}
-	e.say("%s: reading %s", s.Name, s.Image)
-	digest, err := e.image(ctx, s.Image)
+	digest, fingerprint, launched, err := e.identity(ctx, group, s)
 	if err != nil {
 		return err
 	}
-	// The name a container is reached at is given when it is created, so a
-	// container named in another domain is created again.
-	if err := ensureServiceCert(e.dir, s); err != nil {
-		return err
-	}
-	launched := e.launchOf(ctx, s)
-	identity := append(trustArguments(e.dir, s), certArguments(e.dir, s)...)
-	identity = append(identity, "domain="+BackendDomain)
-	// A container created before the slice was registered is created again in it.
-	if parent := serviceCgroupParent(); parent != "" {
-		identity = append(identity, "cgroup-parent="+parent)
-	}
-	if encoded, err := json.Marshal(launched); err == nil {
-		identity = append(identity, "launch="+string(encoded))
-	}
-	fingerprint := serviceFingerprint(group, s, digest, identity)
 	same := found && in.Labels[LabelConfig] == fingerprint && in.ImageDigest == digest
 	if same && !restart {
 		if s.OneShot {

@@ -65,15 +65,18 @@ type Service struct {
 	EntrypointSet bool     `json:",omitempty"`
 	// Restart is the restart key: no, always, on-failure[:N] or
 	// unless-stopped, empty when unset.
-	Restart  string `json:",omitempty"`
-	Env      map[string]string
-	Volumes  []string
-	Network  string
-	CPUs     int
-	Memory   string
-	User     string
-	ReadOnly bool
-	CapDrop  []string
+	Restart string `json:",omitempty"`
+	Env     map[string]string
+	Volumes []string
+	Network string
+	CPUs    int
+	Memory  string
+	User    string
+	// WorkingDir is working_dir, omitted when unset so the identity of other
+	// services does not change.
+	WorkingDir string `json:",omitempty"`
+	ReadOnly   bool
+	CapDrop    []string
 	// Tmpfs are the in-memory mounts, each a path inside the container, with
 	// mount options after a colon on Docker. Omitted when empty, so the
 	// identity of services without the key does not change.
@@ -88,6 +91,13 @@ type Service struct {
 	DependsOn   map[string]string
 	Healthcheck *Healthcheck
 	OneShot     bool
+	// Job marks a service that runs to completion when a job is queued for it,
+	// from x-bay.job; up and start leave it alone. Schedule is its cron
+	// schedule and JobTimeout the limit on one run. All three are omitted when
+	// unset, so the identity of other services does not change.
+	Job        bool          `json:",omitempty"`
+	Schedule   string        `json:",omitempty"`
+	JobTimeout time.Duration `json:",omitempty"`
 	// Trust gives the container the certificates this machine trusts (see
 	// trust_bundle.go). It is on unless x-bay.trust is false.
 	Trust bool
@@ -128,6 +138,9 @@ type serviceSettings struct {
 	Domains     yaml.Node `yaml:"domains"`
 	Trust       *bool     `yaml:"trust"`
 	Certificate *bool     `yaml:"certificate"`
+	Job         bool      `yaml:"job"`
+	Schedule    string    `yaml:"schedule"`
+	Timeout     string    `yaml:"timeout"`
 }
 
 type composeService struct {
@@ -145,6 +158,7 @@ type composeService struct {
 	CPUs          string           `yaml:"cpus"`
 	MemLimit      string           `yaml:"mem_limit"`
 	User          string           `yaml:"user"`
+	WorkingDir    string           `yaml:"working_dir"`
 	ReadOnly      bool             `yaml:"read_only"`
 	CapDrop       []string         `yaml:"cap_drop"`
 	Tmpfs         yaml.Node        `yaml:"tmpfs"`
@@ -351,6 +365,7 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 	s.Volumes = cs.Volumes
 	s.Memory = cs.MemLimit
 	s.User, s.ReadOnly, s.CapDrop = cs.User, cs.ReadOnly, cs.CapDrop
+	s.WorkingDir = cs.WorkingDir
 	tmpfs, err := decodeTmpfs(cs.Tmpfs)
 	if err != nil {
 		return nil, fmt.Errorf("service %q: %w", name, err)
@@ -401,6 +416,9 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 		}
 		if cs.Bay.Certificate != nil {
 			s.Certificate = *cs.Bay.Certificate
+		}
+		if err := decodeJob(s, cs.Bay); err != nil {
+			return nil, fmt.Errorf("service %q: %w", name, err)
 		}
 	}
 	// A domain is forwarded to a port, and a port is never assumed.
@@ -549,6 +567,29 @@ func (c *Config) Sorted() []*Service {
 		out = append(out, s)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out
+}
+
+// Serving returns the services up and start run: every service but the jobs,
+// in name order.
+func (c *Config) Serving() []*Service {
+	var out []*Service
+	for _, s := range c.Sorted() {
+		if !s.Job {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// Jobs returns the job services in name order.
+func (c *Config) Jobs() []*Service {
+	var out []*Service
+	for _, s := range c.Sorted() {
+		if s.Job {
+			out = append(out, s)
+		}
+	}
 	return out
 }
 

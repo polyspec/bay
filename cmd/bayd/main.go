@@ -110,6 +110,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	time.AfterFunc(peerPollDelay, func() { servePeers(ctx, *state) })
+	go serveJobs(ctx, *state)
 	if *hosts {
 		go keepHostsFile(ctx, stack.NewMachine(*state))
 	}

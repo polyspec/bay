@@ -226,6 +226,9 @@ func serviceHead(group string, s *Service, fingerprint string) []string {
 	if s.User != "" {
 		args = append(args, "--user", s.User)
 	}
+	if s.WorkingDir != "" {
+		args = append(args, "--workdir", s.WorkingDir)
+	}
 	if s.ReadOnly {
 		args = append(args, "--read-only")
 	}

@@ -124,6 +124,10 @@ type SetupItem struct {
 	// Agent marks a part that tells agents about the tool, which running a
 	// project does not need.
 	Agent bool
+	// Kept marks a part the resident agent keeps current by itself, such as
+	// the names in /etc/hosts: one that lags a change is caught up within
+	// seconds without anyone running install.
+	Kept bool
 	SetupStep
 }
 

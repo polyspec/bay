@@ -115,9 +115,18 @@ type PlannedService struct {
 	Port      int      `json:"port,omitempty"`
 	Domains   []string `json:"domains"`
 	Image     string   `json:"image"`
+	// Job is set for a service that runs when a job is queued, with its
+	// schedule, if any, and its time limit.
+	Job *PlannedJob `json:"job,omitempty"`
 	// Certificate is where up writes the service's certificate, which exists
 	// once up has run.
 	Certificate *ServiceCertificate `json:"certificate,omitempty"`
+}
+
+// PlannedJob is a job service's schedule and time limit.
+type PlannedJob struct {
+	Schedule string `json:"schedule,omitempty"`
+	Timeout  string `json:"timeout"`
 }
 
 // ProjectPlan is what plan --json prints.
@@ -138,6 +147,9 @@ func PlanProject(m *Machine, cfg *Config) ProjectPlan {
 		p := PlannedService{
 			Name: s.Name, Container: s.ContainerName, Host: s.ContainerName + "." + BackendDomain,
 			Port: s.Port, Domains: append([]string{}, s.Domains...), Image: s.Image,
+		}
+		if s.Job {
+			p.Job = &PlannedJob{Schedule: s.Schedule, Timeout: s.JobTimeout.String()}
 		}
 		if s.Certificate {
 			c := ServiceCert(m.Dir, s)

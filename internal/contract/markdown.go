@@ -21,7 +21,7 @@ func MarkdownCLI(w io.Writer) {
 		if c.Root {
 			root = "Can require"
 		}
-		fmt.Fprintf(w, "| `%s` | %s | %s | %s |\n", name, c.Summary, c.Access, root)
+		fmt.Fprintf(w, "| `%s` | %s | %s | %s |\n", cell(name), cell(c.Summary), c.Access, root)
 	}
 
 	fmt.Fprintln(w, "")

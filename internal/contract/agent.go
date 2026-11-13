@@ -107,6 +107,12 @@ func agentRules(w io.Writer) {
 	fmt.Fprintln(w, "   `verify=False` or copied certificates.")
 	fmt.Fprintln(w, "7. Report what a command printed and its exit status; when it fails, run the")
 	fmt.Fprintln(w, "   command standard error names before trying anything else.")
+	fmt.Fprintln(w, "8. Run a test suite, a build or other work that ends as a job: a service with")
+	fmt.Fprintln(w, "   `x-bay.job: true`, queued with `bay job add -key <commit> <service>` and read")
+	fmt.Fprintln(w, "   with `bay job wait <id>`. The machine runs one job at a time, so heavy runs")
+	fmt.Fprintln(w, "   wait their turn instead of starving each other. On another machine, queue")
+	fmt.Fprintln(w, "   it there over ssh and wait with `bay job wait -peer <name> <id>`, which")
+	fmt.Fprintln(w, "   survives a dropped link; queueing again with the same `-key` never runs twice.")
 }
 
 // commandTable writes one row per command: the command line, what it does, its
@@ -123,7 +129,7 @@ func commandTable(w io.Writer) {
 		if c.Asks != "" {
 			asks = c.Asks
 		}
-		fmt.Fprintf(w, "| `%s` | %s | %s | %s |\n", name, c.Summary, c.Access, asks)
+		fmt.Fprintf(w, "| `%s` | %s | %s | %s |\n", cell(name), cell(c.Summary), c.Access, cell(asks))
 	}
 }
 
@@ -156,8 +162,14 @@ func MCPInstructions() string {
 		"command name. A tool's result is the command's output and its exit status.\n\n")
 	b.WriteString("Read first: check, status (args [\"--json\"]), brief. Machine setup is only " +
 		"install: run it with args [\"-dry-run\"] first. A command that asks a person a question " +
-		"gets no answer here; ask the user to run it in a terminal. The resources " +
+		"gets no answer here; ask the user to run it in a terminal. Work that ends, such as a test suite, is a job: " +
+		"queue it with job args [\"add\", \"-key\", \"<commit>\", \"<service>\"], which returns its ID at once, then call job with " +
+		"[\"wait\", \"<id>\"] (or [\"wait\", \"-peer\", \"<name>\", \"<id>\"] for a peer); a wait states its bound and a dropped link is read again. The resources " +
 		"bay://brief, bay://schema and bay://status hold the contract " +
 		"and the current state as JSON.\n")
 	return b.String()
 }
+
+// cell escapes the pipes a table cell's text holds, which would otherwise end
+// the cell, such as those between a command's alternatives.
+func cell(s string) string { return strings.ReplaceAll(s, "|", "\\|") }

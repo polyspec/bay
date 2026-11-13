@@ -148,6 +148,25 @@ func Commands() []Command {
 			Access:  Reads,
 		},
 		{
+			Name: "job", Args: "add [-wait] [-key k] [-timeout d] <service> | list [-peer name] | show [-peer name] <id> | logs [-f] [-peer name] <id> | wait [-peer name] [-timeout d] <id> | cancel <id> | schedule | unschedule",
+			Summary: "Queue a project's job services and read how they ran. The machine runs one job at a time, oldest first.",
+			Effect: "add queues a run of a service declared with x-bay.job and prints its ID; the agent runs it when the jobs queued before it have ended: " +
+				"it brings the project's other services up as up does, runs the job's container to completion with its output in the job's log, " +
+				"removes the container, and takes the project down again when it was not running before. " +
+				"-key names the run, such as a commit: a job of the service with that key is returned instead of a second one, so a caller cut off before it read the ID queues again safely. " +
+				"-wait prints the output as it comes and exits 0 when the job succeeded and 1 when it did not, after at most -timeout (2h). " +
+				"wait does the same without the output; with -peer it reads an approved peer's job over the link and, when the link drops, reads again every 5s until the bound, " +
+				"because the job runs on there and keeps its result. cancel removes a queued job, or stops a running one with its stop signal and grace period. " +
+				"schedule makes the agent queue the project's jobs at their x-bay.schedule; unschedule stops it. list reads the latest 50 jobs and the schedules, " +
+				"of this machine or with -peer of an approved peer; the latest 10 carry the end of their output, which logs -peer prints. " +
+				"A job's limit is its x-bay.timeout (1h). A job runs in a process of its own: a restart or an update of the agent leaves it running and the next agent takes it over. " +
+				"Jobs and their output are kept in <state>/jobs, the latest 200. On macOS the agent shows a notification when a job here or on an approved peer ends, " +
+				"and one that ended while the peer was out of reach when the link is back. " +
+				"A job on another machine is queued there: ssh host bay -f /path/compose.yaml job add -key $COMMIT test, then bay job wait -peer host <id>.",
+			Example: "bay job add -wait test",
+			Access:  Changes,
+		},
+		{
 			Name: "exec", Args: "[-u user] [-w dir] [-e KEY=VALUE] <service> <command...>",
 			Summary: "Run a command in a service's running container and exit with its status.",
 			Effect: "Whatever the command does inside the container. Standard input, output and error are the caller's, " +
@@ -351,11 +370,23 @@ func ServiceKeys() []Key {
 		{"services.<name>.x-bay.trust", "boolean", "true",
 			"Whether the container trusts the certificates this machine trusts: the system's public roots and " +
 				"this machine's authority, which issues the certificates of its projects and of its peers' names. " +
-				"They are mounted read-only over /etc/ssl/certs/ca-certificates.crt, /etc/pki/tls/certs/ca-bundle.crt " +
-				"and /etc/ssl/cert.pem and named by SSL_CERT_FILE, CURL_CA_BUNDLE, REQUESTS_CA_BUNDLE and " +
-				"NODE_EXTRA_CA_CERTS; for Java a PKCS #12 store is mounted at /etc/bay/truststore.p12 and " +
-				"named by JAVA_TOOL_OPTIONS. A path the service mounts itself and a variable it sets " +
-				"itself are left to the service. false gives the container its image's store only."},
+				"They are mounted read-only at /etc/bay/ca-bundle.crt and named by SSL_CERT_FILE, CURL_CA_BUNDLE, " +
+				"REQUESTS_CA_BUNDLE and NODE_EXTRA_CA_CERTS; for Java a PKCS #12 store is mounted at /etc/bay/truststore.p12 " +
+				"and named by JAVA_TOOL_OPTIONS. The container starts through /etc/bay/init, which adds the authority " +
+				"(/etc/bay/ca.crt) to the image's own store and where update-ca-certificates and update-ca-trust read it, " +
+				"then runs the image's or the file's entrypoint and command; nothing is mounted over the image's store, so " +
+				"installing ca-certificates in the container works. A variable the service sets itself is left to the " +
+				"service. false gives the container its image's store only."},
+		{"services.<name>.x-bay.job", "boolean", "false",
+			"Whether the service is a job: it runs to completion when a job is queued for it, with bay job add or its schedule, " +
+				"one job at a time on the machine. up and start leave it alone, nothing may depend on it, and it serves no domain."},
+		{"services.<name>.x-bay.schedule", "string", "none",
+			"When the agent queues the job, once bay job schedule follows the project: five cron fields (minute hour day-of-month month " +
+				"day-of-week, in the machine's local time) or @hourly, @daily, @weekly, @monthly, @yearly. A schedule that comes round " +
+				"while its last job is queued or running queues nothing."},
+		{"services.<name>.x-bay.timeout", "duration", "1h",
+			"The longest one run of the job may take, up to 24h, such as 30m. At the limit the job is stopped with its stop signal and " +
+				"grace period and recorded as failed."},
 		{"services.<name>.x-bay.certificate", "boolean", "true",
 			"Whether the container is given a certificate for its own name, issued by this machine's authority for " +
 				"<project>-<service>.bay.test, the container name and the service's domains, usable as a server and as a client. " +
@@ -413,6 +444,7 @@ func ComposeKeys() []Key {
 		{"environment", "mapping or list", "empty", "Environment variables."},
 		{"volumes", "list of string", "empty", "Compose-relative bind mounts or declared named volumes, `source:target[:ro]`. Top-level volumes supports name, external, driver: local and driver_opts.size; external volumes allow only name."},
 		{"user", "string", "image default", "Process user, name or uid[:gid]. Values may use project .env and environment interpolation."},
+		{"working_dir", "string", "image default", "Working directory of the process inside the container."},
 		{"read_only", "boolean", "false", "Mount the container root filesystem read-only."},
 		{"cap_drop", "list of string", "empty", "Linux capabilities to drop, including ALL."},
 		{"tmpfs", "string or list of string", "empty", "In-memory mounts at absolute paths in the container, for data that must not outlive it. Docker takes mount options after a colon (/run:size=64m); Apple container takes the path alone and an option is rejected."},
@@ -443,6 +475,8 @@ type Invariant struct {
 // Invariants are the rules this tool holds to.
 func Invariants() []Invariant {
 	return []Invariant{
+		{"One job at a time per machine, in the order jobs were queued.",
+			"Two heavy runs on one machine compete for its memory; one after the other each gets it. A job keeps its result on the machine that ran it until it is read, so a link that drops loses nothing."},
 		{"One proxy container per machine, named bay-edge.",
 			"Projects share it. Its configuration is rebuilt from every running project."},
 		{"Routes are read from container labels, not from Compose files.",
@@ -480,6 +514,7 @@ type Diagnostic struct {
 // Diagnostics lists the common failures and their diagnostic commands.
 func Diagnostics() []Diagnostic {
 	return []Diagnostic{
+		{"A job stays queued.", "A job queued before it runs, or the agent that runs the queue is not running.", "bay job list"},
 		{"A name does not resolve.", "The DNS agent is not registered.", "bay doctor"},
 		{"502 from the proxy.", "The container runs but does not listen on the resolved port.",
 			"bay logs <service>"},
@@ -509,6 +544,7 @@ func StateFiles() []StateFile {
 		{"~/.bay/groups.json", "Registered projects.", false},
 		{"~/.bay/peers.json, peers/", "Approved peers and their authorities.", false},
 		{"~/.bay/trust/", "The certificates service containers trust.", false},
+		{"~/.bay/jobs/", "The job queue: one file per job, its output beside it, and the projects whose schedules are followed.", false},
 		{"~/.claude/skills/bay/, ~/.agents/skills/bay/", "The agent skill, where those directories exist.", false},
 		{"/etc/resolver/<domain>", "macOS: delegates the domain to the DNS server.", true},
 		{"~/Library/LaunchAgents/dev.bay.dns.plist", "macOS: runs the DNS server.", false},
@@ -518,7 +554,6 @@ func StateFiles() []StateFile {
 		{"/etc/bay/firewall.nft, bay-firewall.service", "Linux: accepts new connections only from the hosts install -only-from named.", true},
 		{"/usr/local/share/ca-certificates/bay.crt", "Linux: the authority in the system trust store; the path follows the system.", true},
 		{"/etc/systemd/system/bay.slice", "Linux: holds the containers bay runs below the machine's memory; past 70% they slow, at 80% the kernel kills inside the slice only, and swap is held to 10%.", true},
-		{"/etc/systemd/system/bay-link.service", "Linux: keeps energy-efficient ethernet off at boot on the interface holding the default route, where its PHY is the kernel's.", true},
 		{"/etc/sysctl.d/99-bay.conf", "Linux: the free memory the kernel keeps for allocations that cannot wait, such as the network driver's, and when it starts reclaiming.", true},
 	}
 }

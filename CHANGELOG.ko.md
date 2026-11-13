@@ -4,6 +4,24 @@
 
 ## 2026-11-14
 
+### 작업: 한 번에 하나씩 돌리고 결과를 남기는 큐
+
+`x-bay.job: true`인 서비스가 작업이다. `bay job add`로 실행을 큐에 넣으면 에이전트가 한 번에 하나씩, 넣은 순서대로 프로젝트의 나머지 서비스를 띄운 채 돌리고, 종료 코드, 걸린 시간, 메모리 최고치(Linux, Docker), 출력을 `~/.bay/jobs/`에 남긴다. `x-bay.schedule`은 `bay job schedule`로 프로젝트를 따르게 하면 cron 일정대로 큐에 넣고, `x-bay.timeout`은 한 번 실행의 상한이다(기본 1h, 최대 24h). `-key`는 키마다 한 번만 넣으므로, 연결이 끊겨 `add`를 다시 보낸 호출자도 실행은 하나다. 실행은 에이전트보다 오래 사는 별도 프로세스라, 재시작하거나 업데이트된 에이전트가 넘겨받는다(`bay install`이 쓰는 `bay-agent.service`의 `KillMode=process`). 승인한 peer는 `/__bay/jobs`로 작업을 제공하고, `bay job list|show|logs|wait -peer <name>`이 그것을 읽으며, `wait -peer`는 링크가 끊겨도 상한까지 다시 시도한다. macOS에서는 이 기계나 peer의 작업이 끝나면, 링크가 끊긴 동안 끝난 것까지 알림을 띄운다. `start`와 `restart`는 작업을 거부하고, 무엇도 작업에 의존할 수 없다. [작업](docs/spec/jobs.ko.md) 참고.
+
+검증: `TestScheduleMatchesLikeCron`, `TestJobServicesAreLeftToTheQueue`, `TestQueueRunsOneJobAtATimeInOrder`, `TestSchedulesAreFollowedOncePerProject` 통과. Mac(Apple 엔진)에서 3으로 끝난 작업은 종료 코드 3의 `failed`, 8초 상한에 닿은 작업은 143의 `failed`, 취소한 작업은 `cancelled`였고, 큐의 작업은 순서대로 돌았다. 두 번째 `add -key k1`은 첫 작업의 ID를 출력하고 아무것도 넣지 않았다. 40초짜리 작업 15초 시점에 에이전트를 `launchctl kickstart -k`하자 `taking over its run`이 기록됐고, 작업은 40줄을 모두 남기고 `succeeded`로 끝났다. ODROID에서는 `bay install`이 유닛을 다시 쓴 뒤(`KillMode=process`) 작업 중 `systemctl restart bay-agent`에도 같았고, Mac의 `bay job wait -peer odroid`가 출력과 `succeeded in 51s, 8 MiB at most`를 보였다. `* * * * *` 일정은 매분 한 번씩, 각각 약 600 MiB로 돌았다. 실제 단절 상황에서의 재시도는 시험하지 않았다. 알림이 화면에 뜨는 것은 확인하지 않았다.
+
+### `working_dir`를 적용한다
+
+서비스의 `working_dir`는 읽고 무시됐다. 이제 엔진에 넘긴다(`--workdir`). 검증: `working_dir: /tmp`인 작업의 `pwd`가 Mac과 ODROID에서 `/tmp`를 출력했다.
+
+### 명령이 이름을 따라잡는 에이전트를 실패 대신 기다린다
+
+일정 작업이 에이전트가 이름을 쓰는 동안 `the machine setup is missing names in /etc/hosts (mac-hello.test, odroid-hello.test)`로 실패했다. `/etc/hosts`와 프록시 네트워크의 이름은 에이전트가 맞춘다. 그것만 뒤처진 것을 만난 명령은 실패하기 전에 에이전트를 최대 30초 기다리고, 한 번 그렇다고 말한다.
+
+### 에너지 절약 이더넷은 그대로 둔다
+
+아래 항목을 철회한다. Mac의 감시가 USB LAN 어댑터(USB 2.0의 Realtek RTL8153)가 07:55:32.96에 USB 버스에서 빠지고 ODROID 링크가 07:55:33에 내려간 것, 그리고 어댑터가 07:58:41부터 08:11:35까지 사라진 것을 기록했다. 단절은 ODROID의 PHY가 아니라 Mac의 어댑터에서 시작한다. 이제 `install`은 `bay-link.service`가 있으면 지우고 에너지 절약 이더넷을 다시 켠다. 검증: ODROID에서 `install`이 유닛을 지웠고 `ethtool --show-eee eth0`이 `enabled - inactive`를 읽었다. `TestRetiredLinkUnitIsRemovedWhereItIs` 통과.
+
 ### Linux 기계 업링크의 에너지 절약 이더넷을 끈다
 
 ODROID의 링크가 00:55에 켜진 뒤로 쉬는 중에도 부하 중에도 열세 번 내려갔다 올라왔고, 한 번은 링크가 붙어 있다고 하면서 8분 동안 프레임을 주고받지 못했다. 인터페이스(stmmac + RTL8211F PHY)는 에너지 절약 이더넷이 켜져 있었고, 저전력 대기에서 깨어나기에 실패한 기록이 있었다(`phy_eee_wakeup_error_n: 1`). 이제 Linux의 `install`은 기본 경로를 가진 인터페이스의 에너지 절약 이더넷을 `bay-link.service`로 끄며, 이 유닛이 부팅 때마다 다시 적용한다. `check`는 `ethtool --show-eee`로 읽는다. 커널이 PHY를 직접 다루는 인터페이스(`/sys/class/net/<if>/phydev`)에만 적용하므로, CI 러너 같은 가상 인터페이스에는 해당하지 않는다. 적용할 때 링크가 한 번 다시 협상한다.

@@ -100,10 +100,19 @@ func WriteStats(dir string, st MachineStats) error {
 // machine's client certificate and checking the peer against its authority.
 func FetchPeerStats(dir string, p Peer, timeout time.Duration) (MachineStats, error) {
 	var st MachineStats
+	body, err := fetchFromPeer(dir, p, StatsPath, 4096, timeout)
+	if err != nil {
+		return st, err
+	}
+	return st, json.Unmarshal(body, &st)
+}
+
+// fetchFromPeer reads one document the link serves to approved peers.
+func fetchFromPeer(dir string, p Peer, path string, limit int64, timeout time.Duration) ([]byte, error) {
 	peerDir := PeerDir(dir)
 	cert, err := tls.LoadX509KeyPair(filepath.Join(peerDir, ClientCertName+".crt"), filepath.Join(peerDir, ClientCertName+".key"))
 	if err != nil {
-		return st, err
+		return nil, err
 	}
 	client := &http.Client{
 		Timeout: timeout,
@@ -125,17 +134,13 @@ func FetchPeerStats(dir string, p Peer, timeout time.Duration) (MachineStats, er
 			},
 		}},
 	}
-	resp, err := client.Get("https://" + p.Address + StatsPath)
+	resp, err := client.Get("https://" + p.Address + path)
 	if err != nil {
-		return st, err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return st, fmt.Errorf("%s answered %s", p.Address, resp.Status)
+		return nil, fmt.Errorf("%s answered %s for %s", p.Address, resp.Status, path)
 	}
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	if err != nil {
-		return st, err
-	}
-	return st, json.Unmarshal(body, &st)
+	return io.ReadAll(io.LimitReader(resp.Body, limit))
 }

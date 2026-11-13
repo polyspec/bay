@@ -19,21 +19,22 @@ verifies that this file matches the code.
 | `restart [service...]` | Stop then start services. | change | No |
 | `logs [-f] [-n N] <service>` | Print one service's output. | read | No |
 | `plan [--json]` | Print each service's name, port, domains and certificate paths as up will create them. | read | No |
+| `job add [-wait] [-key k] [-timeout d] <service> \| list [-peer name] \| show [-peer name] <id> \| logs [-f] [-peer name] <id> \| wait [-peer name] [-timeout d] <id> \| cancel <id> \| schedule \| unschedule` | Queue a project's job services and read how they ran. The machine runs one job at a time, oldest first. | change | No |
 | `exec [-u user] [-w dir] [-e KEY=VALUE] <service> <command...>` | Run a command in a service's running container and exit with its status. | change | No |
 | `pull [service...]` | Fetch the images of this project's services from their registries. | change | No |
 | `images [--json] [service...]` | Report whether the local store holds each service's image. Fetches nothing. | read | No |
-| `domain [add|remove|default] [name]` | List the machine's domains, or change them. | remove | Can require |
+| `domain [add\|remove\|default] [name]` | List the machine's domains, or change them. | remove | Can require |
 | `status [--json]` | Print the proxy, the DNS server and every registered project. | read | No |
 | `doctor` | Report what machine setup is missing. Changes nothing. | read | No |
-| `check [-scope all|run]` | Report each part of the machine setup and fail when any is missing. Changes nothing. | read | No |
-| `peer [open|close|find|add|remove] [address|name|fingerprint]` | List the machines whose domains this one reaches, or change them. | remove | No |
+| `check [-scope all\|run]` | Report each part of the machine setup and fail when any is missing. Changes nothing. | read | No |
+| `peer [open\|close\|find\|add\|remove] [address\|name\|fingerprint]` | List the machines whose domains this one reaches, or change them. | remove | No |
 | `sync` | Rewrite the proxy configuration from the containers that are running. | change | No |
 | `cert client <name> [-out dir] [--json]` | Write a client certificate the machine's authority issues, for mutual TLS from outside the containers. | change | No |
-| `install [-dry-run] [-only-from host,...|none]` | Apply the machine setup that is missing. Running it again changes nothing. | change | Can require |
+| `install [-dry-run] [-only-from host,...\|none]` | Apply the machine setup that is missing. Running it again changes nothing. | change | Can require |
 | `uninstall` | Remove the machine setup install wrote. | remove | Can require |
 | `brief [--json]` | Print the full usage contract on one screen. | read | No |
 | `schema [--json]` | Print the Compose extension contract. | read | No |
-| `skill [print|install]` | Print the agent skill, or write it where agents read skills. | change | No |
+| `skill [print\|install]` | Print the agent skill, or write it where agents read skills. | change | No |
 | `mcp [install]` | Serve the commands to an agent as an MCP server on standard input and output, or register it. | change | No |
 | `help [command]` | Print help for one command, or the command list. | read | No |
 | `version [--json]` | Print this executable's version, commit, Go version, platform and contract schema version. | read | No |
@@ -75,6 +76,10 @@ Stops containers and withdraws their routes.
 ### `restart`
 
 Recreates selected owned containers, including explicitly retried initializers, after preparing their dependencies; updates the proxy.
+
+### `job`
+
+add queues a run of a service declared with x-bay.job and prints its ID; the agent runs it when the jobs queued before it have ended: it brings the project's other services up as up does, runs the job's container to completion with its output in the job's log, removes the container, and takes the project down again when it was not running before. -key names the run, such as a commit: a job of the service with that key is returned instead of a second one, so a caller cut off before it read the ID queues again safely. -wait prints the output as it comes and exits 0 when the job succeeded and 1 when it did not, after at most -timeout (2h). wait does the same without the output; with -peer it reads an approved peer's job over the link and, when the link drops, reads again every 5s until the bound, because the job runs on there and keeps its result. cancel removes a queued job, or stops a running one with its stop signal and grace period. schedule makes the agent queue the project's jobs at their x-bay.schedule; unschedule stops it. list reads the latest 50 jobs and the schedules, of this machine or with -peer of an approved peer; the latest 10 carry the end of their output, which logs -peer prints. A job's limit is its x-bay.timeout (1h). A job runs in a process of its own: a restart or an update of the agent leaves it running and the next agent takes it over. Jobs and their output are kept in <state>/jobs, the latest 200. On macOS the agent shows a notification when a job here or on an approved peer ends, and one that ended while the peer was out of reach when the link is back. A job on another machine is queued there: ssh host bay -f /path/compose.yaml job add -key $COMMIT test, then bay job wait -peer host <id>.
 
 ### `exec`
 
@@ -139,14 +144,15 @@ Offers each command that is not terminal-only as a tool, annotated read-only, id
 - **Serve the domains a project declares over HTTPS.** One proxy per machine, routes from container labels, certificates issued and renewed by the tool.
 - **Reach the names of approved peer machines.** Over the mutually authenticated peer link, and only to machines approved by fingerprint.
 - **Be a dependable step for a person, a script or an agent.** Exit status that says whether the request was done, JSON output where a program reads the result, nothing left behind by an interrupted command, and the same result when run twice.
-- **Keep a Linux machine reachable while projects use it.** The containers bay runs share a slice that slows them past 70% of memory and holds them under 80% with at most 10% in swap, and the kernel keeps a reserve for the network driver, so a loaded machine is slow but answers; energy-efficient ethernet stays off on its uplink, whose wake from low-power idle dropped the link.
+- **Run a project's jobs one at a time on the machine that holds it.** A service declared with x-bay.job runs to completion when queued, by request or on its schedule, with the project's other services up around it; the machine runs one job at a time, keeps each one's output, exit status, duration and peak memory, and tells the Mac when a job here or on an approved peer ends.
+- **Keep a Linux machine reachable while projects use it.** The containers bay runs share a slice that slows them past 70% of memory and holds them under 80% with at most 10% in swap, and the kernel keeps a reserve for the network driver, so a loaded machine is slow but answers.
 - **Apply the machine setup only on request.** install applies what is missing; every other command reads the setup and names install when a part is missing.
 
 ## What it does not do
 
 | Not done | Why | Instead |
 | --- | --- | --- |
-| Running or stopping a project on another machine. | A project's files, volumes, state and setup are on the machine that runs it; a remote up would act on paths and setup it cannot see. | Run the command on the machine that holds the project, for example over ssh: ssh host bay -f /path/compose.yaml up. |
+| Running, stopping or queueing a job for a project on another machine. | A project's files, volumes, state and setup are on the machine that runs it; a remote up or job would act on paths and setup it cannot see. Reading a peer's jobs over the link changes nothing there and is done. | Run the command on the machine that holds the project, for example over ssh: ssh host bay -f /path/compose.yaml job add -key $COMMIT test, and wait from here with bay job wait -peer host <id>. |
 | Publishing a service port or a Unix socket on the host. | Every service is reached by name, so two projects never compete for a host port and a reachable service is always a named, certified one. | Connect to <project>-<service>.bay.test:<port>; a socket in a bind-mounted directory is plain Compose and works where the engine shares the host's kernel. |
 | Waiting without a bound. | A wait with no limit hides a service that never starts; every wait states its bound before it begins. | Give a slow service a longer healthcheck start_period or interval. |
 | Deciding a caller's policy: retries, time limits, which images to fetch. | These belong to the caller's rules; the tool states what it does and offers the switches. | bay pull, up -no-pull, healthcheck keys, exit status. |
@@ -156,6 +162,7 @@ Offers each command that is not terminal-only as a tool, annotated read-only, id
 
 | Rule | Reason |
 | --- | --- |
+| One job at a time per machine, in the order jobs were queued. | Two heavy runs on one machine compete for its memory; one after the other each gets it. A job keeps its result on the machine that ran it until it is read, so a link that drops loses nothing. |
 | One proxy container per machine, named bay-edge. | Projects share it. Its configuration is rebuilt from every running project. |
 | Routes are read from container labels, not from Compose files. | Removing a project's containers removes its routes without editing a file. |
 | Domains are machine state, delegated once in /etc/resolver on macOS and named in a marked block of /etc/hosts elsewhere. | A project inherits the machine default unless its Compose file pins one. |
@@ -173,6 +180,7 @@ Offers each command that is not terminal-only as a tool, annotated read-only, id
 
 | Symptom | Cause | Command |
 | --- | --- | --- |
+| A job stays queued. | A job queued before it runs, or the agent that runs the queue is not running. | `bay job list` |
 | A name does not resolve. | The DNS agent is not registered. | `bay doctor` |
 | 502 from the proxy. | The container runs but does not listen on the resolved port. | `bay logs <service>` |
 | 404 from the proxy. | No route claims that name. The service is stopped, internal, or the domain differs. | `bay status` |

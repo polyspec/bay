@@ -29,8 +29,10 @@ func Duties() []Duty {
 			"Over the mutually authenticated peer link, and only to machines approved by fingerprint."},
 		{"Be a dependable step for a person, a script or an agent.",
 			"Exit status that says whether the request was done, JSON output where a program reads the result, nothing left behind by an interrupted command, and the same result when run twice."},
+		{"Run a project's jobs one at a time on the machine that holds it.",
+			"A service declared with x-bay.job runs to completion when queued, by request or on its schedule, with the project's other services up around it; the machine runs one job at a time, keeps each one's output, exit status, duration and peak memory, and tells the Mac when a job here or on an approved peer ends."},
 		{"Keep a Linux machine reachable while projects use it.",
-			"The containers bay runs share a slice that slows them past 70% of memory and holds them under 80% with at most 10% in swap, and the kernel keeps a reserve for the network driver, so a loaded machine is slow but answers; energy-efficient ethernet stays off on its uplink, whose wake from low-power idle dropped the link."},
+			"The containers bay runs share a slice that slows them past 70% of memory and holds them under 80% with at most 10% in swap, and the kernel keeps a reserve for the network driver, so a loaded machine is slow but answers."},
 		{"Apply the machine setup only on request.",
 			"install applies what is missing; every other command reads the setup and names install when a part is missing."},
 	}
@@ -46,9 +48,9 @@ type Exclusion struct {
 // Exclusions are what the tool leaves to others.
 func Exclusions() []Exclusion {
 	return []Exclusion{
-		{"Running or stopping a project on another machine.",
-			"A project's files, volumes, state and setup are on the machine that runs it; a remote up would act on paths and setup it cannot see.",
-			"Run the command on the machine that holds the project, for example over ssh: ssh host bay -f /path/compose.yaml up."},
+		{"Running, stopping or queueing a job for a project on another machine.",
+			"A project's files, volumes, state and setup are on the machine that runs it; a remote up or job would act on paths and setup it cannot see. Reading a peer's jobs over the link changes nothing there and is done.",
+			"Run the command on the machine that holds the project, for example over ssh: ssh host bay -f /path/compose.yaml job add -key $COMMIT test, and wait from here with bay job wait -peer host <id>."},
 		{"Publishing a service port or a Unix socket on the host.",
 			"Every service is reached by name, so two projects never compete for a host port and a reachable service is always a named, certified one.",
 			"Connect to <project>-<service>.bay.test:<port>; a socket in a bind-mounted directory is plain Compose and works where the engine shares the host's kernel."},

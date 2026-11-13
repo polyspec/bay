@@ -104,10 +104,10 @@ func (r *Runtime) Up(cfg *Config) (res SyncResult, err error) {
 		}
 	}()
 	engine := r.engine()
-	if err := engine.preflight(cfg.Name, cfg.Sorted()); err != nil {
+	if err := engine.preflight(cfg.Name, cfg.Serving()); err != nil {
 		return SyncResult{}, err
 	}
-	if err := engine.prepareVolumes(cfg.Name, cfg.Sorted(), false); err != nil {
+	if err := engine.prepareVolumes(cfg.Name, cfg.Serving(), false); err != nil {
 		return SyncResult{}, err
 	}
 	if err := r.checkDomainsFree(cfg); err != nil {
@@ -128,14 +128,14 @@ func (r *Runtime) Up(cfg *Config) (res SyncResult, err error) {
 			return SyncResult{}, err
 		}
 	}
-	if err := engine.start(cfg, cfg.Sorted(), false); err != nil {
+	if err := engine.start(cfg, cfg.Serving(), false); err != nil {
 		return SyncResult{}, err
 	}
-	res, err = r.sync(containerNames(cfg.Sorted()))
+	res, err = r.sync(containerNames(cfg.Serving()))
 	if err != nil {
 		return res, err
 	}
-	r.reportReady(containerNames(cfg.Sorted()))
+	r.reportReady(containerNames(cfg.Serving()))
 	return res, nil
 }
 
@@ -288,7 +288,7 @@ func (r *Runtime) StartServices(cfg *Config, names []string) (SyncResult, error)
 	if err := r.ownsSetup(); err != nil {
 		return SyncResult{}, err
 	}
-	targets, err := SelectServices(cfg, names)
+	targets, err := selectServing(cfg, names)
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -323,7 +323,7 @@ func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, erro
 	if err := r.ownsSetup(); err != nil {
 		return SyncResult{}, err
 	}
-	targets, err := SelectServices(cfg, names)
+	targets, err := selectServing(cfg, names)
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -379,24 +379,46 @@ func (r *Runtime) sync(started []string) (SyncResult, error) {
 // the command and changes nothing. The store of certificates containers trust
 // is state of this tool, derived from the system's roots and the authority, and
 // is refreshed here so a container is created with the current one.
+// keptCatchUp bounds the wait for the agent to catch up a part it keeps: three
+// of its rounds.
+const keptCatchUp = 30 * time.Second
+
 func (r *Runtime) requireSetup(cfg *Config) error {
 	if _, err := os.Stat(filepath.Join(r.Machine.Dir, "ca.crt")); err == nil {
 		if err := EnsureTrust(r.Machine.Dir); err != nil {
 			return err
 		}
 	}
-	items, err := r.setupItems(cfg.Domains()...)
-	if err != nil {
-		return err
-	}
 	var missing []string
-	for _, it := range items {
-		if !it.OK {
-			missing = append(missing, it.Name)
+	deadline := time.Now().Add(keptCatchUp)
+	said := false
+	for {
+		items, err := r.setupItems(cfg.Domains()...)
+		if err != nil {
+			return err
 		}
-	}
-	if len(missing) == 0 {
-		return nil
+		missing = missing[:0]
+		kept := true
+		for _, it := range items {
+			if !it.OK {
+				missing = append(missing, it.Name)
+				kept = kept && it.Kept
+			}
+		}
+		if len(missing) == 0 {
+			return nil
+		}
+		// A part the agent keeps lags a change the agent has not caught up
+		// with yet, such as a peer's new domain: it is waited for, within a
+		// bound, instead of being reported as setup to apply.
+		if !kept || !AgentRuns() || time.Now().After(deadline) {
+			break
+		}
+		if !said {
+			r.say("waiting up to %s for the agent to catch up: %s", keptCatchUp, strings.Join(missing, ", "))
+			said = true
+		}
+		time.Sleep(2 * time.Second)
 	}
 	return fmt.Errorf("the machine setup is missing %s; run bay install, which applies only what is missing (bay install -dry-run lists it)",
 		strings.Join(missing, ", "))
@@ -580,6 +602,24 @@ func SelectServices(cfg *Config, names []string) ([]*Service, error) {
 		out = append(out, s)
 	}
 	return out, nil
+}
+
+// selectServing is SelectServices for start and restart: a job is run by
+// queueing it, so it is left out of an empty selection and refused by name.
+func selectServing(cfg *Config, names []string) ([]*Service, error) {
+	if len(names) == 0 {
+		return cfg.Serving(), nil
+	}
+	targets, err := SelectServices(cfg, names)
+	if err != nil {
+		return nil, err
+	}
+	for _, s := range targets {
+		if s.Job {
+			return nil, fmt.Errorf("%s is a job: it runs when one is queued, with bay job add %s", s.Name, s.Name)
+		}
+	}
+	return targets, nil
 }
 
 // WaitRunning returns when the named container is running and has an address,

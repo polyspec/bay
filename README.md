@@ -46,7 +46,7 @@ and `bay check` says so. On Linux the setup and the commands run as root, so a
 CI job runs them with `sudo`:
 
 ```sh
-VERSION=v0.0.1
+VERSION=v0.0.7
 ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
 NAME=bay_${VERSION}_linux_${ARCH}
 curl -fsSLO https://github.com/polyspec/bay/releases/download/$VERSION/$NAME.tar.gz
@@ -57,6 +57,26 @@ sudo install -m 755 $NAME/bay $NAME/bayd /usr/local/bin/
 sudo bay install            # asks nothing as root
 sudo bay check -scope run   # exit 1 when a part a run needs is missing
 ```
+
+### Jobs
+
+A service with `x-bay.job: true` is a job: a test suite, a build, a migration.
+`bay job add <service>` queues a run, and the machine runs one job at a time,
+oldest first, with the project's other services up around it, and keeps each
+run's output, exit status, duration and peak memory. A schedule
+(`x-bay.schedule: "0 3 * * *"`) queues it by itself once `bay job schedule`
+follows the project.
+
+```sh
+bay job add -wait test                     # queue, print the output, exit 0 or 1
+ssh odroid bay -f /srv/orm/compose.yaml job add -key "$COMMIT" test
+bay job wait -peer odroid <id>             # from the Mac; a dropped link is read again
+```
+
+A job finishes on its machine whatever the network does, and keeps its result
+until it is read; the same `-key` never queues a second run. On macOS a
+notification says when a job here or on an approved peer ends. See
+[Jobs](docs/spec/jobs.md).
 
 ## Usage instructions live in the commands
 
@@ -93,14 +113,15 @@ agent; the agent asks the user to run it. The section below is generated from th
 - **Serve the domains a project declares over HTTPS.** One proxy per machine, routes from container labels, certificates issued and renewed by the tool.
 - **Reach the names of approved peer machines.** Over the mutually authenticated peer link, and only to machines approved by fingerprint.
 - **Be a dependable step for a person, a script or an agent.** Exit status that says whether the request was done, JSON output where a program reads the result, nothing left behind by an interrupted command, and the same result when run twice.
-- **Keep a Linux machine reachable while projects use it.** The containers bay runs share a slice that slows them past 70% of memory and holds them under 80% with at most 10% in swap, and the kernel keeps a reserve for the network driver, so a loaded machine is slow but answers; energy-efficient ethernet stays off on its uplink, whose wake from low-power idle dropped the link.
+- **Run a project's jobs one at a time on the machine that holds it.** A service declared with x-bay.job runs to completion when queued, by request or on its schedule, with the project's other services up around it; the machine runs one job at a time, keeps each one's output, exit status, duration and peak memory, and tells the Mac when a job here or on an approved peer ends.
+- **Keep a Linux machine reachable while projects use it.** The containers bay runs share a slice that slows them past 70% of memory and holds them under 80% with at most 10% in swap, and the kernel keeps a reserve for the network driver, so a loaded machine is slow but answers.
 - **Apply the machine setup only on request.** install applies what is missing; every other command reads the setup and names install when a part is missing.
 
 ### What it does not do
 
 | Not done | Why | Instead |
 | --- | --- | --- |
-| Running or stopping a project on another machine. | A project's files, volumes, state and setup are on the machine that runs it; a remote up would act on paths and setup it cannot see. | Run the command on the machine that holds the project, for example over ssh: ssh host bay -f /path/compose.yaml up. |
+| Running, stopping or queueing a job for a project on another machine. | A project's files, volumes, state and setup are on the machine that runs it; a remote up or job would act on paths and setup it cannot see. Reading a peer's jobs over the link changes nothing there and is done. | Run the command on the machine that holds the project, for example over ssh: ssh host bay -f /path/compose.yaml job add -key $COMMIT test, and wait from here with bay job wait -peer host <id>. |
 | Publishing a service port or a Unix socket on the host. | Every service is reached by name, so two projects never compete for a host port and a reachable service is always a named, certified one. | Connect to <project>-<service>.bay.test:<port>; a socket in a bind-mounted directory is plain Compose and works where the engine shares the host's kernel. |
 | Waiting without a bound. | A wait with no limit hides a service that never starts; every wait states its bound before it begins. | Give a slow service a longer healthcheck start_period or interval. |
 | Deciding a caller's policy: retries, time limits, which images to fetch. | These belong to the caller's rules; the tool states what it does and offers the switches. | bay pull, up -no-pull, healthcheck keys, exit status. |
@@ -122,21 +143,22 @@ bay brief --json                          # the contract, schemaVersion 1
 | `bay restart [service...]` | Stop then start services. | change | nothing |
 | `bay logs [-f] [-n N] <service>` | Print one service's output. | read | nothing |
 | `bay plan [--json]` | Print each service's name, port, domains and certificate paths as up will create them. | read | nothing |
+| `bay job add [-wait] [-key k] [-timeout d] <service> \| list [-peer name] \| show [-peer name] <id> \| logs [-f] [-peer name] <id> \| wait [-peer name] [-timeout d] <id> \| cancel <id> \| schedule \| unschedule` | Queue a project's job services and read how they ran. The machine runs one job at a time, oldest first. | change | nothing |
 | `bay exec [-u user] [-w dir] [-e KEY=VALUE] <service> <command...>` | Run a command in a service's running container and exit with its status. | change | nothing |
 | `bay pull [service...]` | Fetch the images of this project's services from their registries. | change | nothing |
 | `bay images [--json] [service...]` | Report whether the local store holds each service's image. Fetches nothing. | read | nothing |
-| `bay domain [add|remove|default] [name]` | List the machine's domains, or change them. | remove | the administrator password, in a system dialog or on the terminal, when a step needs root |
+| `bay domain [add\|remove\|default] [name]` | List the machine's domains, or change them. | remove | the administrator password, in a system dialog or on the terminal, when a step needs root |
 | `bay status [--json]` | Print the proxy, the DNS server and every registered project. | read | nothing |
 | `bay doctor` | Report what machine setup is missing. Changes nothing. | read | nothing |
-| `bay check [-scope all|run]` | Report each part of the machine setup and fail when any is missing. Changes nothing. | read | nothing |
-| `bay peer [open|close|find|add|remove] [address|name|fingerprint]` | List the machines whose domains this one reaches, or change them. | remove | approval of the other machine's fingerprint, read from standard input; with no one to answer, nothing is approved |
+| `bay check [-scope all\|run]` | Report each part of the machine setup and fail when any is missing. Changes nothing. | read | nothing |
+| `bay peer [open\|close\|find\|add\|remove] [address\|name\|fingerprint]` | List the machines whose domains this one reaches, or change them. | remove | approval of the other machine's fingerprint, read from standard input; with no one to answer, nothing is approved |
 | `bay sync` | Rewrite the proxy configuration from the containers that are running. | change | nothing |
 | `bay cert client <name> [-out dir] [--json]` | Write a client certificate the machine's authority issues, for mutual TLS from outside the containers. | change | nothing |
-| `bay install [-dry-run] [-only-from host,...|none]` | Apply the machine setup that is missing. Running it again changes nothing. | change | the administrator password, in a system dialog or on the terminal, when a step needs root |
+| `bay install [-dry-run] [-only-from host,...\|none]` | Apply the machine setup that is missing. Running it again changes nothing. | change | the administrator password, in a system dialog or on the terminal, when a step needs root |
 | `bay uninstall` | Remove the machine setup install wrote. | remove | the administrator password, in a system dialog or on the terminal, when a step needs root |
 | `bay brief [--json]` | Print the full usage contract on one screen. | read | nothing |
 | `bay schema [--json]` | Print the Compose extension contract. | read | nothing |
-| `bay skill [print|install]` | Print the agent skill, or write it where agents read skills. | change | nothing |
+| `bay skill [print\|install]` | Print the agent skill, or write it where agents read skills. | change | nothing |
 | `bay mcp [install]` | Serve the commands to an agent as an MCP server on standard input and output, or register it. | change | nothing |
 | `bay help [command]` | Print help for one command, or the command list. | read | nothing |
 | `bay version [--json]` | Print this executable's version, commit, Go version, platform and contract schema version. | read | nothing |
@@ -164,6 +186,7 @@ bay brief --json                          # the contract, schemaVersion 1
 | [Changelog](CHANGELOG.md) | Behavior changes and their verification |
 | [Documentation plan](docs/documentation-plan.md) | Where each kind of information is written |
 | [Peers](docs/spec/peers.md) | Peer link, relay, Linux setup and firewall |
+| [Jobs](docs/spec/jobs.md) | Job services, the queue, schedules, results over a dropped link |
 | [Agent skill](skills/bay/SKILL.md) | What an agent reads; generated by `bay skill print` |
 | [Development](AGENTS.md) | Building, testing and the required checks |
 

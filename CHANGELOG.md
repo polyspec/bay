@@ -5,6 +5,24 @@ the day the change was made.
 
 ## 2026-11-14
 
+### Jobs: a queue that runs one job at a time and keeps the result
+
+A service with `x-bay.job: true` is a job. `bay job add` queues a run; the agent runs one job at a time, oldest first, with the project's other services up around it, and records its exit status, duration, peak memory (Linux, Docker) and output in `~/.bay/jobs/`. `x-bay.schedule` queues it by cron schedule once `bay job schedule` follows the project; `x-bay.timeout` bounds a run (1h by default, 24h at most). `-key` queues once per key, so a caller that repeats `add` after a dropped connection gets one run. A run is a process of its own that outlives the agent: a restarted or updated agent takes it over (`KillMode=process` in `bay-agent.service`, written by `bay install`). An approved peer serves its jobs at `/__bay/jobs`; `bay job list|show|logs|wait -peer <name>` read them, and `wait -peer` tries again across a lost link until its bound. On macOS the agent notifies when a job here or on a peer ends, including one that ended while the link was down. `start` and `restart` refuse a job, and nothing may depend on one. See [Jobs](docs/spec/jobs.md).
+
+Verification: `TestScheduleMatchesLikeCron`, `TestJobServicesAreLeftToTheQueue`, `TestQueueRunsOneJobAtATimeInOrder` and `TestSchedulesAreFollowedOncePerProject` pass. On the Mac (Apple engine) a job exiting 3 was `failed` with exit 3, one at its 8 s limit `failed` with 143, a cancelled one `cancelled`, and queued jobs ran in order. A second `add -key k1` printed the first job's ID and queued nothing; `launchctl kickstart -k` of the agent 15 s into a 40 s job logged `taking over its run`, and the job ended `succeeded` with all 40 lines. On the ODROID, after `bay install` rewrote the unit (`KillMode=process`), `systemctl restart bay-agent` mid-job did the same, and `bay job wait -peer odroid` on the Mac printed the output and `succeeded in 51s, 8 MiB at most`; a schedule of `* * * * *` queued one run a minute, around 600 MiB each. The retry across a lost link was not exercised against a real outage. A notification was not observed on screen.
+
+### `working_dir` is applied
+
+A service's `working_dir` was read and ignored. It is now passed to the engine (`--workdir`). Verification: a job with `working_dir: /tmp` printed `/tmp` from `pwd` on the Mac and on the ODROID.
+
+### A command waits for the agent to catch up with names instead of failing
+
+A scheduled job failed with `the machine setup is missing names in /etc/hosts (mac-hello.test, odroid-hello.test)` while the agent was writing them. The names in `/etc/hosts` and on the proxy network are kept by the agent; a command that finds only those behind waits up to 30 seconds for it, and says so once, before failing.
+
+### Energy-efficient ethernet is left as it is
+
+The part below is withdrawn. A watcher on the Mac recorded its USB LAN adapter (Realtek RTL8153 on USB 2.0) leaving the USB bus at 07:55:32.96 and the ODROID's link going down at 07:55:33, and the adapter gone from 07:58:41 to 08:11:35; the drops start at the Mac's adapter, not at the ODROID's PHY. `install` now removes `bay-link.service` where it is and turns energy-efficient ethernet back on. Verification: on the ODROID `install` removed the unit and `ethtool --show-eee eth0` read `enabled - inactive`; `TestRetiredLinkUnitIsRemovedWhereItIs` passes.
+
 ### Energy-efficient ethernet off on a Linux machine's uplink
 
 The ODROID's link went down and up thirteen times since it started at 00:55, at rest as well as under load, and once stopped passing frames for eight minutes with the link reported up. Its interface (stmmac with an RTL8211F PHY) had energy-efficient ethernet active and had recorded a failed wake from low-power idle (`phy_eee_wakeup_error_n: 1`). `install` on Linux now turns energy-efficient ethernet off on the interface holding the default route, through `bay-link.service`, which applies it again at boot; `check` reads it from `ethtool --show-eee`. The part applies only to an interface whose PHY the kernel drives (`/sys/class/net/<if>/phydev`), so a virtual interface, such as a CI runner's, has none. The link renegotiates once when it is applied.

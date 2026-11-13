@@ -144,6 +144,8 @@ func dispatch(cmd string) error {
 		return images(m, flag.Args()[1:])
 	case "plan":
 		return plan(m, flag.Args()[1:])
+	case "job":
+		return job(m, flag.Args()[1:])
 	case "domain":
 		return domain(m, flag.Args()[1:])
 	case "brief":
