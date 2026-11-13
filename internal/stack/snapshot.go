@@ -54,6 +54,18 @@ type MachineStatus struct {
 	Link    string `json:"link,omitempty"`
 	// Peers are the machines whose domains this one reaches.
 	Peers []Peer `json:"peers,omitempty"`
+	// PeerLoad is each peer's load by fingerprint, when it was read. A
+	// snapshot does not read it, because a peer that does not answer would
+	// hold the snapshot for the wait; the dashboard reads it apart.
+	PeerLoad map[string]PeerLoad `json:"peerLoad,omitempty"`
+}
+
+// PeerLoad is a peer's load as last read, or why it could not be.
+type PeerLoad struct {
+	Stats *MachineStats `json:"stats,omitempty"`
+	Err   string        `json:"error,omitempty"`
+	// Next is when it is read again.
+	Next time.Time `json:"next,omitempty"`
 }
 
 type ProxyStatus struct {
@@ -381,7 +393,7 @@ func (m MachineStatus) ProxyAddrs() []string {
 func groupStatus(m *Machine, g GroupRef, byContainer map[string]ServiceInstance, routed map[string]bool) GroupStatus {
 	out := GroupStatus{Name: g.Name, StackPath: g.StackPath, Domains: g.Domains}
 
-	cfg, err := LoadIn(m, g.StackPath)
+	cfg, err := LoadNamed(m, g.StackPath, g.Name)
 	if err != nil {
 		out.Error = err.Error()
 		for _, in := range byContainer {

@@ -59,6 +59,25 @@ bay status --json   # 현재 머신 상태
 
 <!-- generated: bay brief; run "make docs-generate" -->
 
+### What it is for
+
+- **Run a Compose project as its file says, on Apple container or Docker.** A key the Compose specification defines behaves as it does there, or is rejected by name; nothing is silently ignored.
+- **Give every service a name, a certificate and trust.** <project>-<service>.bay.test, known before up from the file alone; a certificate for that name from this machine's authority; containers that trust the authority.
+- **Serve the domains a project declares over HTTPS.** One proxy per machine, routes from container labels, certificates issued and renewed by the tool.
+- **Reach the names of approved peer machines.** Over the mutually authenticated peer link, and only to machines approved by fingerprint.
+- **Be a dependable step for a person, a script or an agent.** Exit status that says whether the request was done, JSON output where a program reads the result, nothing left behind by an interrupted command, and the same result when run twice.
+- **Apply the machine setup only on request.** install applies what is missing; every other command reads the setup and names install when a part is missing.
+
+### What it does not do
+
+| Not done | Why | Instead |
+| --- | --- | --- |
+| Running or stopping a project on another machine. | A project's files, volumes, state and setup are on the machine that runs it; a remote up would act on paths and setup it cannot see. | Run the command on the machine that holds the project, for example over ssh: ssh host bay -f /path/compose.yaml up. |
+| Publishing a service port or a Unix socket on the host. | Every service is reached by name, so two projects never compete for a host port and a reachable service is always a named, certified one. | Connect to <project>-<service>.bay.test:<port>; a socket in a bind-mounted directory is plain Compose and works where the engine shares the host's kernel. |
+| Waiting without a bound. | A wait with no limit hides a service that never starts; every wait states its bound before it begins. | Give a slow service a longer healthcheck start_period or interval. |
+| Deciding a caller's policy: retries, time limits, which images to fetch. | These belong to the caller's rules; the tool states what it does and offers the switches. | bay pull, up -no-pull, healthcheck keys, exit status. |
+| Changing the machine setup from a project command. | A setup change asks for administrator rights and affects every project; it happens when a person asks for it. | bay install -dry-run, then bay install. |
+
 ```sh
 bay install                               # also writes the skill below
 bay skill install                         # ~/.claude/skills and ~/.agents/skills
@@ -68,18 +87,23 @@ bay brief --json                          # the contract, schemaVersion 1
 
 | Command | Summary | Access | Asks a person for |
 | --- | --- | --- | --- |
-| `bay up` | Start this project's services and register their routes. | change | the administrator password, in a system dialog or on the terminal, when a step needs root |
+| `bay up [-no-pull] [--json]` | Start this project's services and register their routes. | change | the administrator password, in a system dialog or on the terminal, when a step needs root |
 | `bay down` | Remove this project's services and withdraw its routes. | remove | nothing |
 | `bay start [service...]` | Start services. With no name, starts every service in the project. | change | nothing |
 | `bay stop [service...]` | Stop services. The containers remain and can be started again. | change | nothing |
 | `bay restart [service...]` | Stop then start services. | change | nothing |
 | `bay logs [-f] [-n N] <service>` | Print one service's output. | read | nothing |
+| `bay plan [--json]` | Print each service's name, port, domains and certificate paths as up will create them. | read | nothing |
+| `bay exec [-u user] [-w dir] [-e KEY=VALUE] <service> <command...>` | Run a command in a service's running container and exit with its status. | change | nothing |
+| `bay pull [service...]` | Fetch the images of this project's services from their registries. | change | nothing |
+| `bay images [--json] [service...]` | Report whether the local store holds each service's image. Fetches nothing. | read | nothing |
 | `bay domain [add|remove|default] [name]` | List the machine's domains, or change them. | remove | the administrator password, in a system dialog or on the terminal, when a step needs root |
 | `bay status [--json]` | Print the proxy, the DNS server and every registered project. | read | nothing |
 | `bay doctor` | Report what machine setup is missing. Changes nothing. | read | nothing |
-| `bay check` | Report each part of the machine setup and fail when any is missing. Changes nothing. | read | nothing |
+| `bay check [-scope all|run]` | Report each part of the machine setup and fail when any is missing. Changes nothing. | read | nothing |
 | `bay peer [open|close|find|add|remove] [address|name|fingerprint]` | List the machines whose domains this one reaches, or change them. | remove | approval of the other machine's fingerprint, read from standard input; with no one to answer, nothing is approved |
 | `bay sync` | Rewrite the proxy configuration from the containers that are running. | change | nothing |
+| `bay cert client <name> [-out dir] [--json]` | Write a client certificate the machine's authority issues, for mutual TLS from outside the containers. | change | nothing |
 | `bay install [-dry-run] [-only-from host,...|none]` | Apply the machine setup that is missing. Running it again changes nothing. | change | the administrator password, in a system dialog or on the terminal, when a step needs root |
 | `bay uninstall` | Remove the machine setup install wrote. | remove | the administrator password, in a system dialog or on the terminal, when a step needs root |
 | `bay brief [--json]` | Print the full usage contract on one screen. | read | nothing |
@@ -87,6 +111,7 @@ bay brief --json                          # the contract, schemaVersion 1
 | `bay skill [print|install]` | Print the agent skill, or write it where agents read skills. | change | nothing |
 | `bay mcp [install]` | Serve the commands to an agent as an MCP server on standard input and output, or register it. | change | nothing |
 | `bay help [command]` | Print help for one command, or the command list. | read | nothing |
+| `bay version [--json]` | Print this executable's version, commit, Go version, platform and contract schema version. | read | nothing |
 
 | Exit status | Meaning |
 | --- | --- |

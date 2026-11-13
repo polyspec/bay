@@ -130,7 +130,7 @@ macOS의 머신 설정은 `/etc/resolver` 아래의 resolver 항목, 로그인 �
   → bayd                      그 이름의 컨테이너가 실행되는 엔진의
                                       프록시 주소 반환
   → bay-edge:443             Host 헤더로 server 블록 선택
-  → <container>.container.test        해당 엔진의 DNS가 해석
+  → <container>.bay.test        해당 엔진의 DNS가 해석
   → 서비스 컨테이너:<port>
 ```
 
@@ -180,7 +180,7 @@ Apple `container`는 컨테이너를 다시 만든 뒤 약 15초 동안 이전 �
 
 다른 방법으로 다시 만들어진 컨테이너는 아무도 응답하지 않는 주소를 설정에 남긴다.
 그래서 각 라우트는 컨테이너 이름도 함께 지닌다. 연결에 2초를 주고, 주소가 실패한
-라우트는 엔진이 해석하는 `<container>.container.test`로 다시 시도한다. 런타임의
+라우트는 엔진이 해석하는 `<container>.bay.test`로 다시 시도한다. 런타임의
 답이 따라잡으면 라우트는 스스로 회복한다.
 
 모든 응답은 둘 중 무엇이 답했는지를 `X-Bay-Route`에 `address` 또는

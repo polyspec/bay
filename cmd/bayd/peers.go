@@ -23,6 +23,31 @@ func servePeers(ctx context.Context, dir string) {
 	go followPeers(ctx, m)
 	go refreshDomains(ctx, m)
 	go recordRelayAddress(ctx, m)
+	go writeStats(ctx, m)
+}
+
+// writeStats samples this machine's load and writes it where the link serves
+// it to approved peers.
+func writeStats(ctx context.Context, m *stack.Machine) {
+	var s stack.StatsSampler
+	t := time.NewTicker(stack.StatsInterval)
+	defer t.Stop()
+	failed := false
+	for {
+		st, err := s.Sample()
+		if err == nil {
+			err = stack.WriteStats(m.Dir, st)
+		}
+		if err != nil && !failed {
+			log.Printf("load: %v", err)
+		}
+		failed = err != nil
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }
 
 // domainRefresh is how often each approved peer is asked what it holds. The

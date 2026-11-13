@@ -4,6 +4,22 @@
 
 ## 2026-11-14
 
+### 도구의 임무와 하지 않는 일을 명시하고, 하네스 보고를 고친다
+
+`brief`, skill, README, `docs/spec/cli.md`가 bay가 하는 일과 하지 않는 일을 이유와 대안과 함께 적는다(`internal/contract/scope.go`): 다른 기계에서의 up/down, 호스트 포트와 Unix socket 공개, 한도 없는 대기, 호출자의 정책 결정, 프로젝트 명령의 설정 변경은 하지 않는다.
+
+- `up`은 기계 설정을 적용하지 않는다. 빠진 부분과 `bay install`을 알리고 실패한다. 상태 디렉터리의 신뢰 저장소는 계속 갱신한다.
+- 중단된 `up`은 만들거나 지우는 엔진 명령이 끝나기를 기다리고, 새 명령은 거부하고, 만든 것을 지운다. 정리 단계의 목록 조회가 중단에 같이 끝나던 문제를 고쳤다. ODROID에서 `creating its container` 중 SIGTERM 3회 모두 남은 컨테이너가 없었다(전에는 1~2개가 남아 두 번째 `down`에서야 지워짐).
+- 포트가 없는 서비스는 기다리지 않는다. 일회성 작업이 있는 `up`이 20초 뒤 경고 대신 3.6초에 끝났다.
+- 멈춘 컨테이너의 `logs -f`는 출력하고 끝나며, 따라가던 컨테이너가 멈추면 끝난다.
+- 프록시가 이미 멈춰 있던 `down`은 프록시를 다시 띄우지 못해도 성공하고 프록시 상태를 알린다. Compose 검증에 실패한 파일의 `down`은 프로젝트 이름만 읽어 exit 0으로 끝난다.
+- 컨테이너가 멈추면 healthcheck가 1초 안에 실패한다. `retries` 범위 1~100과 한도를 두는 이유를 문서에 적었다.
+- Docker 응답 확인을 `docker version`으로 한다. 부하가 큰 ODROID에서 `docker info`가 20초 걸려 응답 없음으로 보고됐다.
+- 새 기능: `bay exec`(명령 자신의 exit 상태), Compose `tmpfs` 키(Apple container에서는 옵션을 이름으로 거부), `bay plan [--json]`(파일만으로 이름, 포트, 인증서 경로).
+- 대시보드가 승인한 peer의 CPU, 메모리, swap 사용을 5초마다 읽고 다음 읽기까지 남은 시간을 센다. peer 링크의 `/__bay/stats`는 승인한 인증기관이 발급한 클라이언트 인증서에만 답한다. `bayd`는 peer 문서 옆에 부하를 쓰고, 실행 파일이 바뀌면 끝나서 launchd와 systemd가 새 버전을 띄운다. `make install`은 떠 있는 대시보드를 새 빌드로 다시 연다.
+
+검증: `make check` 통과. Mac: `exec`가 `exit 7`에 7을 돌려주고 파이프 입력과 `-e`/`-w`를 적용했다. `tmpfs`가 마운트됐다. `-p other`에서 `plan --json`이 `other-db.bay.test`를 냈다. 클라이언트 인증서를 쓴 `curl`이 ODROID와 Mac의 부하를 읽었고, 인증서 없이는 403이었다. ODROID: `bayd` 교체 후 에이전트가 스스로 재시작했다(systemd 재시작 횟수 1).
+
 ### 에이전트가 최신 skill과 MCP 서버를 찾는다
 
 `bay mcp install`과, `claude` 명령이 있으면 `install`이 실행 파일의 절대 경로로 Claude Code 사용자 설정에 MCP 서버를 등록하며, 등록이 다를 때만 바꾼다. `check`는 없거나 낡은 등록을 알린다. `make install`과 시작하는 MCP 서버가 바이너리와 다른 skill을 다시 쓴다.

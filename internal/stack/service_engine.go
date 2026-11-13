@@ -30,6 +30,8 @@ type serviceEngine struct {
 	// the result of each healthcheck attempt, so a long startup gate reports
 	// its elapsed time.
 	progress func(string)
+	// noPull refuses to fetch a missing image.
+	noPull bool
 }
 
 // say reports one progress line.
@@ -54,7 +56,29 @@ func newServiceEngine(dir string) *serviceEngine {
 	}
 }
 
+// changesState names the engine commands that make or remove a container,
+// network or volume. Ending one of them ends only the client: the engine
+// finishes the change after the client is gone, so a container created that
+// way appears after the cleanup listed the project's containers and is left
+// behind. An interruption therefore refuses such a command before it starts
+// and lets one that started finish.
+var changesState = map[string]bool{
+	"create": true, "rm": true, "start": true, "stop": true, "kill": true,
+	"network": true, "volume": true,
+}
+
 func serviceCommand(ctx context.Context, engine string, args ...string) ([]byte, error) {
+	if changesState[args[0]] {
+		if refused(ctx) {
+			return nil, fmt.Errorf("%s %s: %w", engineBin(engine), args[0], ErrInterrupted)
+		}
+		inflight.Add(1)
+		defer inflight.Done()
+	} else if ctx.Value(cleanupKey{}) == nil {
+		var stop context.CancelFunc
+		ctx, stop = interruptible(ctx)
+		defer stop()
+	}
 	cmd := exec.CommandContext(ctx, engineBin(engine), args...)
 	begun := time.Now()
 	if args[0] == "create" {
@@ -212,6 +236,13 @@ func (e *serviceEngine) preflight(group string, services []*Service) error {
 		return err
 	}
 	for _, s := range services {
+		if e.engine == AppleEngine {
+			for _, t := range s.Tmpfs {
+				if strings.Contains(t, ":") {
+					return fmt.Errorf("service %s: tmpfs %q: Apple container takes a tmpfs path without mount options", s.Name, t)
+				}
+			}
+		}
 		for _, in := range list {
 			if in.Name == s.ContainerName {
 				if err := owns(group, s, in); err != nil {
@@ -228,6 +259,9 @@ func (e *serviceEngine) image(ctx context.Context, reference string) (string, er
 	if err != nil {
 		if !imageMissing(err) {
 			return "", err
+		}
+		if e.noPull {
+			return "", fmt.Errorf("image %s is not in the local store and -no-pull fetches nothing; run \"bay pull\" first", reference)
 		}
 		e.say("pulling %s", reference)
 		if _, err = e.command(ctx, "image", "pull", reference); err != nil {
@@ -296,7 +330,14 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	if err != nil {
 		return err
 	}
-	fingerprint := serviceFingerprint(group, s, digest, trustArguments(e.dir, s))
+	// The name a container is reached at is given when it is created, so a
+	// container named in another domain is created again.
+	if err := ensureServiceCert(e.dir, s); err != nil {
+		return err
+	}
+	identity := append(trustArguments(e.dir, s), certArguments(e.dir, s)...)
+	identity = append(identity, "domain="+BackendDomain)
+	fingerprint := serviceFingerprint(group, s, digest, identity)
 	same := found && in.Labels[LabelConfig] == fingerprint && in.ImageDigest == digest
 	if same && !restart {
 		if s.OneShot {
@@ -558,8 +599,39 @@ func (e *serviceEngine) healthy(s *Service) error {
 		if failures >= h.Retries {
 			return e.failureWithLogOf(fmt.Sprintf("service %s failed its healthcheck after %d attempts", s.Name, failures), s.ContainerName)
 		}
-		if err = sleepContext(ctx, h.Interval); err != nil {
+		stopped, err := e.waitWhileRunning(ctx, s.ContainerName, h.Interval)
+		if stopped {
+			return e.failureWithLogOf(fmt.Sprintf("service %s stopped during healthcheck", s.Name), s.ContainerName)
+		}
+		if err != nil {
 			return e.failureWithLogOf(fmt.Sprintf("service %s healthcheck timed out", s.Name), s.ContainerName)
+		}
+	}
+}
+
+// stateCheck is how often a wait between healthcheck attempts looks at the
+// container, so a container that stops fails the wait at once rather than at
+// the next attempt, an interval later.
+var stateCheck = time.Second
+
+// waitWhileRunning waits for d and reports whether the container stopped
+// before it passed.
+func (e *serviceEngine) waitWhileRunning(ctx context.Context, name string, d time.Duration) (bool, error) {
+	end := time.Now().Add(d)
+	for {
+		left := time.Until(end)
+		if left <= 0 {
+			return false, nil
+		}
+		if err := sleepContext(ctx, min(left, stateCheck)); err != nil {
+			return false, err
+		}
+		in, ok, err := e.lookup(ctx, name)
+		if err != nil {
+			return false, err
+		}
+		if !ok || in.State != "running" {
+			return true, nil
 		}
 	}
 }

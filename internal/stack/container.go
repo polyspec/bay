@@ -3,6 +3,7 @@ package stack
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -222,6 +224,9 @@ func serviceArguments(group string, s *Service, fingerprint string) []string {
 	for _, capability := range s.CapDrop {
 		args = append(args, "--cap-drop", capability)
 	}
+	for _, t := range s.Tmpfs {
+		args = append(args, "--tmpfs", t)
+	}
 	for k, v := range s.Env {
 		args = append(args, "--env", k+"="+v)
 	}
@@ -362,8 +367,21 @@ func StopContainer(name string) error {
 }
 
 // Logs writes a container's output to w. With follow set it returns when the
-// stream ends or the container stops.
+// stream ends or the container stops. A container that is not running has no
+// more output, so following it prints what it wrote and returns: Apple
+// `container logs --follow` keeps waiting on a stopped container.
 func Logs(name string, follow bool, tail int, w io.Writer) error {
+	in, found, err := Lookup(name)
+	if err != nil {
+		return err
+	}
+	if !found {
+		return fmt.Errorf("%s: no such container", name)
+	}
+	engine := in.Engine
+	if follow && in.State != "running" {
+		follow = false
+	}
 	args := []string{"logs"}
 	if follow {
 		args = append(args, "--follow")
@@ -373,10 +391,6 @@ func Logs(name string, follow bool, tail int, w io.Writer) error {
 	}
 	args = append(args, name)
 
-	engine, err := engineOf(name)
-	if err != nil {
-		return err
-	}
 	// Following an output has no end of its own, so only a fixed read is bound.
 	ctx := context.Background()
 	if !follow {
@@ -388,7 +402,52 @@ func Logs(name string, follow bool, tail int, w io.Writer) error {
 	cmd.WaitDelay = time.Second
 	cmd.Stdout = w
 	cmd.Stderr = w
-	return runLogs(cmd, follow)
+	if !follow {
+		return runLogs(cmd, false)
+	}
+	var ended atomic.Bool
+	stop := endWhenStopped(cmd, engine, name, &ended)
+	err = runLogs(cmd, true)
+	stop()
+	if ended.Load() {
+		return nil // the container stopped, which is the end of its output
+	}
+	return err
+}
+
+// stoppedPoll is how often a follower checks that its container still runs.
+var stoppedPoll = time.Second
+
+// endWhenStopped ends a log follower once its container has stopped and the
+// follower has had a moment to print the last output.
+func endWhenStopped(cmd *exec.Cmd, engine, name string, ended *atomic.Bool) func() {
+	done := make(chan struct{})
+	go func() {
+		t := time.NewTicker(stoppedPoll)
+		defer t.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-t.C:
+			}
+			in, found, err := lookupOn(engine, name)
+			if err != nil || (found && in.State == "running") {
+				continue
+			}
+			select {
+			case <-done:
+				return
+			case <-time.After(stoppedPoll):
+			}
+			if cmd.Process != nil {
+				ended.Store(true)
+				_ = cmd.Process.Signal(syscall.SIGTERM)
+			}
+			return
+		}
+	}()
+	return func() { close(done) }
 }
 
 // runLogs runs the log command of a container. A follower is a child of this process and stays in its process group.
@@ -544,4 +603,49 @@ func serviceNetworkOn(engine, named string) string {
 		return DockerNetwork
 	}
 	return named
+}
+
+// Exec runs a command in a service's running container with this process's
+// standard input, output and error, and returns the command's exit status. A
+// terminal on standard input gives the command one too.
+func Exec(name string, command []string, user, workdir string, env []string) (int, error) {
+	in, found, err := Lookup(name)
+	if err != nil {
+		return 0, err
+	}
+	if !found {
+		return 0, fmt.Errorf("%s: no such container; run bay up", name)
+	}
+	if in.State != "running" {
+		return 0, fmt.Errorf("%s is %s; run bay start", name, in.State)
+	}
+	args := []string{"exec", "--interactive"}
+	if info, err := os.Stdin.Stat(); err == nil && info.Mode()&os.ModeCharDevice != 0 {
+		args = append(args, "--tty")
+	}
+	if user != "" {
+		args = append(args, "--user", user)
+	}
+	if workdir != "" {
+		args = append(args, "--workdir", workdir)
+	}
+	for _, kv := range env {
+		args = append(args, "--env", kv)
+	}
+	args = append(append(args, name), command...)
+	cmd := exec.Command(engineBin(in.Engine), args...)
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	// The command's signals are the user's: an interrupt reaches the command
+	// through the engine, and this process waits for it to end.
+	signal.Ignore(syscall.SIGINT)
+	defer signal.Reset(syscall.SIGINT)
+	err = cmd.Run()
+	var exited *exec.ExitError
+	if errors.As(err, &exited) {
+		return exited.ExitCode(), nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	return 0, nil
 }

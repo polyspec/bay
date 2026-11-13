@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"slices"
@@ -375,6 +376,7 @@ func peersView(p *panel, snap stack.Snapshot, busy bool, found []stack.Beacon) {
 			{Text: text.T("Fingerprint"), Kind: "kv",
 				Detail: shortFingerprint(peer.Fingerprint), Mono: true},
 		}}
+		machine.Rows = append(machine.Rows, loadRows(snap.Machine.PeerLoad, peer.Fingerprint)...)
 		if n := len(peer.Domains); n > 0 {
 			machine.Rows = append(machine.Rows, row{Kind: "label",
 				Text: text.P("%d domain", "%d domains", n, n)})
@@ -415,6 +417,49 @@ func peersView(p *panel, snap stack.Snapshot, busy bool, found []stack.Beacon) {
 			"reached by its address.")
 	}
 	p.Sections = append(p.Sections, heard)
+}
+
+// loadRows states a peer's processor, memory and swap use, or why they could
+// not be read. Nothing is shown before the first reading.
+func loadRows(loads map[string]stack.PeerLoad, fingerprint string) []row {
+	load, ok := loads[fingerprint]
+	if !ok {
+		return nil
+	}
+	if load.Err != "" || load.Stats == nil {
+		return []row{{Text: text.T("Load"), Kind: "kv", Detail: text.T("not answering"),
+			Faint: load.Err}}
+	}
+	st := load.Stats
+	rows := []row{
+		{Text: "CPU", Kind: "kv", Mono: true,
+			Detail: text.T("%s of %d cores", fmt.Sprintf("%.0f%%", st.CPU), st.CPUs),
+			Faint:  countdown(load.Next)},
+		{Text: "RAM", Kind: "kv", Mono: true, Detail: usage(st.MemUsed, st.MemTotal)},
+	}
+	if st.SwapTotal > 0 {
+		rows = append(rows, row{Text: "Swap", Kind: "kv", Mono: true, Detail: usage(st.SwapUsed, st.SwapTotal)})
+	}
+	return rows
+}
+
+// countdown states the seconds until the next reading.
+func countdown(next time.Time) string {
+	left := int(math.Ceil(time.Until(next).Seconds()))
+	if left < 1 {
+		return text.T("reading…")
+	}
+	return text.T("next in %ds", left)
+}
+
+// usage states an amount used of a total, in GiB, with the share.
+func usage(used, total uint64) string {
+	if total == 0 {
+		return "-"
+	}
+	const gib = 1 << 30
+	return fmt.Sprintf("%.1f / %.1f GiB (%.0f%%)", float64(used)/gib, float64(total)/gib,
+		float64(used)*100/float64(total))
 }
 
 // shortFingerprint returns what a person compares between two machines.

@@ -23,7 +23,7 @@ func renderWith(t *testing.T, c NginxConfig) string {
 func base() NginxConfig {
 	return NginxConfig{
 		Routes: []Route{{Domain: "web.test", Address: "192.168.64.10:80",
-			Backend: "g-web.container.test:80", Scheme: "http"}},
+			Backend: "g-web.bay.test:80", Scheme: "http"}},
 		Resolver:    "192.168.64.1",
 		DefaultCert: DefaultCertName,
 		Generation:  "gen1",
@@ -67,11 +67,40 @@ func TestThePeerEndpointDoesNotRequireACertificate(t *testing.T) {
 	c.PeerPort = 8443
 	c.PeerAuthorities = "/etc/nginx/peers/authorities.pem"
 	conf := renderWith(t, c)
-	if !strings.Contains(conf, "ssl_verify_client optional_no_ca") {
-		t.Errorf("the endpoint asks for a certificate it cannot check:\n%s", conf)
+	if !strings.Contains(conf, "ssl_verify_client optional;") {
+		t.Errorf("the endpoint requires a certificate:\n%s", conf)
 	}
 	if !strings.Contains(conf, "location = "+PeerPath) {
 		t.Errorf("no peer endpoint:\n%s", conf)
+	}
+	before := c
+	before.PeerAuthorities = ""
+	if !strings.Contains(renderWith(t, before), "ssl_verify_client optional_no_ca") {
+		t.Errorf("without an approved authority the endpoint checks a certificate it cannot")
+	}
+}
+
+// The load is answered only to a client whose certificate an approved
+// authority issued, and not at all before there is one.
+func TestTheLoadIsServedOnlyToApprovedPeers(t *testing.T) {
+	c := base()
+	c.PeerPort = 8443
+	if strings.Contains(renderWith(t, c), StatsPath) {
+		t.Errorf("the load is served with no approved authority")
+	}
+	c.PeerAuthorities = "/etc/nginx/peers/authorities.pem"
+	conf := renderWith(t, c)
+	i := strings.Index(conf, "location = "+StatsPath)
+	if i < 0 {
+		t.Fatalf("no load endpoint:\n%s", conf)
+	}
+	block := conf[i:]
+	block = block[:strings.Index(block, "\n    }\n")]
+	if !strings.Contains(block, "$ssl_client_verify != SUCCESS") || !strings.Contains(block, "return 403") {
+		t.Errorf("the load endpoint does not check the certificate:\n%s", block)
+	}
+	if !strings.Contains(block, "/etc/nginx/conf.d/"+StatsName) {
+		t.Errorf("the load is not read from the configuration directory:\n%s", block)
 	}
 }
 

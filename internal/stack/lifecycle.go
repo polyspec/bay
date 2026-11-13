@@ -1,12 +1,15 @@
 package stack
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 // Runtime performs the operations that change what is running. The command line
@@ -36,6 +39,9 @@ type Runtime struct {
 	Elevate Elevator
 	// Progress, when set, is called with a line describing each step.
 	Progress func(string)
+	// NoPull makes a missing image an error instead of a pull, so a run that
+	// must not fetch anything fails before it creates a container.
+	NoPull bool
 }
 
 // ownsSetup stops an operation that would change a machine setup this state
@@ -59,6 +65,7 @@ func (r *Runtime) ownsSetup() error {
 func (r *Runtime) engine() *serviceEngine {
 	e := newServiceEngine(r.Machine.Dir)
 	e.progress = r.Progress
+	e.noPull = r.NoPull
 	return e
 }
 
@@ -91,7 +98,7 @@ func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
 	if err := r.checkDomainsFree(cfg); err != nil {
 		return SyncResult{}, err
 	}
-	if err := r.EnsureInstalled(); err != nil {
+	if err := r.requireSetup(cfg); err != nil {
 		return SyncResult{}, err
 	}
 	// A service the file no longer declares keeps its container and its route
@@ -115,6 +122,55 @@ func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
 	}
 	r.reportReady(containerNames(cfg.Sorted()))
 	return res, nil
+}
+
+// Pull fetches the image of each selected service, or of every service with no
+// name, from its registry, whether or not the local store holds it. It starts
+// and changes no container.
+func (r *Runtime) Pull(cfg *Config, names []string) error {
+	targets, err := SelectServices(cfg, names)
+	if err != nil {
+		return err
+	}
+	e := r.engine()
+	seen := map[string]bool{}
+	for _, s := range targets {
+		if seen[s.Image] {
+			continue
+		}
+		seen[s.Image] = true
+		e.say("pulling %s", s.Image)
+		if _, err := e.command(context.Background(), "image", "pull", s.Image); err != nil {
+			return fmt.Errorf("pulling %s: %w", s.Image, err)
+		}
+	}
+	return nil
+}
+
+// ImageState says whether the local store holds a service's image.
+type ImageState struct {
+	Service string `json:"service"`
+	Image   string `json:"image"`
+	Present bool   `json:"present"`
+}
+
+// Images reports, for each selected service, or every service with no name,
+// whether the local store holds its image. It fetches nothing.
+func (r *Runtime) Images(cfg *Config, names []string) ([]ImageState, error) {
+	targets, err := SelectServices(cfg, names)
+	if err != nil {
+		return nil, err
+	}
+	e := r.engine()
+	var out []ImageState
+	for _, s := range targets {
+		_, err := e.command(context.Background(), "image", "inspect", s.Image)
+		if err != nil && !imageMissing(err) {
+			return nil, err
+		}
+		out = append(out, ImageState{Service: s.Name, Image: s.Image, Present: err == nil})
+	}
+	return out, nil
 }
 
 // ReadyTimeout bounds how long a command waits for the processes inside the
@@ -183,13 +239,32 @@ func (r *Runtime) Down(group string) (SyncResult, error) {
 	if err := r.ownsSetup(); err != nil {
 		return SyncResult{}, err
 	}
+	served := proxyRuns()
 	if err := r.engine().removeProject(group); err != nil {
 		return SyncResult{}, err
 	}
 	if err := r.Machine.Unregister(group); err != nil {
 		return SyncResult{}, err
 	}
-	return r.sync(nil)
+	res, err := r.sync(nil)
+	if err != nil && !served {
+		// The project's routes are withdrawn whether or not the proxy serves the
+		// other projects again: no proxy served them before this command. What
+		// down was asked to do is done, so the proxy is reported, not failed on.
+		r.say("warning: the proxy was not running and did not start again: %v; run bay sync", err)
+		return res, nil
+	}
+	return res, err
+}
+
+// proxyRuns reports whether a proxy runs on any engine.
+func proxyRuns() bool {
+	for _, engine := range Engines() {
+		if in, found, err := lookupOn(engine, ProxyName); err == nil && found && in.State == "running" {
+			return true
+		}
+	}
+	return false
 }
 
 // StartServices starts the named services and creates any missing container. An
@@ -251,12 +326,13 @@ func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, erro
 	return res, nil
 }
 
-// containerNames returns the long-running services that need TCP readiness and,
-// when routed, a connection from the proxy.
+// containerNames returns the services whose readiness is a connection: the
+// long-running ones that declare a port. A service with no port is not waited
+// for, since nothing would ever connect; one that runs once and exits is done.
 func containerNames(services []*Service) []string {
 	out := make([]string, 0, len(services))
 	for _, s := range services {
-		if !s.OneShot {
+		if !s.OneShot && s.Port > 0 {
 			out = append(out, s.ContainerName)
 		}
 	}
@@ -281,6 +357,34 @@ func (r *Runtime) sync(started []string) (SyncResult, error) {
 		r.say("proxy %s with %d route(s)", res.Action, len(res.Routes))
 	}
 	return res, nil
+}
+
+// requireSetup stops up when a part of the machine setup a project needs is
+// missing. Machine setup is applied only by install, so up names the parts and
+// the command and changes nothing. The store of certificates containers trust
+// is state of this tool, derived from the system's roots and the authority, and
+// is refreshed here so a container is created with the current one.
+func (r *Runtime) requireSetup(cfg *Config) error {
+	if _, err := os.Stat(filepath.Join(r.Machine.Dir, "ca.crt")); err == nil {
+		if err := EnsureTrust(r.Machine.Dir); err != nil {
+			return err
+		}
+	}
+	items, err := r.setupItems(cfg.Domains()...)
+	if err != nil {
+		return err
+	}
+	var missing []string
+	for _, it := range items {
+		if !it.OK {
+			missing = append(missing, it.Name)
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	return fmt.Errorf("the machine setup is missing %s; run bay install, which applies only what is missing (bay install -dry-run lists it)",
+		strings.Join(missing, ", "))
 }
 
 // EnsureInstalled applies the machine setup that is missing and changes
@@ -351,15 +455,16 @@ func (r *Runtime) install(caPath string) (Install, error) {
 		return Install{}, err
 	}
 	return Install{
-		Domains:   domains,
-		Retire:    r.Retire,
-		Addr:      r.Addr,
-		CAPath:    caPath,
-		UntrustCA: r.RetiredCA,
-		Helper:    r.HelperBin,
-		Elevate:   r.Elevate,
-		RelayBin:  r.DNSBin,
-		State:     r.Machine.Dir,
+		Domains:     domains,
+		Retire:      r.Retire,
+		Addr:        r.Addr,
+		CAPath:      caPath,
+		UntrustCA:   r.RetiredCA,
+		Helper:      r.HelperBin,
+		Elevate:     r.Elevate,
+		RelayBin:    r.DNSBin,
+		State:       r.Machine.Dir,
+		AppleDomain: BackendDomain,
 	}, nil
 }
 
@@ -428,7 +533,7 @@ func (r *Runtime) LoadGroup(name string) (*Config, error) {
 	}
 	for _, g := range groups {
 		if g.Name == name {
-			return LoadIn(r.Machine, g.StackPath)
+			return LoadNamed(r.Machine, g.StackPath, g.Name)
 		}
 	}
 	return nil, fmt.Errorf("no registered group named %q", name)
@@ -481,7 +586,7 @@ func WaitRunning(name string, timeout time.Duration) (Instance, error) {
 // When it cannot, the registry entry recorded for that path does, so a project
 // whose file is gone can still be stopped and removed.
 func ProjectNameAt(m *Machine, path string) (string, error) {
-	cfg, loadErr := LoadIn(m, path)
+	cfg, loadErr := LoadNamed(m, path, "")
 	if loadErr == nil {
 		return cfg.Name, nil
 	}
@@ -498,7 +603,36 @@ func ProjectNameAt(m *Machine, path string) (string, error) {
 			return g.Name, nil
 		}
 	}
+	// A file that fails validation still names its project, and down of a
+	// project whose up was refused has nothing to remove and succeeds.
+	if name, ok := declaredName(abs); ok {
+		return name, nil
+	}
 	return "", fmt.Errorf("%w, and no project is registered for %s", loadErr, abs)
+}
+
+// declaredName reads only the project name of a Compose file: its top-level
+// name, or the name of its directory. A name built from variables is not read.
+func declaredName(path string) (string, bool) {
+	if info, err := os.Stat(path); err == nil && info.IsDir() {
+		path = filepath.Join(path, "compose.yaml")
+	}
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return "", false
+	}
+	var head struct {
+		Name string `yaml:"name"`
+	}
+	if yaml.Unmarshal(b, &head) != nil || strings.Contains(head.Name, "$") {
+		return "", false
+	}
+	name := head.Name
+	if name == "" {
+		name = filepath.Base(filepath.Dir(path))
+	}
+	name = strings.ToLower(name)
+	return name, validName(name)
 }
 
 // routed reports whether the proxy routes a domain to a service of cfg.

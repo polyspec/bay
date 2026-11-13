@@ -39,6 +39,9 @@ type Install struct {
 	// setup.
 	RelayBin string
 	State    string
+	// AppleDomain is the domain Apple `container` names containers in; empty
+	// leaves it out of the setup.
+	AppleDomain string
 }
 
 // Elevator runs one command with administrator rights.
@@ -79,6 +82,7 @@ func (in Install) Items() []SetupItem {
 			SetupStep: SetupStep{Text: "register the peer relay " + RelayDaemonPath(), Asks: AsksAdministrator},
 		})
 	}
+	items = append(items, appleDomainItems(in.AppleDomain)...)
 	if in.UntrustCA != "" && CATrusted(in.UntrustCA) {
 		items = append(items, SetupItem{
 			Name:      "trust " + in.UntrustCA,
@@ -106,6 +110,9 @@ func (in Install) relayPending() bool {
 type SetupItem struct {
 	Name string
 	OK   bool
+	// Agent marks a part that tells agents about the tool, which running a
+	// project does not need.
+	Agent bool
 	SetupStep
 }
 
@@ -158,6 +165,9 @@ func (in Install) privilegedSteps() []string {
 	}
 	if in.relayPending() {
 		steps = append(steps, "register the peer relay "+RelayDaemonPath())
+	}
+	if appleDomainRootPending(in.AppleDomain) {
+		steps = append(steps, "create the Apple container DNS domain "+in.AppleDomain)
 	}
 	return steps
 }
@@ -213,9 +223,18 @@ func (in Install) Ensure() error {
 		if in.RelayBin != "" {
 			args = append(args, "-relaybin", in.RelayBin, "-state", in.State)
 		}
+		if in.AppleDomain != "" {
+			args = append(args, "-appledomain", in.AppleDomain)
+		}
 		if err := in.elevate(args...); err != nil {
 			return err
 		}
+	}
+	if err := setAppleDomain(in.AppleDomain); err != nil {
+		return err
+	}
+	if err := restartAppleSystem(in.AppleDomain); err != nil {
+		return err
 	}
 	return in.applyTrust()
 }
@@ -249,6 +268,11 @@ func (in Install) applyAsRoot() error {
 	}
 	if in.relayPending() {
 		if err := installRelayDaemon(in.RelayBin, in.State); err != nil {
+			return err
+		}
+	}
+	if appleDomainRootPending(in.AppleDomain) {
+		if err := createAppleDomain(in.AppleDomain); err != nil {
 			return err
 		}
 	}
@@ -490,8 +514,15 @@ func sudoRun(exe string, args []string) error {
 		return cmd.Run()
 	}
 	if runtime.GOOS != "darwin" {
-		return fmt.Errorf("administrator rights are needed and there is no terminal to ask on; " +
-			"run \"bay install\" from a terminal")
+		// Without a terminal, such as on a CI runner, sudo runs only where it
+		// asks for no password; root itself never comes here.
+		cmd := exec.Command("sudo", append([]string{"-n", "--", exe}, args...)...)
+		cmd.Stdout, cmd.Stderr = os.Stdout, os.Stderr
+		if err := cmd.Run(); err != nil {
+			return fmt.Errorf("administrator rights are needed, there is no terminal to ask on, and sudo -n " +
+				"asks for a password; run \"bay install\" as root or where sudo needs no password")
+		}
+		return nil
 	}
 	fmt.Fprintln(os.Stderr, "no terminal to ask on; macOS asks for an administrator password in a dialog")
 	out, err := exec.Command("osascript", "-e", adminScript(exe, args)).CombinedOutput()

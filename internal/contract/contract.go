@@ -57,6 +57,23 @@ const (
 	asksApproval = "approval of the other machine's fingerprint, read from standard input; with no one to answer, nothing is approved"
 )
 
+// Flag declares one flag given before the command.
+type Flag struct {
+	Name        string `json:"name"`
+	Value       string `json:"value"`
+	Description string `json:"description"`
+}
+
+// GlobalFlags are the flags every command takes before its name.
+func GlobalFlags() []Flag {
+	return []Flag{
+		{"-f", "path", "The Compose file, or a directory to find one in. Default: the working directory."},
+		{"-p", "name", "The project name, instead of the Compose file's name or directory. Two runs of one file under two names " +
+			"do not overlap: their containers, default volume names and registrations are separate, and down -p removes only its own."},
+		{"-state", "dir", "The state directory. Default: ~/.bay."},
+	}
+}
+
 // ExitCode declares what one exit status means.
 type ExitCode struct {
 	Code    int
@@ -76,11 +93,15 @@ func ExitCodes() []ExitCode {
 func Commands() []Command {
 	return []Command{
 		{
-			Name: "up", Args: "",
+			Name: "up", Args: "[-no-pull] [--json]",
 			Summary: "Start this project's services and register their routes.",
 			Effect: "Reuses unchanged owned containers and proven completed initializers; replaces changed configuration or local image digests. " +
 				"Starts dependencies in order, checks declared health, issues certificates and updates the proxy. Delegates new project domains. " +
-				"Removes the containers of services the Compose file no longer declares, stopping a running one first, and withdraws their routes.",
+				"Removes the containers of services the Compose file no longer declares, stopping a running one first, and withdraws their routes. " +
+				"-no-pull fails before creating anything when the local store lacks an image, instead of pulling it. " +
+				"--json prints each service's name, host name, address, port, URLs and certificate paths on standard output, and progress on standard error. " +
+				"On SIGINT or SIGTERM it ends the engine commands that run, removes the containers this up created and leaves the ones that were there before, " +
+				"withdraws the registration of a project that had no container before, keeps volumes, and exits with 128 plus the signal number.",
 			Root:    true,
 			Example: "bay up",
 			Access:  Changes,
@@ -121,6 +142,35 @@ func Commands() []Command {
 			Access:  Reads,
 		},
 		{
+			Name: "plan", Args: "[--json]",
+			Summary: "Print each service's name, port, domains and certificate paths as up will create them.",
+			Example: "bay plan --json",
+			Access:  Reads,
+		},
+		{
+			Name: "exec", Args: "[-u user] [-w dir] [-e KEY=VALUE] <service> <command...>",
+			Summary: "Run a command in a service's running container and exit with its status.",
+			Effect: "Whatever the command does inside the container. Standard input, output and error are the caller's, " +
+				"with a terminal when standard input is one. The exit status is the command's own; a status of 1 with " +
+				"a line starting with bay: on standard error is bay's own failure.",
+			Example: "bay exec db psql -U postgres -c 'select 1'",
+			Access:  Changes,
+		},
+		{
+			Name: "pull", Args: "[service...]",
+			Summary: "Fetch the images of this project's services from their registries.",
+			Effect:  "Pulls each selected service's image, or every service's with no name, whether or not the local store holds it. Creates, starts and changes no container.",
+			Example: "bay pull",
+			Access:  Changes,
+		},
+		{
+			Name: "images", Args: "[--json] [service...]",
+			Summary: "Report whether the local store holds each service's image. Fetches nothing.",
+			Effect:  "Prints present or missing per service and exits 1 when any image is missing.",
+			Example: "bay images --json",
+			Access:  Reads,
+		},
+		{
 			Name: "domain", Args: "[add|remove|default] [name]",
 			Summary: "List the machine's domains, or change them.",
 			Effect: "add writes an /etc/resolver entry for the domain. remove deletes it. " +
@@ -145,11 +195,12 @@ func Commands() []Command {
 			Access:  Reads,
 		},
 		{
-			Name: "check", Args: "",
+			Name: "check", Args: "[-scope all|run]",
 			Summary: "Report each part of the machine setup and fail when any is missing. Changes nothing.",
 			Effect: "Prints one line per part: ok or missing, and for a missing part what " +
 				"\"install\" would do about it. Exits non-zero when any part is missing, " +
-				"so a script can call it before relying on the machine.",
+				"so a script can call it before relying on the machine. -scope run leaves out the parts that only tell agents about the tool " +
+				"(the agent skill and the MCP registration), so a test run can require exactly what running a project needs.",
 			Example: "bay check",
 			Access:  Reads,
 		},
@@ -176,6 +227,14 @@ func Commands() []Command {
 				"then reloads the proxy and waits until it serves the new configuration. " +
 				"Starts, stops and changes no container.",
 			Example: "bay sync",
+			Access:  Changes,
+		},
+		{
+			Name: "cert", Args: "client <name> [-out dir] [--json]",
+			Summary: "Write a client certificate the machine's authority issues, for mutual TLS from outside the containers.",
+			Effect: "Issues a certificate for name, usable as a client, kept in the state directory and reused while more than 30 days remain, " +
+				"and writes cert.pem, key.pem (mode 0600) and ca.pem to the directory -out names, the working directory by default.",
+			Example: "bay cert client tests -out ./var/tls",
 			Access:  Changes,
 		},
 		{
@@ -251,6 +310,12 @@ func Commands() []Command {
 			Access:   Reads,
 			Terminal: true,
 		},
+		{
+			Name: "version", Args: "[--json]",
+			Summary: "Print this executable's version, commit, Go version, platform and contract schema version.",
+			Example: "bay version --json",
+			Access:  Reads,
+		},
 	}
 }
 
@@ -291,6 +356,15 @@ func ServiceKeys() []Key {
 				"NODE_EXTRA_CA_CERTS; for Java a PKCS #12 store is mounted at /etc/bay/truststore.p12 and " +
 				"named by JAVA_TOOL_OPTIONS. A path the service mounts itself and a variable it sets " +
 				"itself are left to the service. false gives the container its image's store only."},
+		{"services.<name>.x-bay.certificate", "boolean", "true",
+			"Whether the container is given a certificate for its own name, issued by this machine's authority for " +
+				"<project>-<service>.bay.test, the container name and the service's domains, usable as a server and as a client. " +
+				"It is mounted read-only at /etc/bay/tls/cert.pem, its key at /etc/bay/tls/key.pem (readable by every user in the container) " +
+				"and the authority at /etc/bay/tls/ca.pem, and reissued at up when 30 days or less remain. Redis takes them as --tls-cert-file, " +
+				"--tls-key-file and --tls-ca-cert-file; MySQL and MariaDB as --ssl-cert, --ssl-key and --ssl-ca. PostgreSQL refuses a key other " +
+				"users can read, so its command first copies the key to a file it owns: sh -c 'install -o postgres -m 600 /etc/bay/tls/key.pem " +
+				"/tmp/key.pem && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/etc/bay/tls/cert.pem -c ssl_key_file=/tmp/key.pem'. " +
+				"A path the service mounts itself is left to the service. false gives no certificate."},
 	}
 }
 
@@ -341,8 +415,16 @@ func ComposeKeys() []Key {
 		{"user", "string", "image default", "Process user, name or uid[:gid]. Values may use project .env and environment interpolation."},
 		{"read_only", "boolean", "false", "Mount the container root filesystem read-only."},
 		{"cap_drop", "list of string", "empty", "Linux capabilities to drop, including ALL."},
+		{"tmpfs", "string or list of string", "empty", "In-memory mounts at absolute paths in the container, for data that must not outlive it. Docker takes mount options after a colon (/run:size=64m); Apple container takes the path alone and an option is rejected."},
 		{"depends_on", "list or mapping", "empty", "Startup dependencies: service_started, service_healthy or service_completed_successfully. Unsupported options and cycles are rejected."},
-		{"healthcheck", "mapping", "empty", "Startup CMD/CMD-SHELL test; interval, timeout, retries, start_period and disable. No continuous background monitoring."},
+		{"healthcheck", "mapping", "empty", "Startup CMD/CMD-SHELL test; interval (default 30s), timeout (30s), retries (default 3, from 1 to 100), start_period (0) and disable. " +
+			"up, start and restart run it, as an exec in the container, right after the service starts and before the services that come after it in dependency order. " +
+			"The first attempt runs at once, not after one interval. An attempt that fails or takes longer than timeout is a failure; " +
+			"a failure while start_period has not passed since the start is not counted. The next attempt follows interval after a failure. " +
+			"The service is healthy at the first attempt that succeeds; it fails after retries counted failures, or when its container stops, " +
+			"or after start_period + retries x (interval + timeout) + 1s, and the command fails with the service's output. " +
+			"The bound is in the file on purpose: a wait with no limit hides a service that never starts; a slow service gets a longer start_period. " +
+			"There is no monitoring after startup."},
 		{"container_name", "string", "<project>-<service>", "Container name."},
 		{"networks", "list or mapping", "the project network", "First entry is used."},
 		{"mem_limit", "string", "runtime default", "Memory limit."},
@@ -379,6 +461,10 @@ func Invariants() []Invariant {
 			"Trusting the certificate authority on macOS uses the user's trust settings."},
 		{"Every service container trusts this machine's authority unless its Compose file sets x-bay.trust: false.",
 			"A program in a container verifies against its image's store, which does not hold the authority that issues the local names."},
+		{"Every service is reached at <project>-<service>.bay.test, by other services and by this machine, on Apple container as on Docker.",
+			"install sets Apple container's DNS domain to bay.test and Docker gives the same name as a network alias."},
+		{"An interrupted up leaves nothing it created.",
+			"On SIGINT or SIGTERM it removes the containers it created and keeps what existed before and every volume."},
 		{"Machine setup is applied only by install, which changes nothing that is in place; check and install -dry-run report it without changing it.",
 			"A setup step done by hand is not checked, repeated or removed by anything."},
 	}

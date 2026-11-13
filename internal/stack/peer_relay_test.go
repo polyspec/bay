@@ -195,7 +195,7 @@ func TestDockerCreateArguments(t *testing.T) {
 	e := &serviceEngine{engine: DockerEngine}
 	args := e.createArguments("app", s, "f")
 	joined := strings.Join(args, " ")
-	if !strings.Contains(joined, "--network-alias app-web.container.test") || !strings.Contains(joined, "--restart unless-stopped") {
+	if !strings.Contains(joined, "--network-alias app-web.bay.test") || !strings.Contains(joined, "--restart unless-stopped") {
 		t.Fatalf("args = %v", args)
 	}
 	if tail := strings.Join(args[len(args)-4:], " "); tail != "nginx nginx -g daemon off;" {

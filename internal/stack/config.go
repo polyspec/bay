@@ -66,6 +66,10 @@ type Service struct {
 	User          string
 	ReadOnly      bool
 	CapDrop       []string
+	// Tmpfs are the in-memory mounts, each a path inside the container, with
+	// mount options after a colon on Docker. Omitted when empty, so the
+	// identity of services without the key does not change.
+	Tmpfs []string `json:",omitempty"`
 	// StopGrace is stop_grace_period in whole seconds. It is nil when the key is
 	// not set, and then a stop sends no --time. It is omitted from the encoded
 	// service when nil, so the configuration identity of services without the
@@ -78,7 +82,11 @@ type Service struct {
 	OneShot     bool
 	// Trust gives the container the certificates this machine trusts (see
 	// trust_bundle.go). It is on unless x-bay.trust is false.
-	Trust              bool
+	Trust bool
+	// Certificate gives the container a server and client certificate for its
+	// own name (see service_cert.go). It is on unless x-bay.certificate is
+	// false.
+	Certificate        bool
 	NamedVolumes       []*Volume
 	dependencyIdentity map[string]string
 
@@ -109,8 +117,9 @@ type projectSettings struct {
 // serviceSettings holds the keys this tool reads from a service's
 // x-bay mapping.
 type serviceSettings struct {
-	Domains yaml.Node `yaml:"domains"`
-	Trust   *bool     `yaml:"trust"`
+	Domains     yaml.Node `yaml:"domains"`
+	Trust       *bool     `yaml:"trust"`
+	Certificate *bool     `yaml:"certificate"`
 }
 
 type composeService struct {
@@ -129,6 +138,7 @@ type composeService struct {
 	User          string           `yaml:"user"`
 	ReadOnly      bool             `yaml:"read_only"`
 	CapDrop       []string         `yaml:"cap_drop"`
+	Tmpfs         yaml.Node        `yaml:"tmpfs"`
 	StopGrace     *string          `yaml:"stop_grace_period"`
 	StopSignal    *string          `yaml:"stop_signal"`
 	DependsOn     yaml.Node        `yaml:"depends_on"`
@@ -161,21 +171,29 @@ func FindComposeFile(path string) (string, error) {
 
 // Load reads a Compose file and applies the built-in default domain. Use
 // LoadIn to apply a machine's default domain instead.
-func Load(path string) (*Config, error) { return load(path, DefaultDomain) }
+func Load(path string) (*Config, error) { return load(path, DefaultDomain, "") }
 
 // LoadIn reads a Compose file, inheriting the machine's default domain when the
 // file does not name one.
 func LoadIn(m *Machine, path string) (*Config, error) {
+	return LoadNamed(m, path, "")
+}
+
+// LoadNamed reads a Compose file as LoadIn does, and names the project name
+// instead of the file's name or directory when name is not empty. Two runs of
+// one file under two names are two projects: their containers, default volume
+// names and registrations do not overlap.
+func LoadNamed(m *Machine, path, name string) (*Config, error) {
 	fallback := DefaultDomain
 	if m != nil {
 		if s, err := m.Settings(); err == nil {
 			fallback = s.Domain
 		}
 	}
-	return load(path, fallback)
+	return load(path, fallback, name)
 }
 
-func load(path, fallback string) (*Config, error) {
+func load(path, fallback, name string) (*Config, error) {
 	path, err := FindComposeFile(path)
 	if err != nil {
 		return nil, err
@@ -205,6 +223,9 @@ func load(path, fallback string) (*Config, error) {
 		return nil, fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
 	cfg := &Config{Name: file.Name, path: abs}
+	if name != "" {
+		cfg.Name = name
+	}
 	if file.Bay != nil {
 		cfg.Domain = file.Bay.Domain
 		cfg.DomainPinned = cfg.Domain != ""
@@ -290,7 +311,7 @@ func (c *Config) build(file *composeFile) error {
 }
 
 func (c *Config) service(name string, cs *composeService, network string) (*Service, error) {
-	s := &Service{Name: strings.ToLower(name), Network: network, Trust: true}
+	s := &Service{Name: strings.ToLower(name), Network: network, Trust: true, Certificate: true}
 	if !validName(s.Name) {
 		return nil, fmt.Errorf("service name %q must be letters, digits, - or _", name)
 	}
@@ -307,7 +328,11 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 	s.Volumes = cs.Volumes
 	s.Memory = cs.MemLimit
 	s.User, s.ReadOnly, s.CapDrop = cs.User, cs.ReadOnly, cs.CapDrop
-	var err error
+	tmpfs, err := decodeTmpfs(cs.Tmpfs)
+	if err != nil {
+		return nil, fmt.Errorf("service %q: %w", name, err)
+	}
+	s.Tmpfs = tmpfs
 	if cs.StopGrace != nil {
 		seconds, err := stopGraceSeconds(*cs.StopGrace)
 		if err != nil {
@@ -350,6 +375,9 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 		}
 		if cs.Bay.Trust != nil {
 			s.Trust = *cs.Bay.Trust
+		}
+		if cs.Bay.Certificate != nil {
+			s.Certificate = *cs.Bay.Certificate
 		}
 	}
 	// A domain is forwarded to a port, and a port is never assumed.
@@ -578,4 +606,28 @@ func (v *mapOrList) UnmarshalYAML(node *yaml.Node) error {
 	}
 	*v = out
 	return nil
+}
+
+// decodeTmpfs reads the Compose tmpfs key: one path or a list of them, each
+// absolute, optionally followed by a colon and mount options.
+func decodeTmpfs(node yaml.Node) ([]string, error) {
+	var list []string
+	switch node.Kind {
+	case 0:
+		return nil, nil
+	case yaml.ScalarNode:
+		list = []string{node.Value}
+	case yaml.SequenceNode:
+		if err := node.Decode(&list); err != nil {
+			return nil, fmt.Errorf("tmpfs: %w", err)
+		}
+	default:
+		return nil, fmt.Errorf("tmpfs must be a path or a list of paths")
+	}
+	for _, t := range list {
+		if !strings.HasPrefix(t, "/") {
+			return nil, fmt.Errorf("tmpfs %q must be an absolute path in the container", t)
+		}
+	}
+	return list, nil
 }

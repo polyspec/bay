@@ -20,7 +20,7 @@ func route() Route {
 	return Route{
 		Domain:  "web.test",
 		Address: "192.168.64.10:80",
-		Backend: "g-web.container.test:80",
+		Backend: "g-web.bay.test:80",
 		Scheme:  "http",
 	}
 }
@@ -53,7 +53,7 @@ func TestARouteIsSentToTheKnownAddress(t *testing.T) {
 // to when the address stops answering.
 func TestARouteFallsBackToTheName(t *testing.T) {
 	conf := render(t, route())
-	if !strings.Contains(conf, `set $byname "http://g-web.container.test:80"`) {
+	if !strings.Contains(conf, `set $byname "http://g-web.bay.test:80"`) {
 		t.Errorf("the route has no name to fall back to:\n%s", conf)
 	}
 	if !strings.Contains(conf, "error_page 502 504 = @byname") {
@@ -69,7 +69,7 @@ func TestARouteWithoutAnAddressUsesTheName(t *testing.T) {
 	r := route()
 	r.Address = ""
 	conf := render(t, r)
-	if !strings.Contains(conf, `set $backend "http://g-web.container.test:80"`) {
+	if !strings.Contains(conf, `set $backend "http://g-web.bay.test:80"`) {
 		t.Errorf("a route with no address does not use the name:\n%s", conf)
 	}
 	if strings.Contains(conf, "@byname") {

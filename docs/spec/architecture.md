@@ -142,7 +142,7 @@ browser
   → bayd                      returns the address of the proxy for the
                                       engine that name's container runs on
   → bay-edge:443             selects a server block by Host header
-  → <container>.container.test        resolved by that engine's DNS
+  → <container>.bay.test        resolved by that engine's DNS
   → service container:<port>
 ```
 
@@ -195,7 +195,7 @@ and does not depend on DNS for a service that was just started.
 A container recreated by other means leaves the configuration holding an address
 nothing answers on. Each route therefore carries the container's name as well: a
 connection is given two seconds, and a route whose address fails is retried
-against `<container>.container.test`, which the runtime resolves. The route
+against `<container>.bay.test`, which the runtime resolves. The route
 recovers on its own once the runtime's answer catches up.
 
 Every response says which of the two answered, in `X-Bay-Route`:

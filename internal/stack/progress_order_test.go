@@ -3,6 +3,8 @@ package stack
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync/atomic"
 	"strings"
 	"testing"
 	"time"
@@ -104,5 +106,38 @@ func TestTheHealthcheckWaitStatesItsBound(t *testing.T) {
 	}
 	if !strings.Contains(joined, "up to ") {
 		t.Errorf("the wait does not say how long it will wait:\n%s", joined)
+	}
+}
+
+// A container that stops between two attempts fails the healthcheck at once,
+// not an interval later at the next attempt.
+func TestAContainerThatStopsFailsTheHealthcheckAtOnce(t *testing.T) {
+	defer func(d time.Duration) { stateCheck = d }(stateCheck)
+	stateCheck = 10 * time.Millisecond
+	var lists atomic.Int32
+	e := &serviceEngine{dir: t.TempDir(), timeout: time.Second, engine: AppleEngine}
+	e.command = func(ctx context.Context, args ...string) ([]byte, error) {
+		switch args[0] {
+		case "ls":
+			state := "running"
+			if lists.Add(1) > 2 {
+				state = "stopped"
+			}
+			return []byte(`[{"configuration":{"id":"p-db"},"status":{"state":"` + state + `"}}]`), nil
+		case "exec":
+			return nil, fmt.Errorf("not ready")
+		}
+		return nil, nil
+	}
+	svc := &Service{Name: "db", ContainerName: "p-db", Healthcheck: &Healthcheck{
+		Test: []string{"CMD", "false"}, Interval: time.Minute, Timeout: time.Second, Retries: 5,
+	}}
+	begun := time.Now()
+	err := e.healthy(svc)
+	if err == nil || !strings.Contains(err.Error(), "stopped during healthcheck") {
+		t.Fatalf("err = %v, want a stop during the healthcheck", err)
+	}
+	if took := time.Since(begun); took > 5*time.Second {
+		t.Fatalf("the stop was noticed after %s, not at once", took)
 	}
 }

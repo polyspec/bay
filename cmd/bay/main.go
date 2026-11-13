@@ -16,9 +16,13 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+	"sync/atomic"
+	"syscall"
 	"time"
 
 	"github.com/polyspec/bay/internal/contract"
@@ -26,10 +30,11 @@ import (
 )
 
 var (
-	file   = flag.String("f", ".", "Compose file, or a directory to find one in")
-	dir    = flag.String("state", defaultState(), "directory holding the CA, certificates and machine state")
-	addr   = flag.String("addr", stack.DefaultDNSAddr, "address bayd listens on")
-	dnsBin = flag.String("dnsbin", "", "path to the bayd binary (default: next to this one)")
+	file    = flag.String("f", ".", "Compose file, or a directory to find one in")
+	project = flag.String("p", "", "project name, instead of the Compose file's name or directory; two runs of one file under two names do not overlap")
+	dir     = flag.String("state", defaultState(), "directory holding the CA, certificates and machine state")
+	addr    = flag.String("addr", stack.DefaultDNSAddr, "address bayd listens on")
+	dnsBin  = flag.String("dnsbin", "", "path to the bayd binary (default: next to this one)")
 
 	// Set when this binary re-runs itself as root; not part of the user interface.
 	privApply   = flag.Bool("privileged-apply", false, "internal: apply the privileged setup steps")
@@ -39,6 +44,7 @@ var (
 	privCA      = flag.String("ca", "", "internal: CA certificate for the privileged steps")
 	privUntrust = flag.String("untrust", "", "internal: retired CA certificate to stop trusting")
 	privRelay   = flag.String("relaybin", "", "internal: bayd binary the relay daemon runs")
+	privApple   = flag.String("appledomain", "", "internal: the Apple container DNS domain to create")
 	privNoRelay = flag.Bool("privileged-remove-relay", false, "internal: remove the relay daemon")
 )
 
@@ -60,6 +66,10 @@ func main() {
 		os.Exit(2)
 	}
 	if err := dispatch(cmd); err != nil {
+		var status exitStatus
+		if errors.As(err, &status) {
+			os.Exit(int(status))
+		}
 		fmt.Fprintf(os.Stderr, "bay: %v\n", err)
 		var usage usageError
 		if errors.As(err, &usage) {
@@ -102,26 +112,38 @@ func privileged() error {
 	}
 	return stack.Install{Domains: domains, Retire: retire, Addr: *addr,
 		CAPath: *privCA, UntrustCA: *privUntrust,
-		RelayBin: *privRelay, State: *dir}.Apply()
+		RelayBin: *privRelay, State: *dir, AppleDomain: *privApple}.Apply()
 }
 
 func dispatch(cmd string) error {
 	m := stack.NewMachine(*dir)
 	switch cmd {
 	case "up":
-		return up(m)
+		return up(m, flag.Args()[1:])
+	case "pull":
+		return pull(m, flag.Args()[1:])
+	case "cert":
+		return cert(m, flag.Args()[1:])
+	case "version":
+		return version(flag.Args()[1:])
 	case "down":
 		return down(m)
 	case "start", "stop", "restart":
 		return serviceAction(m, cmd, flag.Args()[1:])
 	case "logs":
 		return logs(m, flag.Args()[1:])
+	case "exec":
+		return execIn(m, flag.Args()[1:])
 	case "status":
 		return status(m, flag.Args()[1:])
 	case "doctor":
 		return doctor(m)
 	case "check":
-		return check(m)
+		return check(m, flag.Args()[1:])
+	case "images":
+		return images(m, flag.Args()[1:])
+	case "plan":
+		return plan(m, flag.Args()[1:])
 	case "domain":
 		return domain(m, flag.Args()[1:])
 	case "brief":
@@ -168,8 +190,14 @@ func newRuntime(m *stack.Machine) (*stack.Runtime, error) {
 	}, nil
 }
 
-func up(m *stack.Machine) error {
-	cfg, err := stack.LoadIn(m, *file)
+func up(m *stack.Machine, args []string) error {
+	fs := flag.NewFlagSet("up", flag.ContinueOnError)
+	noPull := fs.Bool("no-pull", false, "fail instead of pulling an image the local store does not hold")
+	asJSON := fs.Bool("json", false, "print the services as JSON on standard output; progress goes to standard error")
+	if err := fs.Parse(args); err != nil {
+		return usageError{err.Error()}
+	}
+	cfg, err := loadProject(m)
 	if err != nil {
 		return err
 	}
@@ -177,8 +205,24 @@ func up(m *stack.Machine) error {
 	if err != nil {
 		return err
 	}
-	if _, err := rt.Up(cfg); err != nil {
+	rt.NoPull = *noPull
+	if *asJSON {
+		rt.Progress = func(line string) { fmt.Fprintln(os.Stderr, line) }
+	}
+	stop := cleanupOnSignal(rt, cfg)
+	_, err = rt.Up(cfg)
+	stop()
+	if err != nil {
 		return err
+	}
+	if *asJSON {
+		report, err := stack.ReportProject(m, *addr, cfg)
+		if err != nil {
+			return err
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(report)
 	}
 	fmt.Println()
 	for _, s := range cfg.Sorted() {
@@ -189,10 +233,23 @@ func up(m *stack.Machine) error {
 	return nil
 }
 
+// pull fetches the images of the selected services.
+func pull(m *stack.Machine, names []string) error {
+	cfg, err := loadProject(m)
+	if err != nil {
+		return err
+	}
+	rt, err := newRuntime(m)
+	if err != nil {
+		return err
+	}
+	return rt.Pull(cfg, names)
+}
+
 func down(m *stack.Machine) error {
 	// What to remove is read from the containers, so only the project's name is
 	// needed, and it is found even when the file is gone.
-	name, err := stack.ProjectNameAt(m, *file)
+	name, err := projectName(m)
 	if err != nil {
 		return err
 	}
@@ -214,14 +271,14 @@ func serviceAction(m *stack.Machine, action string, names []string) error {
 	// Stopping is read from the containers and needs only the project's name;
 	// starting needs the file, because the file says what to start.
 	if action == "stop" {
-		name, err := stack.ProjectNameAt(m, *file)
+		name, err := projectName(m)
 		if err != nil {
 			return err
 		}
 		_, err = rt.StopServices(name, names)
 		return err
 	}
-	cfg, err := stack.LoadIn(m, *file)
+	cfg, err := loadProject(m)
 	if err != nil {
 		return err
 	}
@@ -242,7 +299,7 @@ func logs(m *stack.Machine, args []string) error {
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
-	cfg, err := stack.LoadIn(m, *file)
+	cfg, err := loadProject(m)
 	if err != nil {
 		return err
 	}
@@ -254,6 +311,49 @@ func logs(m *stack.Machine, args []string) error {
 		return fmt.Errorf("logs needs exactly one service; this group has %d", len(targets))
 	}
 	return stack.Logs(targets[0].ContainerName, *follow, *tail, os.Stdout)
+}
+
+// exitStatus is the exit status of a command bay ran for the caller, which bay
+// exits with unchanged.
+type exitStatus int
+
+func (s exitStatus) Error() string { return fmt.Sprintf("exit status %d", int(s)) }
+
+// listFlag collects a flag given more than once.
+type listFlag []string
+
+func (l *listFlag) String() string     { return strings.Join(*l, ",") }
+func (l *listFlag) Set(v string) error { *l = append(*l, v); return nil }
+
+// execIn runs a command in a service's container: bay exec <service> <command...>.
+func execIn(m *stack.Machine, args []string) error {
+	fs := flag.NewFlagSet("exec", flag.ContinueOnError)
+	user := fs.String("u", "", "run as this user (name or uid[:gid])")
+	workdir := fs.String("w", "", "run in this directory inside the container")
+	var env listFlag
+	fs.Var(&env, "e", "set an environment variable, KEY=VALUE; repeatable")
+	if err := fs.Parse(args); err != nil {
+		return usageError{err.Error()}
+	}
+	if fs.NArg() < 2 {
+		return usageError{"exec needs a service and a command: bay exec <service> <command...>"}
+	}
+	cfg, err := loadProject(m)
+	if err != nil {
+		return err
+	}
+	targets, err := stack.SelectServices(cfg, fs.Args()[:1])
+	if err != nil {
+		return err
+	}
+	code, err := stack.Exec(targets[0].ContainerName, fs.Args()[1:], *user, *workdir, env)
+	if err != nil {
+		return err
+	}
+	if code != 0 {
+		return exitStatus(code)
+	}
+	return nil
 }
 
 // domain lists or changes the machine's domains. A domain is delegated once for
@@ -674,7 +774,7 @@ func install(m *stack.Machine, args []string) error {
 			}
 		}
 	}
-	return check(m)
+	return check(m, nil)
 }
 
 func describeHosts(hosts []string) string {
@@ -686,10 +786,25 @@ func describeHosts(hosts []string) string {
 
 // check prints every part of the machine setup and whether it is in place, and
 // fails when any is not. It changes nothing.
-func check(m *stack.Machine) error {
-	items, err := queryRuntime(m).SetupItems()
+func check(m *stack.Machine, args []string) error {
+	fs := flag.NewFlagSet("check", flag.ContinueOnError)
+	scope := fs.String("scope", "all", "all: every part; run: only the parts running a project needs, without the agent skill and MCP registration")
+	if err := fs.Parse(args); err != nil {
+		return usageError{err.Error()}
+	}
+	if *scope != "all" && *scope != "run" {
+		return usageError{fmt.Sprintf("unknown scope %q; use all or run", *scope)}
+	}
+	all, err := queryRuntime(m).SetupItems()
 	if err != nil {
 		return err
+	}
+	var items []stack.SetupItem
+	for _, it := range all {
+		if *scope == "run" && it.Agent {
+			continue
+		}
+		items = append(items, it)
 	}
 	missing := 0
 	for _, it := range items {
@@ -888,7 +1003,7 @@ func doctor(m *stack.Machine) error {
 	// Include the project in the working directory even before it is
 	// registered, so the report covers the next up.
 	var extra []string
-	if cfg, err := stack.LoadIn(m, *file); err == nil {
+	if cfg, err := loadProject(m); err == nil {
 		extra = cfg.Domains()
 		domains = union(domains, extra)
 		fmt.Printf("group     %s  (%s)\n", cfg.Name, cfg.Path())
@@ -1028,7 +1143,7 @@ func defaultState() string {
 }
 
 func usage() {
-	fmt.Fprint(os.Stderr, `usage: bay [-f compose.yaml] [-state dir] [-addr host:port] <command>
+	fmt.Fprint(os.Stderr, `usage: bay [-f compose.yaml] [-p name] [-state dir] [-addr host:port] <command>
 
 commands:
 `)
@@ -1040,4 +1155,179 @@ file contract.
 
 `)
 	flag.PrintDefaults()
+}
+
+// loadProject reads the selected Compose file under the name -p gives, if any.
+func loadProject(m *stack.Machine) (*stack.Config, error) {
+	return stack.LoadNamed(m, *file, *project)
+}
+
+// projectName is the selected project's name: the one -p gives, or the one its
+// Compose file or registration has.
+func projectName(m *stack.Machine) (string, error) {
+	if *project != "" {
+		return *project, nil
+	}
+	return stack.ProjectNameAt(m, *file)
+}
+
+// cleanupOnSignal makes an interrupted up leave nothing it made: on SIGINT or
+// SIGTERM the engine commands that run are ended, the containers this up
+// created are removed, and the process exits with 128 plus the signal. The
+// containers that were there before are left as they were. A second signal
+// during the cleanup exits at once. The returned function stops watching.
+func cleanupOnSignal(rt *stack.Runtime, cfg *stack.Config) func() {
+	before, err := rt.ProjectContainers(cfg.Name)
+	if err != nil {
+		before = nil
+	}
+	signals := make(chan os.Signal, 2)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
+	done := make(chan struct{})
+	var got atomic.Bool
+	go func() {
+		var sig os.Signal
+		select {
+		case sig = <-signals:
+		case <-done:
+			return
+		}
+		got.Store(true)
+		stack.Interrupt()
+		go func() {
+			<-signals
+			os.Exit(exitFor(sig))
+		}()
+		// A container being created when the signal came is created by the
+		// engine whatever the client does, so the cleanup waits for it and
+		// lists it. The interrupted up stays refused while the cleanup runs.
+		if !stack.Settle(2 * time.Minute) {
+			fmt.Fprintf(os.Stderr, "bay: %s: an engine command did not finish in 2m; cleaning up what exists\n", sig)
+		}
+		fmt.Fprintf(os.Stderr, "bay: %s: removing the containers this up created\n", sig)
+		if err := rt.RemoveCreatedSince(cfg.Name, before); err != nil {
+			fmt.Fprintf(os.Stderr, "bay: cleanup: %v\n", err)
+		}
+		os.Exit(exitFor(sig))
+	}()
+	return func() {
+		signal.Stop(signals)
+		select {
+		case <-done:
+		default:
+			close(done)
+		}
+		// A signal that arrived is being cleaned up; the cleanup exits.
+		if got.Load() {
+			select {}
+		}
+	}
+}
+
+func exitFor(sig os.Signal) int {
+	if s, ok := sig.(syscall.Signal); ok {
+		return 128 + int(s)
+	}
+	return 1
+}
+
+// cert writes a client certificate: bay cert client <name> [-out dir] [--json].
+func cert(m *stack.Machine, args []string) error {
+	if len(args) < 2 || args[0] != "client" {
+		return usageError{"usage: bay cert client <name> [-out dir] [--json]"}
+	}
+	fs := flag.NewFlagSet("cert", flag.ContinueOnError)
+	out := fs.String("out", ".", "directory to write cert.pem, key.pem and ca.pem to")
+	asJSON := fs.Bool("json", false, "print the paths as JSON")
+	if err := fs.Parse(args[2:]); err != nil {
+		return usageError{err.Error()}
+	}
+	dir, err := filepath.Abs(*out)
+	if err != nil {
+		return err
+	}
+	c, err := stack.IssueClient(m.Dir, args[1], dir)
+	if err != nil {
+		return err
+	}
+	if *asJSON {
+		return json.NewEncoder(os.Stdout).Encode(c)
+	}
+	fmt.Printf("cert  %s\nkey   %s\nca    %s\n", c.Cert, c.Key, c.CA)
+	return nil
+}
+
+// images says whether the local store holds each service's image, and fails
+// when one is missing. It fetches nothing.
+func images(m *stack.Machine, args []string) error {
+	fs := flag.NewFlagSet("images", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print the result as JSON")
+	if err := fs.Parse(args); err != nil {
+		return usageError{err.Error()}
+	}
+	cfg, err := loadProject(m)
+	if err != nil {
+		return err
+	}
+	list, err := queryRuntime(m).Images(cfg, fs.Args())
+	if err != nil {
+		return err
+	}
+	missing := 0
+	for _, it := range list {
+		if !it.Present {
+			missing++
+		}
+	}
+	if *asJSON {
+		if err := json.NewEncoder(os.Stdout).Encode(list); err != nil {
+			return err
+		}
+	} else {
+		for _, it := range list {
+			state := "present"
+			if !it.Present {
+				state = "missing"
+			}
+			fmt.Printf("%-8s %-20s %s\n", state, it.Service, it.Image)
+		}
+	}
+	if missing > 0 {
+		return fmt.Errorf("%d image(s) are not in the local store; \"bay pull\" fetches them", missing)
+	}
+	return nil
+}
+
+// plan prints each service as up will create it: its name, port, domains and
+// certificate paths. It reads the Compose file only.
+func plan(m *stack.Machine, args []string) error {
+	fs := flag.NewFlagSet("plan", flag.ContinueOnError)
+	asJSON := fs.Bool("json", false, "print the plan as JSON")
+	if err := fs.Parse(args); err != nil {
+		return usageError{err.Error()}
+	}
+	cfg, err := loadProject(m)
+	if err != nil {
+		return err
+	}
+	p := stack.PlanProject(m, cfg)
+	if *asJSON {
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(p)
+	}
+	for _, s := range p.Services {
+		addr := s.Host
+		if s.Port > 0 {
+			addr += ":" + strconv.Itoa(s.Port)
+		}
+		fmt.Printf("%-20s %s\n", s.Name, addr)
+		for _, d := range s.Domains {
+			fmt.Printf("%-20s https://%s/\n", "", d)
+		}
+		if c := s.Certificate; c != nil {
+			fmt.Printf("%-20s certificate %s (in the container %s)\n", "", c.Cert, c.ContainerCert)
+		}
+	}
+	return nil
 }

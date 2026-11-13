@@ -29,6 +29,7 @@ readable by other Compose tools.
 | --- | --- | --- | --- |
 | `services.<name>.x-bay.domains` | list of string | none: the service is internal | Domains the proxy routes to this service, each under one of the project's domains. Each domain gets its own certificate and route. A service without it runs and other services reach it by name, but the proxy does not route to it and issues it no certificate. |
 | `services.<name>.x-bay.trust` | boolean | true | Whether the container trusts the certificates this machine trusts: the system's public roots and this machine's authority, which issues the certificates of its projects and of its peers' names. They are mounted read-only over /etc/ssl/certs/ca-certificates.crt, /etc/pki/tls/certs/ca-bundle.crt and /etc/ssl/cert.pem and named by SSL_CERT_FILE, CURL_CA_BUNDLE, REQUESTS_CA_BUNDLE and NODE_EXTRA_CA_CERTS; for Java a PKCS #12 store is mounted at /etc/bay/truststore.p12 and named by JAVA_TOOL_OPTIONS. A path the service mounts itself and a variable it sets itself are left to the service. false gives the container its image's store only. |
+| `services.<name>.x-bay.certificate` | boolean | true | Whether the container is given a certificate for its own name, issued by this machine's authority for <project>-<service>.bay.test, the container name and the service's domains, usable as a server and as a client. It is mounted read-only at /etc/bay/tls/cert.pem, its key at /etc/bay/tls/key.pem (readable by every user in the container) and the authority at /etc/bay/tls/ca.pem, and reissued at up when 30 days or less remain. Redis takes them as --tls-cert-file, --tls-key-file and --tls-ca-cert-file; MySQL and MariaDB as --ssl-cert, --ssl-key and --ssl-ca. PostgreSQL refuses a key other users can read, so its command first copies the key to a file it owns: sh -c 'install -o postgres -m 600 /etc/bay/tls/key.pem /tmp/key.pem && exec docker-entrypoint.sh postgres -c ssl=on -c ssl_cert_file=/etc/bay/tls/cert.pem -c ssl_key_file=/tmp/key.pem'. A path the service mounts itself is left to the service. false gives no certificate. |
 
 ## Service labels
 
@@ -58,8 +59,9 @@ First match wins.
 | `user` | string | image default | Process user, name or uid[:gid]. Values may use project .env and environment interpolation. |
 | `read_only` | boolean | false | Mount the container root filesystem read-only. |
 | `cap_drop` | list of string | empty | Linux capabilities to drop, including ALL. |
+| `tmpfs` | string or list of string | empty | In-memory mounts at absolute paths in the container, for data that must not outlive it. Docker takes mount options after a colon (/run:size=64m); Apple container takes the path alone and an option is rejected. |
 | `depends_on` | list or mapping | empty | Startup dependencies: service_started, service_healthy or service_completed_successfully. Unsupported options and cycles are rejected. |
-| `healthcheck` | mapping | empty | Startup CMD/CMD-SHELL test; interval, timeout, retries, start_period and disable. No continuous background monitoring. |
+| `healthcheck` | mapping | empty | Startup CMD/CMD-SHELL test; interval (default 30s), timeout (30s), retries (default 3, from 1 to 100), start_period (0) and disable. up, start and restart run it, as an exec in the container, right after the service starts and before the services that come after it in dependency order. The first attempt runs at once, not after one interval. An attempt that fails or takes longer than timeout is a failure; a failure while start_period has not passed since the start is not counted. The next attempt follows interval after a failure. The service is healthy at the first attempt that succeeds; it fails after retries counted failures, or when its container stops, or after start_period + retries x (interval + timeout) + 1s, and the command fails with the service's output. The bound is in the file on purpose: a wait with no limit hides a service that never starts; a slow service gets a longer start_period. There is no monitoring after startup. |
 | `container_name` | string | <project>-<service> | Container name. |
 | `networks` | list or mapping | the project network | First entry is used. |
 | `mem_limit` | string | runtime default | Memory limit. |
@@ -80,7 +82,7 @@ services:
     image: node:26-slim
     ports: ["3000"]          # the container port; no host port is published
     environment:
-      DATABASE_URL: postgres://shop-db.container.test:5432/app
+      DATABASE_URL: postgres://shop-db.bay.test:5432/app
     volumes:
       - ./src:/app/src
     command: ["npm", "run", "dev"]
@@ -102,7 +104,7 @@ services:
     expose: ["5432"]
     environment:
       POSTGRES_PASSWORD: dev
-    # no domains: internal, reached at shop-db.container.test:5432
+    # no domains: internal, reached at shop-db.bay.test:5432
 ```
 
 <!-- end generated -->

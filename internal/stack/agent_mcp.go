@@ -78,8 +78,9 @@ func MCPItems() []SetupItem {
 	}
 	got, ok := registeredMCP()
 	return []SetupItem{{
-		Name: "MCP server " + MCPServerName + " in Claude Code (" + want.Command + " mcp)",
-		OK:   ok && reflect.DeepEqual(got, want),
+		Name:  "MCP server " + MCPServerName + " in Claude Code (" + want.Command + " mcp)",
+		OK:    ok && reflect.DeepEqual(got, want),
+		Agent: true,
 		SetupStep: SetupStep{Text: "register the MCP server: claude mcp add --scope user " +
 			MCPServerName + " -- " + want.Command + " mcp"},
 	}}

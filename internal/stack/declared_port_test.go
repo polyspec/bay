@@ -81,10 +81,10 @@ func TestAStoppedServiceIsNotMeasured(t *testing.T) {
 
 // A service without a port is addressed by its name alone.
 func TestAnAddressHasNoPortWhenTheServiceHasNone(t *testing.T) {
-	if got := serviceAddress("soksakim-hyper-test-node", 0); got != "soksakim-hyper-test-node.container.test" {
+	if got := serviceAddress("soksakim-hyper-test-node", 0); got != "soksakim-hyper-test-node.bay.test" {
 		t.Errorf("address %q", got)
 	}
-	if got := serviceAddress("soksakim-hyper-php", 9000); got != "soksakim-hyper-php.container.test:9000" {
+	if got := serviceAddress("soksakim-hyper-php", 9000); got != "soksakim-hyper-php.bay.test:9000" {
 		t.Errorf("address %q", got)
 	}
 }

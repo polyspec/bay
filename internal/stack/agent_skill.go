@@ -54,7 +54,7 @@ func SkillItems() []SetupItem {
 		got, err := os.ReadFile(p)
 		items = append(items, SetupItem{
 			Name: "agent skill " + p, OK: err == nil && bytes.Equal(got, want),
-			SetupStep: SetupStep{Text: "write the agent skill " + p},
+			SetupStep: SetupStep{Text: "write the agent skill " + p}, Agent: true,
 		})
 	}
 	return items

@@ -14,6 +14,7 @@ func TestReadinessSelectionExcludesCompletedDependencies(t *testing.T) {
     image: application
   web:
     image: application
+    expose: ["8080"]
     depends_on:
       initialize: {condition: service_completed_successfully}
 `))

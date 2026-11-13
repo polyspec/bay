@@ -226,12 +226,26 @@ func writePeerLink(b *strings.Builder, c NginxConfig) {
 	fmt.Fprintf(b, "server {\n    listen %d ssl default_server;\n    http2 on;\n", c.PeerPort)
 	fmt.Fprintf(b, "    ssl_certificate     /etc/nginx/certs/%s.crt;\n", c.DefaultCert)
 	fmt.Fprintf(b, "    ssl_certificate_key /etc/nginx/certs/%s.key;\n", c.DefaultCert)
-	// Nothing is asked for and nothing is checked here: this server answers the
-	// endpoint, and the endpoint is what an approval is made from.
-	b.WriteString("    ssl_verify_client optional_no_ca;\n")
+	// No certificate is required here: this server answers the endpoint, and
+	// the endpoint is what an approval is made from. With an approved
+	// authority, a certificate is checked when one is presented, and the load
+	// is answered only to a client whose certificate verified.
+	if c.PeerAuthorities == "" {
+		b.WriteString("    ssl_verify_client optional_no_ca;\n")
+	} else {
+		fmt.Fprintf(b, "    ssl_client_certificate %s;\n", c.PeerAuthorities)
+		b.WriteString("    ssl_verify_client optional;\n")
+	}
 	fmt.Fprintf(b, "    location = %s {\n", PeerPath)
 	b.WriteString("        default_type application/json;\n")
 	b.WriteString("        alias /etc/nginx/conf.d/peer.json;\n    }\n")
+	if c.PeerAuthorities != "" {
+		fmt.Fprintf(b, "    location = %s {\n", StatsPath)
+		b.WriteString("        if ($ssl_client_verify != SUCCESS) {\n            return 403;\n        }\n")
+		b.WriteString("        default_type application/json;\n")
+		b.WriteString("        add_header Cache-Control no-store always;\n")
+		fmt.Fprintf(b, "        alias /etc/nginx/conf.d/%s;\n    }\n", StatsName)
+	}
 	b.WriteString("    location / {\n        return 404;\n    }\n}\n\n")
 
 	// Without an approved authority there is nothing to check a client against,

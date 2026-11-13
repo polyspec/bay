@@ -154,8 +154,8 @@ func checkNames() []string {
 			}
 		}
 		for _, m := range labelPattern.FindAllStringSubmatch(text, -1) {
-			if m[2] == "git" {
-				continue // a repository URL, not a label
+			if m[2] == "git" || m[2] == "test" {
+				continue // a repository URL or the backend domain, not a label
 			}
 			if !labels[m[2]] {
 				problems = append(problems, fmt.Sprintf(

@@ -763,7 +763,10 @@ static const NSUInteger kLongList = 40;
   BOOL tall = [row[@"hint"] length] > 0;
   NSStackView *line = [NSStackView new];
   line.orientation = NSUserInterfaceLayoutOrientationHorizontal;
-  line.alignment = tall ? NSLayoutAttributeTop : NSLayoutAttributeCenterY;
+  // The key and the value sit on one baseline. They differ in font and size
+  // (a value is often monospaced), so centring them left the two texts a
+  // pixel or two apart.
+  line.alignment = NSLayoutAttributeFirstBaseline;
   line.spacing = 0;
   BOOL half = [row[@"halfPad"] boolValue];
   CGFloat pad = half ? kCardPad / 2 : (tall ? 11 : 9);

@@ -122,7 +122,7 @@ func readConf(t *testing.T, dir string) string {
 func TestAnOrdinaryRequestCarriesNoConnectionClose(t *testing.T) {
 	dir := t.TempDir()
 	conf := NginxConfig{
-		Routes:      []Route{{Domain: "a.test", Address: "10.0.0.2:80", Backend: "c.container.test:80", Scheme: "http"}},
+		Routes:      []Route{{Domain: "a.test", Address: "10.0.0.2:80", Backend: "c.bay.test:80", Scheme: "http"}},
 		Resolver:    "10.0.0.1",
 		DefaultCert: DefaultCertName,
 		Generation:  "g",
@@ -148,7 +148,7 @@ func TestAnOrdinaryRequestCarriesNoConnectionClose(t *testing.T) {
 func TestAPeerRouteDoesNotReuseItsTLSSession(t *testing.T) {
 	dir := t.TempDir()
 	conf := NginxConfig{
-		Routes:      []Route{{Domain: "a.test", Address: "10.0.0.2:80", Backend: "c.container.test:80", Scheme: "http"}},
+		Routes:      []Route{{Domain: "a.test", Address: "10.0.0.2:80", Backend: "c.bay.test:80", Scheme: "http"}},
 		Resolver:    "10.0.0.1",
 		DefaultCert: DefaultCertName,
 		PeerRoutes: []PeerRoute{{

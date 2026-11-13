@@ -1,0 +1,22 @@
+# A tag vX.Y.Z publishes a release: bay and bayd for macOS and Linux on arm64
+# and amd64, one archive per platform, and SHA256SUMS over the archives, so a
+# caller pins a version and a digest.
+name: release
+on:
+  push:
+    tags: ["v*"]
+permissions:
+  contents: write
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./internal/contract ./cmd/docsgen
+      - run: make release VERSION=${{ github.ref_name }}
+      - run: gh release create "${{ github.ref_name }}" dist/*.tar.gz dist/SHA256SUMS --title "${{ github.ref_name }}" --generate-notes
+        env:
+          GH_TOKEN: ${{ github.token }}

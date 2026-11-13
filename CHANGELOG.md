@@ -5,6 +5,22 @@ the day the change was made.
 
 ## 2026-11-14
 
+### The tool states its task and what it leaves out; harness reports fixed
+
+`brief`, the skill, the README and `docs/spec/cli.md` now state what bay is for and what it does not do, with the reason and what to do instead (`internal/contract/scope.go`): no up or down on another machine, no host port or Unix socket, no wait without a bound, no caller policy, no setup change from a project command.
+
+- `up` no longer applies machine setup: it names the missing parts and `bay install`, and fails. The trust store under the state directory is still refreshed.
+- An interrupted `up` lets an engine command that creates or removes something finish, refuses new ones, and removes what it made; the cleanup's own listing is no longer ended by the interruption. On the ODROID, SIGTERM during `creating its container` three times left no container (before: one or two, removed only by a second `down`).
+- A service with no port is not waited for; `up` with a one-shot job took 3.6 s instead of reporting it after 20 s.
+- `logs -f` of a stopped container prints and returns, and a follower ends when its container stops (Apple `container logs --follow` kept waiting).
+- `down` succeeds when the proxy was not running before it and does not start again; it reports the proxy. `down` of a project whose file fails validation reads the project name alone and exits 0.
+- A healthcheck fails within a second when its container stops, not at the next attempt. `retries` is documented as 1 to 100 and the bound's reason is stated.
+- The Docker engine is asked with `docker version`; `docker info` took 20 s on the loaded ODROID and was reported as not answering.
+- New: `bay exec` (exit status is the command's), the Compose `tmpfs` key (options rejected by name on Apple container), `bay plan [--json]` (names, ports, certificate paths from the file alone).
+- The dashboard shows each approved peer's processor, memory and swap use, read every 5 s, with a countdown to the next reading, from `/__bay/stats` on the peer's link, which answers only a client whose certificate an approved authority issued. `bayd` writes the load beside the peer document and exits when its executable is replaced, so launchd and systemd start the new version. `make install` reopens a running dashboard on the new build.
+
+Verification: `make check` passed. On the Mac: `exec` returned 7 from `exit 7`, read piped input and applied `-e`/`-w`; `tmpfs` mounted; `plan --json` named `other-db.bay.test` under `-p other`. `curl` with the client certificate read the ODROID's and the Mac's load; without one, 403. On the ODROID: the agent restarted itself after `bayd` was replaced (systemd restart counter 1).
+
 ### Agents find the tool's skill and MCP server current
 
 `bay mcp install`, and `install` where the `claude` command exists, register the MCP server in Claude Code's user configuration with the absolute path of the executable, only when the registration differs; `check` reports a missing or stale one. `make install` and the MCP server at its start rewrite the skill when it differs from the binary's.

@@ -25,6 +25,15 @@ func MarkdownCLI(w io.Writer) {
 	}
 
 	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "## Flags before the command")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "| Flag | Description |")
+	fmt.Fprintln(w, "| --- | --- |")
+	for _, f := range GlobalFlags() {
+		fmt.Fprintf(w, "| `%s %s` | %s |\n", f.Name, f.Value, f.Description)
+	}
+
+	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "## Exit status")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "| Status | Meaning |")
@@ -42,6 +51,8 @@ func MarkdownCLI(w io.Writer) {
 		fmt.Fprintf(w, "\n### `%s`\n\n%s\n", c.Name, c.Effect)
 	}
 
+	fmt.Fprintln(w, "")
+	scopeMarkdown(w, "##")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "## Rules callers can rely on")
 	fmt.Fprintln(w, "")

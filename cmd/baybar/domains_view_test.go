@@ -19,7 +19,7 @@ func multiDomainGroup() stack.GroupStatus {
 			Domains: []string{"console.site.test", "example.site.test", "admin.example.site.test"},
 			URLs:    siteLinks,
 		}, {
-			Name: "db", State: "running", Internal: true, Address: "site-db.container.test:5432",
+			Name: "db", State: "running", Internal: true, Address: "site-db.bay.test:5432",
 		}},
 	}
 }

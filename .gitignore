@@ -33,3 +33,4 @@ design/bay-window.html
 .DS_Store
 .idea/
 .vscode/
+/dist/

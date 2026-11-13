@@ -27,7 +27,7 @@ const (
 	// DockerResolver is the DNS address on which Docker resolves a container
 	// name. Docker does not answer on the network gateway.
 	DockerResolver   = "127.0.0.11"
-	BackendDomain    = "container.test"
+	BackendDomain    = "bay.test"
 	DefaultDNSAddr   = "127.0.0.1:5354"
 	groupsFileName   = "groups.json"
 	settingsFileName = "machine.json"

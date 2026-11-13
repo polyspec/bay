@@ -10,7 +10,7 @@ APPDIR  ?= /Applications
 OUT ?= /tmp/baybar.png
 REGION ?=
 
-.PHONY: all check clean test e2e docs-check docs-generate install uninstall window
+.PHONY: all check clean test e2e docs-check docs-generate install uninstall window release
 all: $(BIN)/bay $(BIN)/bayd $(APP)
 
 $(BIN)/bay: $(shell find cmd/bay internal \( -name '*.go' -o -name '*.c' -o -name '*.h' \))
@@ -69,8 +69,14 @@ install: all
 	# kernel kills the new contents with SIGKILL; a new file is validated afresh.
 	rm -f "$(PREFIX)/bin/bay" "$(PREFIX)/bin/bayd"
 	cp $(BIN)/bay $(BIN)/bayd "$(PREFIX)/bin/"
+	@# A running dashboard keeps the old build in memory: it is quit before the
+	@# app is replaced and opened again after.
+	@pgrep -x baybar >/dev/null && touch $(BIN)/.baybar-running || rm -f $(BIN)/.baybar-running
+	-@pkill -x baybar; while pgrep -x baybar >/dev/null; do sleep 0.1; done
 	rm -rf "$(APPDIR)/baybar.app"
 	cp -R $(APP) "$(APPDIR)/"
+	@if [ -f $(BIN)/.baybar-running ] && [ "$$(id -u)" != 0 ]; then \
+	  rm -f $(BIN)/.baybar-running; open "$(APPDIR)/baybar.app"; echo "reopened baybar"; fi
 	@# The agent skill and the MCP registration follow the installed binary. As
 	@# root they would land in root's home, so sudo leaves them to "bay install".
 	@# A machine without an agent has neither, which is not a failure here.
@@ -97,3 +103,26 @@ window:
 
 clean:
 	rm -rf $(BIN)
+
+# release builds bay and bayd for each platform into dist/, one archive per
+# platform, and SHA256SUMS over the archives. VERSION is the tag, which the
+# binaries print with "bay version". The macOS builds use cgo, so a release is
+# built on macOS; the Linux builds need no cgo.
+#   make release VERSION=v0.1.0
+DIST ?= dist
+release:
+	@test -n "$(VERSION)" || { echo "make release VERSION=vX.Y.Z"; exit 1; }
+	rm -rf $(DIST) && mkdir -p $(DIST)
+	@set -e; for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do \
+	  os=$${target%/*}; arch=$${target#*/}; name=bay_$(VERSION)_$${os}_$${arch}; \
+	  mkdir -p $(DIST)/$$name; \
+	  if [ $$os = darwin ]; then cgo=1; cc="clang -arch $$( [ $$arch = amd64 ] && echo x86_64 || echo arm64 )"; else cgo=0; cc=cc; fi; \
+	  for cmd in bay bayd; do \
+	    CGO_ENABLED=$$cgo CC="$$cc" GOOS=$$os GOARCH=$$arch $(GO) build -trimpath \
+	      -ldflags "-s -w -X main.buildVersion=$(VERSION)" -o $(DIST)/$$name/$$cmd ./cmd/$$cmd; \
+	  done; \
+	  cp LICENSE* README.md $(DIST)/$$name/ 2>/dev/null || true; \
+	  tar -C $(DIST) -czf $(DIST)/$$name.tar.gz $$name; rm -rf $(DIST)/$$name; \
+	done
+	cd $(DIST) && shasum -a 256 *.tar.gz > SHA256SUMS
+	@cat $(DIST)/SHA256SUMS

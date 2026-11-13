@@ -21,7 +21,7 @@ func TestBackendRestartWaitsForCurrentProxyGeneration(t *testing.T) {
 			before := routes("192.168.64.20", "2026-09-08T12:00:00Z")
 			after := routes(change.address, change.started)
 			oldGeneration, generation := routeGeneration(before), routeGeneration(after)
-			if before[0].Backend != after[0].Backend || after[0].Backend != "alpha-web.container.test:8080" {
+			if before[0].Backend != after[0].Backend || after[0].Backend != "alpha-web.bay.test:8080" {
 				t.Fatal("restart must retain the named backend")
 			}
 			requests := 0

@@ -116,7 +116,7 @@ func decodeDockerVolumes(out []byte) ([]runtimeVolume, error) {
 // dockerServiceArguments are the arguments a service's container is created
 // with on Docker in addition to the ones both engines take.
 //
-// The proxy reaches a backend by the name <container>.container.test when its
+// The proxy reaches a backend by the name <container>.bay.test when its
 // address stops answering. Apple's DNS answers that name; Docker's answers a
 // container's name and its aliases on a user-defined network, so the name is
 // given as an alias.
@@ -139,7 +139,7 @@ func dockerServiceArguments(s *Service) []string {
 // everything after the image is the service's command.
 func (e *serviceEngine) createArguments(group string, s *Service, fingerprint string) []string {
 	args := serviceArguments(group, s, fingerprint)
-	extra := trustArguments(e.dir, s)
+	extra := append(trustArguments(e.dir, s), certArguments(e.dir, s)...)
 	if e.engine == DockerEngine {
 		extra = append(extra, dockerServiceArguments(s)...)
 	}

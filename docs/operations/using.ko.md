@@ -87,12 +87,12 @@ bay up
 
 ## 서비스 간 통신
 
-다른 서비스는 `<프로젝트>-<서비스>.container.test:<포트>`로 접근한다.
+다른 서비스는 `<프로젝트>-<서비스>.bay.test:<포트>`로 접근한다.
 
 ```yaml
   web:
     environment:
-      DATABASE_URL: postgres://myapp-db.container.test:5432/app
+      DATABASE_URL: postgres://myapp-db.bay.test:5432/app
 ```
 
 컨테이너 주소는 DHCP로 할당되어 시작할 때마다 바뀐다. 이름을 사용한다. 프록시와
@@ -188,7 +188,7 @@ bay sync               # 프록시 설정만 다시 쓴다. 컨테이너는 그�
   → /etc/resolver/<도메인>     도메인을 로컬 DNS 서버로 위임
   → bayd               프록시 주소를 반환
   → bay-edge:443      Host 헤더로 서비스를 선택
-  → <프로젝트>-<서비스>.container.test
+  → <프로젝트>-<서비스>.bay.test
   → 컨테이너
 ```
 

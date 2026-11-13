@@ -341,8 +341,11 @@ func (l LinuxSetup) rootPending() bool {
 }
 
 // dockerAnswers reports whether the Docker engine on this machine answers.
+// dockerAnswers asks the engine for its version, which it answers without
+// work. "docker info" also sums the disk use and took 20s on a loaded machine,
+// past the read bound, so a busy engine was reported as not answering.
 func dockerAnswers() bool {
-	_, err := runEngineWithin(engineReadWait, DockerEngine, "info", "--format", "{{.ServerVersion}}")
+	_, err := runEngineWithin(engineReadWait, DockerEngine, "version", "--format", "{{.Server.Version}}")
 	return err == nil
 }
 

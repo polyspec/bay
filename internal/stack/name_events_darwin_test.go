@@ -12,7 +12,7 @@ import (
 func TestNativeNameSubscriptionCloseCancelsSocketWait(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	subscription, err := nativeNameSubscription(ctx, "unassigned-fixture.container.test", []netip.Addr{netip.MustParseAddr("192.0.2.1")})
+	subscription, err := nativeNameSubscription(ctx, "unassigned-fixture.bay.test", []netip.Addr{netip.MustParseAddr("192.0.2.1")})
 	if err != nil {
 		t.Fatal(err)
 	}

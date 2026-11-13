@@ -73,6 +73,9 @@ type app struct {
 	// container, and usesFor names that project.
 	uses    map[string]serviceUse
 	usesFor string
+	// peerLoad is each approved peer's load, read while the peers screen is
+	// shown.
+	peerLoad map[string]stack.PeerLoad
 }
 
 func main() {
@@ -116,6 +119,7 @@ func (a *app) onReady() {
 	go a.watch(quit)
 	go a.loop()
 	go a.sampleResources()
+	go a.samplePeers()
 	if *show || showAtLaunch() {
 		go func() {
 			a.refresh()
@@ -159,6 +163,7 @@ func (a *app) currentPanel() panel {
 	if group, _ := expandedProject(selected); group != "" && group == a.usesFor {
 		uses = a.uses
 	}
+	snap.Machine.PeerLoad = a.peerLoad
 	a.mu.Unlock()
 
 	// The service screen shows the tail of its container's output, so it is
@@ -222,6 +227,54 @@ func (a *app) sampleResources() {
 		a.mu.Unlock()
 		a.refreshWindowOnly()
 		time.Sleep(time.Second)
+	}
+}
+
+// samplePeers reads the load of each approved peer over its link while the
+// peers screen is shown, every StatsInterval. The peers are read together, so
+// one that does not answer delays none of the others.
+func (a *app) samplePeers() {
+	for {
+		a.mu.Lock()
+		shown := a.selected == viewPeers
+		peers := append([]stack.Peer{}, a.snap.Machine.Peers...)
+		a.mu.Unlock()
+		if !shown || len(peers) == 0 {
+			time.Sleep(time.Second)
+			continue
+		}
+		got := make(map[string]stack.PeerLoad, len(peers))
+		var mu sync.Mutex
+		var wg sync.WaitGroup
+		for _, p := range peers {
+			wg.Add(1)
+			go func(p stack.Peer) {
+				defer wg.Done()
+				st, err := stack.FetchPeerStats(a.rt.Machine.Dir, p, 3*time.Second)
+				load := stack.PeerLoad{Stats: &st}
+				if err != nil {
+					load = stack.PeerLoad{Err: err.Error()}
+				}
+				mu.Lock()
+				got[p.Fingerprint] = load
+				mu.Unlock()
+			}(p)
+		}
+		wg.Wait()
+		next := time.Now().Add(stack.StatsInterval)
+		for fp, load := range got {
+			load.Next = next
+			got[fp] = load
+		}
+		a.mu.Lock()
+		a.peerLoad = got
+		a.mu.Unlock()
+		// The screen counts down to the next reading, so it is redrawn each
+		// second until then.
+		for time.Now().Before(next) {
+			a.refreshWindowOnly()
+			time.Sleep(min(time.Second, time.Until(next)))
+		}
 	}
 }
 

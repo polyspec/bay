@@ -53,7 +53,7 @@ func TestPeerConfigurationIsAcceptedByNginxActualRuntime(t *testing.T) {
 	}
 	if err := RenderNginxConfig(confDir, NginxConfig{
 		Routes: []Route{{Domain: "web.test", Address: "192.168.64.10:80",
-			Backend: "g-web.container.test:80", Scheme: "http"}},
+			Backend: "g-web.bay.test:80", Scheme: "http"}},
 		Resolver:        "192.168.64.1",
 		DefaultCert:     DefaultCertName,
 		Generation:      "gen1",

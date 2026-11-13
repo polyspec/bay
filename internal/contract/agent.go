@@ -34,11 +34,19 @@ func Skill(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, Purpose)
 	fmt.Fprintln(w)
+	scopeMarkdown(w, "##")
+	fmt.Fprintln(w)
 	agentRules(w)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "## Commands")
 	fmt.Fprintln(w)
 	commandTable(w)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "## Flags before the command")
+	fmt.Fprintln(w)
+	for _, f := range GlobalFlags() {
+		fmt.Fprintf(w, "- `%s %s` %s\n", f.Name, f.Value, f.Description)
+	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "## Exit status")
 	fmt.Fprintln(w)
@@ -50,7 +58,7 @@ func Skill(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "A project is a Compose file. A service is served at the domains listed in its")
 	fmt.Fprintln(w, "`x-bay.domains`; a service without the list is internal and is reached")
-	fmt.Fprintln(w, "by other services at `<project>-<service>.container.test:<port>`. Run")
+	fmt.Fprintln(w, "by other services at `<project>-<service>.bay.test:<port>`. Run")
 	fmt.Fprintln(w, "`bay schema` for every key and its default.")
 	fmt.Fprintf(w, "\n```yaml\n%s```\n", Example())
 	fmt.Fprintln(w)
@@ -121,6 +129,8 @@ func commandTable(w io.Writer) {
 
 // MarkdownAgents writes the README's section on agents.
 func MarkdownAgents(w io.Writer) {
+	scopeMarkdown(w, "###")
+	fmt.Fprintln(w)
 	fmt.Fprintln(w, "```sh")
 	fmt.Fprintln(w, "bay install                               # also writes the skill below")
 	fmt.Fprintln(w, "bay skill install                         # ~/.claude/skills and ~/.agents/skills")

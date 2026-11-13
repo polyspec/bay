@@ -53,8 +53,10 @@ func skill(args []string) error {
 // toolInput is what every tool takes: the arguments after the command name and
 // the project directory the command runs in.
 type toolInput struct {
-	Args []string `json:"args,omitempty" jsonschema:"arguments after the command name, as on the command line"`
-	Dir  string   `json:"dir,omitempty" jsonschema:"absolute path of the directory holding the project's Compose file; project commands run there"`
+	Args    []string `json:"args,omitempty" jsonschema:"arguments after the command name, as on the command line"`
+	Dir     string   `json:"dir,omitempty" jsonschema:"absolute path of the directory holding the project's Compose file; project commands run there"`
+	Project string   `json:"project,omitempty" jsonschema:"project name, as -p: two runs of one Compose file under two names do not overlap"`
+	File    string   `json:"file,omitempty" jsonschema:"Compose file, as -f, relative to dir or absolute"`
 }
 
 // toolOutput is a command's result.
@@ -183,7 +185,14 @@ func runner(self string, c contract.Command) mcp.ToolHandlerFor[toolInput, toolO
 		if in.Dir != "" && !filepath.IsAbs(in.Dir) {
 			return nil, toolOutput{}, fmt.Errorf("dir must be an absolute path, got %q", in.Dir)
 		}
-		out, status, err := runSelf(ctx, self, in.Dir, append([]string{c.Name}, in.Args...))
+		var before []string
+		if in.File != "" {
+			before = append(before, "-f", in.File)
+		}
+		if in.Project != "" {
+			before = append(before, "-p", in.Project)
+		}
+		out, status, err := runSelf(ctx, self, in.Dir, append(append(before, c.Name), in.Args...))
 		if err != nil {
 			return nil, toolOutput{}, err
 		}

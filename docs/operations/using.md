@@ -90,12 +90,12 @@ The container runs and other services reach it by name.
 
 ## Service to service
 
-Reach another service at `<project>-<service>.container.test:<port>`:
+Reach another service at `<project>-<service>.bay.test:<port>`:
 
 ```yaml
   web:
     environment:
-      DATABASE_URL: postgres://myapp-db.container.test:5432/app
+      DATABASE_URL: postgres://myapp-db.bay.test:5432/app
 ```
 
 Container addresses are assigned by DHCP and change on every start. Use the
@@ -198,7 +198,7 @@ browser
   → /etc/resolver/<domain>     delegates the domain to the local DNS server
   → bayd               returns the proxy's address
   → bay-edge:443      selects the service by Host header
-  → <project>-<service>.container.test
+  → <project>-<service>.bay.test
   → the container
 ```
 

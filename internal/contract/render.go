@@ -54,8 +54,17 @@ func Brief(w io.Writer) {
 	fmt.Fprintln(w, "  parent is one label.")
 
 	fmt.Fprintln(w, "\nSERVICE TO SERVICE")
-	fmt.Fprintln(w, "  Reach another service at <project>-<service>.container.test:<port>.")
+	fmt.Fprintln(w, "  Reach another service at <project>-<service>.bay.test:<port>.")
 	fmt.Fprintln(w, "  Container addresses change on every start, so use the name.")
+
+	fmt.Fprintln(w, "\nWHAT IT IS FOR")
+	for _, d := range Duties() {
+		fmt.Fprintf(w, "  - %s\n", d.Duty)
+	}
+	fmt.Fprintln(w, "\nWHAT IT DOES NOT DO")
+	for _, e := range Exclusions() {
+		fmt.Fprintf(w, "  - %s Instead: %s\n", e.Excluded, e.Instead)
+	}
 
 	fmt.Fprintln(w, "\nRULES")
 	for _, i := range Invariants() {
@@ -71,6 +80,11 @@ func Brief(w io.Writer) {
 	}
 	for _, d := range Diagnostics() {
 		fmt.Fprintf(w, "  %-*s  %s\n", width, d.Symptom, d.Command)
+	}
+
+	fmt.Fprintln(w, "\nFLAGS BEFORE THE COMMAND")
+	for _, f := range GlobalFlags() {
+		fmt.Fprintf(w, "  %s %s\n%s", f.Name, f.Value, indent(wrap(f.Description, 70), "      "))
 	}
 
 	fmt.Fprintln(w, "\nEXIT STATUS")
@@ -101,18 +115,21 @@ func BriefJSON(w io.Writer) error {
 		"purpose":       Purpose,
 		"commands":      Commands(),
 		"exitCodes":     ExitCodes(),
+		"globalFlags":   GlobalFlags(),
 		"projectKeys":   ProjectKeys(),
 		"serviceKeys":   ServiceKeys(),
 		"serviceLabels": ServiceLabels(),
 		"composeKeys":   ComposeKeys(),
 		"portOrder":     PortOrder(),
+		"duties":        Duties(),
+		"exclusions":    Exclusions(),
 		"invariants":    Invariants(),
 		"diagnostics":   Diagnostics(),
 		"stateFiles":    StateFiles(),
 		"composeFileNames": []string{
 			"compose.yaml", "compose.yml", "docker-compose.yaml", "docker-compose.yml",
 		},
-		"serviceAddress": "<project>-<service>.container.test:<port>",
+		"serviceAddress": "<project>-<service>.bay.test:<port>",
 	}
 	enc := json.NewEncoder(w)
 	enc.SetIndent("", "  ")
@@ -177,7 +194,7 @@ services:
     image: node:26-slim
     ports: ["3000"]          # the container port; no host port is published
     environment:
-      DATABASE_URL: postgres://shop-db.container.test:5432/app
+      DATABASE_URL: postgres://shop-db.bay.test:5432/app
     volumes:
       - ./src:/app/src
     command: ["npm", "run", "dev"]
@@ -199,7 +216,7 @@ services:
     expose: ["5432"]
     environment:
       POSTGRES_PASSWORD: dev
-    # no domains: internal, reached at shop-db.container.test:5432
+    # no domains: internal, reached at shop-db.bay.test:5432
 `
 }
 

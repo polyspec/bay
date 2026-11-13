@@ -58,6 +58,7 @@ func main() {
 	flag.Parse()
 	log.SetFlags(log.Ltime)
 
+	go exitWhenReplaced(context.Background())
 	if *relay {
 		serveRelay(context.Background(), *state)
 		return
