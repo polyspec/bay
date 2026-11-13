@@ -10,8 +10,8 @@ import (
 
 // MarkdownCLI writes the command contract for docs/spec/cli.md.
 func MarkdownCLI(w io.Writer) {
-	fmt.Fprintln(w, "| Command | Summary | Administrator rights |")
-	fmt.Fprintln(w, "| --- | --- | --- |")
+	fmt.Fprintln(w, "| Command | Summary | Access | Administrator rights |")
+	fmt.Fprintln(w, "| --- | --- | --- | --- |")
 	for _, c := range Commands() {
 		name := c.Name
 		if c.Args != "" {
@@ -21,7 +21,16 @@ func MarkdownCLI(w io.Writer) {
 		if c.Root {
 			root = "Can require"
 		}
-		fmt.Fprintf(w, "| `%s` | %s | %s |\n", name, c.Summary, root)
+		fmt.Fprintf(w, "| `%s` | %s | %s | %s |\n", name, c.Summary, c.Access, root)
+	}
+
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "## Exit status")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "| Status | Meaning |")
+	fmt.Fprintln(w, "| --- | --- |")
+	for _, e := range ExitCodes() {
+		fmt.Fprintf(w, "| `%d` | %s |\n", e.Code, e.Meaning)
 	}
 
 	fmt.Fprintln(w, "")

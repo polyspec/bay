@@ -11,6 +11,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -37,13 +38,15 @@ var (
 	privRetire  = flag.String("retire", "", "internal: comma-separated domains whose resolver entries are removed")
 	privCA      = flag.String("ca", "", "internal: CA certificate for the privileged steps")
 	privUntrust = flag.String("untrust", "", "internal: retired CA certificate to stop trusting")
+	privRelay   = flag.String("relaybin", "", "internal: bayd binary the relay daemon runs")
+	privNoRelay = flag.Bool("privileged-remove-relay", false, "internal: remove the relay daemon")
 )
 
 func main() {
 	flag.Usage = usage
 	flag.Parse()
 
-	if *privApply || *privRemove {
+	if *privApply || *privRemove || *privNoRelay {
 		if err := privileged(); err != nil {
 			fmt.Fprintf(os.Stderr, "bay: %v\n", err)
 			os.Exit(1)
@@ -58,11 +61,37 @@ func main() {
 	}
 	if err := dispatch(cmd); err != nil {
 		fmt.Fprintf(os.Stderr, "bay: %v\n", err)
+		var usage usageError
+		if errors.As(err, &usage) {
+			os.Exit(2)
+		}
 		os.Exit(1)
 	}
 }
 
 func privileged() error {
+	if *privNoRelay {
+		return stack.UninstallRelayDaemon("", nil)
+	}
+	// A machine that is not macOS has one step that needs root, its firewall,
+	// and it is read from the state directory.
+	if !stack.HostSetsUpNames() {
+		bin := ""
+		if *dnsBin != "" {
+			bin = *dnsBin
+		}
+		l, err := stack.NewLinuxSetup(stack.NewMachine(*dir), bin, *addr)
+		if err != nil {
+			return err
+		}
+		if *privRemove {
+			if err := stack.RemoveAgent(); err != nil {
+				return err
+			}
+			return l.ApplyFirewall()
+		}
+		return l.ApplyRoot()
+	}
 	domains := strings.Split(*privDomain, ",")
 	if *privRemove {
 		return stack.UninstallResolver("", nil, domains...)
@@ -72,7 +101,8 @@ func privileged() error {
 		retire = strings.Split(*privRetire, ",")
 	}
 	return stack.Install{Domains: domains, Retire: retire, Addr: *addr,
-		CAPath: *privCA, UntrustCA: *privUntrust}.Apply()
+		CAPath: *privCA, UntrustCA: *privUntrust,
+		RelayBin: *privRelay, State: *dir}.Apply()
 }
 
 func dispatch(cmd string) error {
@@ -90,6 +120,8 @@ func dispatch(cmd string) error {
 		return status(m, flag.Args()[1:])
 	case "doctor":
 		return doctor(m)
+	case "check":
+		return check(m)
 	case "domain":
 		return domain(m, flag.Args()[1:])
 	case "brief":
@@ -103,15 +135,27 @@ func dispatch(cmd string) error {
 	case "sync":
 		return sync(m)
 	case "install":
-		return install(m)
+		return install(m, flag.Args()[1:])
 	case "uninstall":
 		return uninstall(m)
+	case "skill":
+		return skill(flag.Args()[1:])
+	case "mcp":
+		return mcpCommand(flag.Args()[1:])
 	default:
-		return fmt.Errorf("unknown command %q", cmd)
+		return usageError{fmt.Sprintf("unknown command %q; \"bay help\" lists them", cmd)}
 	}
 }
 
+// queryRuntime is the runtime of a command that changes nothing. It needs no
+// bayd: one that is missing is reported as missing setup.
+func queryRuntime(m *stack.Machine) *stack.Runtime {
+	return &stack.Runtime{Machine: m, Addr: *addr, DNSBin: dnsBinary()}
+}
+
 func newRuntime(m *stack.Machine) (*stack.Runtime, error) {
+	// The agent is part of every machine's setup: the DNS agent on macOS, the
+	// systemd agent elsewhere.
 	bin, err := resolveDNSBinary()
 	if err != nil {
 		return nil, err
@@ -568,7 +612,50 @@ func sync(m *stack.Machine) error {
 	return nil
 }
 
-func install(m *stack.Machine) error {
+// install applies the machine setup that is missing and changes nothing that
+// is in place, so running it again does nothing. -dry-run prints what it would
+// do and changes nothing. -only-from, on a machine that is not macOS, records
+// the hosts its firewall accepts connections from before applying.
+func install(m *stack.Machine, args []string) error {
+	fs := flag.NewFlagSet("install", flag.ContinueOnError)
+	dryRun := fs.Bool("dry-run", false, "print what would change and change nothing")
+	onlyFrom := fs.String("only-from", "", "comma-separated hosts or networks this machine accepts new connections from, or none (not macOS)")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	var hosts []string
+	if *onlyFrom != "" {
+		if stack.HostSetsUpNames() {
+			return fmt.Errorf("-only-from is for a machine that is not macOS")
+		}
+		var err error
+		if hosts, err = stack.ParseOnlyFrom(*onlyFrom); err != nil {
+			return err
+		}
+	}
+	if *dryRun {
+		items, err := queryRuntime(m).SetupItems()
+		if err != nil {
+			return err
+		}
+		// The firewall -only-from names is the one reported, as if recorded.
+		if *onlyFrom != "" {
+			l, err := stack.NewLinuxSetup(m, dnsBinary(), *addr)
+			if err != nil {
+				return err
+			}
+			l.OnlyFrom = hosts
+			items = l.Items()
+			fmt.Printf("would record: accept new connections only from %s\n", describeHosts(hosts))
+		}
+		printPlan(items, "\"bay install\" would:")
+		return nil
+	}
+	if *onlyFrom != "" {
+		if err := m.SetOnlyFrom(hosts); err != nil {
+			return err
+		}
+	}
 	rt, err := newRuntime(m)
 	if err != nil {
 		return err
@@ -579,15 +666,109 @@ func install(m *stack.Machine) error {
 	if err := rt.EnsureInstalled(); err != nil {
 		return err
 	}
-	return doctor(m)
+	// The proxy is written with the relay once the relay is registered.
+	if stack.HostSetsUpNames() {
+		if peers, _ := stack.Peers(m.Dir); len(peers) > 0 {
+			if _, err := stack.SyncProxy(m); err != nil {
+				return err
+			}
+		}
+	}
+	return check(m)
 }
 
-// uninstall removes the launchd job and every resolver entry this tool wrote.
-// The certificate authority is left in the trust settings.
+func describeHosts(hosts []string) string {
+	if len(hosts) == 0 {
+		return "anyone (no firewall)"
+	}
+	return strings.Join(hosts, ", ")
+}
+
+// check prints every part of the machine setup and whether it is in place, and
+// fails when any is not. It changes nothing.
+func check(m *stack.Machine) error {
+	items, err := queryRuntime(m).SetupItems()
+	if err != nil {
+		return err
+	}
+	missing := 0
+	for _, it := range items {
+		if it.OK {
+			fmt.Printf("ok       %s\n", it.Name)
+			continue
+		}
+		missing++
+		if it.Text == "" {
+			fmt.Printf("missing  %s\n", it.Name)
+			continue
+		}
+		fmt.Printf("missing  %s  (install: %s)\n", it.Name, it.Text)
+	}
+	if missing > 0 {
+		return fmt.Errorf("%d part(s) of the setup are not in place; \"bay install -dry-run\" shows what install changes", missing)
+	}
+	return nil
+}
+
+// printPlan prints what install changes, or that it changes nothing. A part
+// install cannot put in place is listed under its own heading.
+func printPlan(items []stack.SetupItem, heading string) {
+	var does, cannot []stack.SetupItem
+	for _, it := range items {
+		switch {
+		case it.OK:
+		case it.Text == "":
+			cannot = append(cannot, it)
+		default:
+			does = append(does, it)
+		}
+	}
+	if len(does) == 0 {
+		fmt.Println("nothing to do")
+	} else {
+		fmt.Println(heading)
+		// Each step says what it puts in front of a person, because the two
+		// that do ask for different things and neither can be answered by a
+		// script.
+		for _, p := range does {
+			if p.Asks == stack.AsksNobody {
+				fmt.Println("  - " + p.Text)
+				continue
+			}
+			fmt.Printf("  - %s   (asks for %s)\n", p.Text, p.Asks)
+		}
+	}
+	if len(cannot) > 0 {
+		fmt.Println("install cannot fix:")
+		for _, it := range cannot {
+			fmt.Println("  - " + it.Name)
+		}
+	}
+}
+
+// uninstall removes the machine setup this tool wrote. On macOS that is the
+// launchd jobs and every resolver entry; the certificate authority is left in
+// the trust settings. On a machine that is not macOS it is the firewall.
 func uninstall(m *stack.Machine) error {
 	// Removing the setup changes it, so it belongs to the owner.
 	if err := stack.OwnsMachineSetup(m.Dir); err != nil {
 		return err
+	}
+	if !stack.HostSetsUpNames() {
+		if err := m.SetOnlyFrom(nil); err != nil {
+			return err
+		}
+		if os.Geteuid() != 0 {
+			return stack.Install{}.ElevateArgs("-privileged-remove", "-state", m.Dir)
+		}
+		if err := stack.RemoveAgent(); err != nil {
+			return err
+		}
+		l, err := stack.NewLinuxSetup(m, "", *addr)
+		if err != nil {
+			return err
+		}
+		return l.ApplyFirewall()
 	}
 	domains, err := m.Domains()
 	if err != nil {
@@ -597,6 +778,9 @@ func uninstall(m *stack.Machine) error {
 		return err
 	}
 	fmt.Printf("removed dns agent %s\n", stack.DNSAgentLabel)
+	if err := stack.UninstallRelayDaemon("", nil); err != nil {
+		return err
+	}
 	if err := stack.UninstallResolver("", nil, domains...); err != nil {
 		return err
 	}
@@ -639,6 +823,13 @@ func printSnapshot(snap stack.Snapshot) {
 		fmt.Printf("proxy  %-22s %s, %s, %d route(s)\n", p.Name, p.Engine, where, p.Routes)
 	}
 
+	// A machine that is not macOS has no DNS agent and no setup to report. Its
+	// authority is created by the first command that publishes the proxy.
+	if !stack.HostSetsUpNames() {
+		fmt.Println("setup  none on this system; this machine serves its names to approved peers only")
+		printGroups(snap)
+		return
+	}
 	d := snap.Machine.DNS
 	dnsState := "not loaded"
 	switch {
@@ -654,7 +845,11 @@ func printSnapshot(snap stack.Snapshot) {
 	if len(snap.Machine.Pending) > 0 {
 		fmt.Printf("setup  %d step(s) pending; run \"bay install\"\n", len(snap.Machine.Pending))
 	}
+	printGroups(snap)
+}
 
+// printGroups writes each registered project and its services.
+func printGroups(snap stack.Snapshot) {
 	if len(snap.Groups) == 0 {
 		fmt.Println("\nno groups registered")
 		return
@@ -692,24 +887,32 @@ func doctor(m *stack.Machine) error {
 	}
 	// Include the project in the working directory even before it is
 	// registered, so the report covers the next up.
+	var extra []string
 	if cfg, err := stack.LoadIn(m, *file); err == nil {
-		domains = union(domains, cfg.Domains())
+		extra = cfg.Domains()
+		domains = union(domains, extra)
 		fmt.Printf("group     %s  (%s)\n", cfg.Name, cfg.Path())
 	}
-	in := stack.Install{Domains: domains, Addr: *addr, CAPath: authority.Path}
-
 	shown := "none"
 	if len(domains) > 0 {
 		shown = "*." + strings.Join(domains, ", *.")
 	}
 	fmt.Printf("state     %s\n", m.Dir)
 	fmt.Printf("domains   %s\n", shown)
-	fmt.Printf("resolver  %s\n", *addr)
+	if stack.HostSetsUpNames() {
+		fmt.Printf("resolver  %s\n", *addr)
+	} else {
+		// A machine that is not macOS resolves no names itself: it serves them
+		// to the peers that approve it.
+		fmt.Println("names     served to approved peers only; this machine resolves none itself")
+	}
 
 	// The machine setup is one per machine. Saying who owns it here is what
 	// tells a reader running from another state directory why a command stops.
+	// Ownership is recorded by the DNS agent, which only macOS has.
 	owner, owned := stack.MachineOwner()
 	switch {
+	case !stack.HostSetsUpNames():
 	case !owned:
 		fmt.Printf("owner     none yet; the next \"bay install\" takes it\n")
 	case stack.OwnsMachineSetup(m.Dir) == nil:
@@ -717,45 +920,27 @@ func doctor(m *stack.Machine) error {
 	default:
 		fmt.Printf("owner     %s  (this command cannot change the machine setup)\n", owner)
 	}
-
-	agent := "not loaded"
-	switch {
-	case !stack.DNSAgentLoaded():
-	case stack.DNSAgentServes(domains, *addr, dnsBinary(), m.Dir):
-		agent = "loaded and current"
-	default:
-		agent = "loaded but out of date"
-	}
-	fmt.Printf("dns agent %s\n", agent)
 	if authority.Unreadable() != "" {
 		fmt.Printf("authority %s\n", authority.Status())
 	}
 
-	pending := in.Pending()
-	if _, err := os.Stat(authority.Path); os.IsNotExist(err) {
-		pending = append([]stack.SetupStep{{
-			Text: "create local certificate authority", Asks: stack.AsksNobody,
-		}}, pending...)
+	items, err := queryRuntime(m).SetupItems(extra...)
+	if err != nil {
+		return err
 	}
-	if len(pending) == 0 && agent == "loaded and current" && authority.Unreadable() == "" {
-		fmt.Println("\nnothing to do")
-		reportUnclaimed(domains)
-		return nil
-	}
-	fmt.Println("\n\"bay up\" would:")
-	// Each step says what it puts in front of a person, because the two that do
-	// ask for different things and neither can be answered by a script.
-	for _, p := range pending {
-		if p.Asks == stack.AsksNobody {
-			fmt.Println("  - " + p.Text)
-			continue
+	fmt.Println()
+	for _, it := range items {
+		mark := "ok     "
+		if !it.OK {
+			mark = "missing"
 		}
-		fmt.Printf("  - %s   (asks for %s)\n", p.Text, p.Asks)
+		fmt.Printf("%s  %s\n", mark, it.Name)
 	}
-	if agent != "loaded and current" {
-		fmt.Println("  - re-register " + stack.DNSAgentLabel)
+	fmt.Println()
+	printPlan(items, "\"bay install\" would:")
+	if stack.HostSetsUpNames() {
+		reportUnclaimed(domains)
 	}
-	reportUnclaimed(domains)
 	return nil
 }
 

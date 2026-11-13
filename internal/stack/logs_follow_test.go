@@ -19,7 +19,17 @@ func TestMain(m *testing.M) {
 		_ = runLogs(cmd, true)
 		os.Exit(0)
 	}
-	os.Exit(m.Run())
+	// No test writes the agent skill into the home directory of whoever runs
+	// the tests.
+	home, err := os.MkdirTemp("", "bay-home")
+	if err != nil {
+		panic(err)
+	}
+	agentHome = func() (string, error) { return home, nil }
+	claudeBinary = func() (string, bool) { return "", false }
+	code := m.Run()
+	os.RemoveAll(home)
+	os.Exit(code)
 }
 
 // A follower of Logs ends when bay receives SIGTERM, instead of staying as an orphan of process 1.

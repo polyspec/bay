@@ -195,6 +195,12 @@ func Take(m *Machine, addr string) (Snapshot, error) {
 			Current: DNSAgentServes(domains, addr, "", m.Dir),
 		},
 	}
+	// A machine that is not macOS has no machine setup, so nothing is pending
+	// on it and no DNS agent belongs to it.
+	if !hostSetsUpNames {
+		snap.Machine.Pending = nil
+		snap.Machine.DNS = DNSStatus{}
+	}
 
 	instances, err := Instances()
 	if err != nil {

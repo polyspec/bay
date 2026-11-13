@@ -192,6 +192,84 @@ Nothing is refused for it. Each machine serves its own, by the resolution order
 above, and the window says the name is served in more than one place. Changing
 the domain on one side ends it.
 
+## A machine that is not macOS
+
+A Linux machine with Docker serves its names to the peers that approve it, and
+reaches its own names and theirs by the names in `/etc/hosts`
+([architecture](architecture.md#machines-that-are-not-macos)). It is set up and
+checked with the same commands as a Mac:
+
+```sh
+bay install -dry-run                 # what install would change; changes nothing
+bay install -only-from 192.168.2.1   # apply; run again, it changes nothing
+bay check                            # one line per part; exits 1 when one is missing
+bay doctor                           # the same parts, with the machine's state
+```
+
+Its setup is read from the system, and a part install does not know how to
+change on this system is reported by `check` and `doctor` with what to install,
+and left alone:
+
+| Part | In place when | install does |
+| --- | --- | --- |
+| certificate authority | `<state>/ca.crt` exists | creates it |
+| docker engine | `docker info` answers | nothing; install Docker |
+| trust | the authority is in the store the system has: `/usr/local/share/ca-certificates` with `update-ca-certificates` (Debian, Ubuntu, Alpine), or `/etc/pki/ca-trust/source/anchors` or `/etc/ca-certificates/trust-source/anchors` with `update-ca-trust` (Fedora, RHEL, Arch) | writes the authority there and runs the tool; with neither tool, nothing |
+| firewall | see below | writes and loads it; without systemd or nft, nothing |
+| agent | `bay-agent.service` runs `bayd ... -hosts` | registers, enables and starts it; without systemd, nothing |
+| names on the proxy network | the Docker proxy carries the same names as network aliases on the `bay` network, so Docker's DNS answers them to every container on it | connects the proxy to the network again with the names; the container is not recreated |
+| names in `/etc/hosts` | the block between its two marker lines names every route's domain and every approved peer's domain at 127.0.0.1 | writes the block; nothing outside it changes |
+
+The agent reads every 30 seconds what domains the approved peers hold, rewrites
+the proxy when they change, and keeps the block current. A peer's name reaches
+the machine's proxy at 127.0.0.1, which forwards it over the peer's link. A
+container does not read the host's `/etc/hosts`; one on the `bay`
+network resolves the same names through Docker's DNS to the proxy. It verifies
+the proxy's certificate only if it trusts this machine's authority, which
+depends on its image.
+
+The firewall is asked for with `-only-from`.
+The firewall is an nftables table `inet bay` in
+`/etc/bay/firewall.nft`, loaded at boot by
+`bay-firewall.service`. On the interface holding the default route it
+accepts new connections only from the named hosts, and replies to connections
+the machine opened, so the machine reaches the network as before. It does not
+touch Docker's rules or the machine's own bridges. The hosts are recorded in
+`machine.json` as `onlyFrom`, so the next `install` keeps them;
+`-only-from none` removes the firewall. A moved default route makes `check`
+report the firewall missing, and `install` writes it for the new interface.
+
+It is approved and approves in both directions as any machine is:
+
+1. On the Linux machine, `bay peer open` publishes the link, and
+   `bay peer add <mac-address>:8443` approves the Mac, whose client
+   certificate the link then accepts.
+2. On the Mac, `bay peer add <linux-address>:8443` approves the Linux
+   machine. The Mac's resolver answers the Linux machine's names with the Mac's
+   proxy, which forwards them over the link.
+
+## The relay on a Mac
+
+The Apple proxy runs in a virtual machine whose address the Mac translates to
+its own only on the interface of the default route. A peer reached through
+another interface, such as the network the Mac shares with a board attached to
+it, receives the container's address, and its answer never returns. So the
+Apple proxy reaches every peer through a relay on its network's gateway
+(`192.168.65.1:8444`): the relay reads the name in the TLS handshake, connects
+from the Mac to the link of the approved peer that serves it, and copies bytes.
+The TLS session stays the proxy's and the peer's.
+
+The relay is a launchd daemon, `dev.bay.relay`
+(`/Library/LaunchDaemons/dev.bay.relay.plist`, running
+`bayd -relay -state <dir>`, writing `/var/log/bay-relay.log`).
+macOS refuses a program launchd starts for a user a connection to the local
+network, without asking, unless it is an application the user allowed; a
+daemon is not subject to that. The DNS agent records the gateway in
+`<state>/peer-relay`, and the daemon listens there only if it is an address of
+this Mac at port 8444. `bay install` registers the daemon, `check`
+reports it, and `uninstall` removes it. Until it is registered the proxy
+connects to each peer directly.
+
 ## What this does not do
 
 - No machine name in a domain. There is no `web.<machine>.test`.

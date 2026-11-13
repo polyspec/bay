@@ -105,7 +105,7 @@ func syncProxy(m *Machine, verify []string, keep string, say func(string)) (Sync
 		conf := NginxConfig{
 			Routes:      own,
 			DefaultCert: DefaultCertName,
-			PeerRoutes:  peerRoutes,
+			PeerRoutes:  viaRelay(engine, peerRoutes),
 			LinkLog:     settings.LinkLog,
 		}
 		// The resolver is used only by a route's name fallback, so a
@@ -199,6 +199,9 @@ func publishProxy(m *Machine, engine string, conf NginxConfig, peerDir string, v
 	if err != nil {
 		return false, err
 	}
+	if err := ensureProxyNames(engine, servedNames(conf)); err != nil {
+		return false, err
+	}
 	if created {
 		return true, waitProxyConnects(engine, verify, within, say)
 	}
@@ -261,6 +264,37 @@ func peerRoutesFor(m *Machine, peers []Peer, own []string) []PeerRoute {
 		})
 	}
 	return out
+}
+
+// viaRelay returns the peer routes one engine's proxy is written with. The Apple
+// proxy connects to every peer through the relay on its network's gateway,
+// because a connection it opens to a peer reached through an interface other
+// than the default route's never completes. A Docker proxy, and an Apple proxy
+// whose network gateway cannot be read, connects to each peer directly.
+func viaRelay(engine string, routes []PeerRoute) []PeerRoute {
+	if engine != AppleEngine || len(routes) == 0 {
+		return routes
+	}
+	relay := peerRelayAddress()
+	if relay == "" {
+		return routes
+	}
+	out := make([]PeerRoute, len(routes))
+	for i, r := range routes {
+		r.Via = relay
+		out[i] = r
+	}
+	return out
+}
+
+// peerRelayAddress is where the Apple proxy reaches the relay, or an empty
+// string when no relay daemon is registered, which leaves the proxy to reach
+// each peer directly. Tests replace it.
+var peerRelayAddress = func() string {
+	if !RelayDaemonInstalled() {
+		return ""
+	}
+	return PeerRelayAddress()
 }
 
 // peerLinkServable reports whether one engine's proxy can serve all of
@@ -329,7 +363,7 @@ func configGeneration(c NginxConfig) string {
 		fmt.Fprintf(h, "%s\x00%s\x00%s\x00%s\x00%s\n", r.Domain, r.Scheme, r.Backend, r.ipv4, r.started)
 	}
 	for _, r := range c.PeerRoutes {
-		fmt.Fprintf(h, "peer\x00%s\x00%s\x00%s\n", r.Domain, r.Address, r.Authority)
+		fmt.Fprintf(h, "peer\x00%s\x00%s\x00%s\x00%s\n", r.Domain, r.Address, r.Authority, r.Via)
 	}
 	fmt.Fprintf(h, "link\x00%d\n", c.PeerPort)
 	return hex.EncodeToString(h.Sum(nil))[:16]

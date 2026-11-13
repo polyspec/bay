@@ -2,6 +2,7 @@ package stack
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -282,10 +283,32 @@ func (r *Runtime) sync(started []string) (SyncResult, error) {
 	return res, nil
 }
 
-// EnsureInstalled applies the machine setup missing for the registered domains.
-// It does nothing when the machine is set up, and requests administrator rights
-// only when a resolver entry changes.
+// EnsureInstalled applies the machine setup that is missing and changes
+// nothing that is in place, so running it again does nothing. It requests
+// administrator rights only for a step that needs them.
+//
+// A machine that is not macOS has its own, smaller setup; see LinuxSetup.
 func (r *Runtime) EnsureInstalled() error {
+	if err := r.ensureSetup(); err != nil {
+		return err
+	}
+	if _, err := EnsureSkills(); err != nil {
+		return err
+	}
+	_, err := EnsureMCP()
+	return err
+}
+
+// ensureSetup applies the setup parts other than the agent skill.
+func (r *Runtime) ensureSetup() error {
+	// Who owns the setup is recorded by the DNS agent, which only macOS has.
+	if !hostSetsUpNames {
+		l, err := NewLinuxSetup(r.Machine, r.DNSBin, r.Addr)
+		if err != nil {
+			return err
+		}
+		return l.Ensure(r.HelperBin, r.Elevate)
+	}
 	if err := r.ownsSetup(); err != nil {
 		return err
 	}
@@ -293,18 +316,12 @@ func (r *Runtime) EnsureInstalled() error {
 	if err != nil {
 		return err
 	}
-	domains, err := r.Machine.Domains()
-	if err != nil {
+	if err := EnsureTrust(r.Machine.Dir); err != nil {
 		return err
 	}
-	in := Install{
-		Domains:   domains,
-		Retire:    r.Retire,
-		Addr:      r.Addr,
-		CAPath:    ca.CertPath(),
-		UntrustCA: r.RetiredCA,
-		Helper:    r.HelperBin,
-		Elevate:   r.Elevate,
+	in, err := r.install(ca.CertPath())
+	if err != nil {
+		return err
 	}
 	if err := in.Ensure(); err != nil {
 		return err
@@ -312,14 +329,95 @@ func (r *Runtime) EnsureInstalled() error {
 	if pending := in.PendingText(); len(pending) > 0 {
 		return fmt.Errorf("setup did not complete: %s", strings.Join(pending, "; "))
 	}
-	if DNSAgentLoaded() && DNSAgentServes(domains, r.Addr, r.DNSBin, r.Machine.Dir) {
+	// The relay listens where the record says, and the record is written here
+	// and by the DNS agent, which both read the network as the user.
+	if err := RecordRelayAddress(r.Machine.Dir, PeerRelayAddress()); err != nil {
+		return err
+	}
+	if r.dnsAgentCurrent(in.Domains) {
 		return nil
 	}
 	if r.DNSBin == "" {
 		return fmt.Errorf("no bayd binary configured for the launchd job")
 	}
-	_, err = InstallDNSAgent(r.DNSBin, strings.Join(domains, ","), r.Addr, r.Machine.Dir, r.Machine.LogDir())
+	_, err = InstallDNSAgent(r.DNSBin, strings.Join(in.Domains, ","), r.Addr, r.Machine.Dir, r.Machine.LogDir())
 	return err
+}
+
+// install describes the macOS setup for the registered domains.
+func (r *Runtime) install(caPath string) (Install, error) {
+	domains, err := r.Machine.Domains()
+	if err != nil {
+		return Install{}, err
+	}
+	return Install{
+		Domains:   domains,
+		Retire:    r.Retire,
+		Addr:      r.Addr,
+		CAPath:    caPath,
+		UntrustCA: r.RetiredCA,
+		Helper:    r.HelperBin,
+		Elevate:   r.Elevate,
+		RelayBin:  r.DNSBin,
+		State:     r.Machine.Dir,
+	}, nil
+}
+
+func (r *Runtime) dnsAgentCurrent(domains []string) bool {
+	return DNSAgentLoaded() && DNSAgentServes(domains, r.Addr, r.DNSBin, r.Machine.Dir)
+}
+
+// SetupItems lists every part of this machine's setup and whether it is in
+// place. "bay check", "doctor" and "install -dry-run" all read it, and
+// "install" applies the items that are not, so the four never disagree.
+// Extra domains are included as if registered, for a report that covers the
+// project about to be brought up.
+func (r *Runtime) SetupItems(extra ...string) ([]SetupItem, error) {
+	items, err := r.setupItems(extra...)
+	if err != nil {
+		return nil, err
+	}
+	items = append(items, SkillItems()...)
+	return append(items, MCPItems()...), nil
+}
+
+func (r *Runtime) setupItems(extra ...string) ([]SetupItem, error) {
+	if !hostSetsUpNames {
+		l, err := NewLinuxSetup(r.Machine, r.DNSBin, r.Addr)
+		if err != nil {
+			return nil, err
+		}
+		return l.Items(), nil
+	}
+	authority := AuthorityInfo(r.Machine.Dir)
+	_, err := os.Stat(authority.Path)
+	items := []SetupItem{{
+		Name: "certificate authority " + authority.Path, OK: err == nil,
+		SetupStep: SetupStep{Text: "create local certificate authority"},
+	}}
+	in, err := r.install(authority.Path)
+	if err != nil {
+		return nil, err
+	}
+	in.Domains = unionDomains(in.Domains, extra)
+	items = append(items, in.Items()...)
+	items = append(items, TrustItem(r.Machine.Dir))
+	return append(items, SetupItem{
+		Name: "dns agent " + DNSAgentLabel, OK: r.dnsAgentCurrent(in.Domains),
+		SetupStep: SetupStep{Text: "register " + DNSAgentLabel},
+	}), nil
+}
+
+func unionDomains(a, b []string) []string {
+	seen := make(map[string]bool, len(a)+len(b))
+	var out []string
+	for _, d := range append(append([]string{}, a...), b...) {
+		if !seen[d] {
+			seen[d] = true
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // LoadGroup reads a registered project's Compose file by project name.

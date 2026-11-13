@@ -177,6 +177,9 @@ func (d *creationDiagnostic) category() string {
 }
 
 func (e *serviceEngine) list(ctx context.Context) ([]Instance, error) {
+	if e.engine == DockerEngine {
+		return e.listDocker(ctx)
+	}
 	out, err := e.command(ctx, "ls", "--all", "--format", "json")
 	if err != nil {
 		return nil, err
@@ -223,7 +226,7 @@ func (e *serviceEngine) preflight(group string, services []*Service) error {
 func (e *serviceEngine) image(ctx context.Context, reference string) (string, error) {
 	out, err := e.command(ctx, "image", "inspect", reference)
 	if err != nil {
-		if !strings.Contains(strings.ToLower(err.Error()), "not found") {
+		if !imageMissing(err) {
 			return "", err
 		}
 		e.say("pulling %s", reference)
@@ -234,6 +237,9 @@ func (e *serviceEngine) image(ctx context.Context, reference string) (string, er
 	}
 	if err != nil {
 		return "", err
+	}
+	if e.engine == DockerEngine {
+		return dockerImageID(out, reference)
 	}
 	var images []struct {
 		Configuration struct {
@@ -250,13 +256,19 @@ func (e *serviceEngine) image(ctx context.Context, reference string) (string, er
 	}
 	return images[0].Configuration.Descriptor.Digest, nil
 }
-func serviceFingerprint(group string, s *Service, digest string) string {
+
+// serviceFingerprint identifies a service's configuration. The arguments that
+// give the container the trusted certificates are part of it, so a container
+// created before the store was written, or with other such arguments, is
+// created again.
+func serviceFingerprint(group string, s *Service, digest string, trust []string) string {
 	encoded, _ := json.Marshal(struct {
 		Group        string
 		Service      *Service
 		Image        string
 		Dependencies map[string]string
-	}{group, s, digest, s.dependencyIdentity})
+		Trust        []string `json:",omitempty"`
+	}{group, s, digest, s.dependencyIdentity, trust})
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:])
 }
@@ -284,7 +296,7 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	if err != nil {
 		return err
 	}
-	fingerprint := serviceFingerprint(group, s, digest)
+	fingerprint := serviceFingerprint(group, s, digest, trustArguments(e.dir, s))
 	same := found && in.Labels[LabelConfig] == fingerprint && in.ImageDigest == digest
 	if same && !restart {
 		if s.OneShot {
@@ -315,7 +327,7 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	// Create does not execute the process. Inspect its actual image before
 	// starting, since a local tag need not have a name@digest cache alias.
 	e.say("%s: creating its container", s.Name)
-	if _, err = e.command(ctx, serviceArguments(group, s, fingerprint)...); err != nil {
+	if _, err = e.command(ctx, e.createArguments(group, s, fingerprint)...); err != nil {
 		return fmt.Errorf("service %s create: %w", s.Name, err)
 	}
 	created, ok, err := e.lookup(ctx, s.ContainerName)

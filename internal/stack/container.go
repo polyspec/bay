@@ -257,8 +257,10 @@ func EnsureProxy(engine, confDir, certDir, peerDir string) (created bool, err er
 			return false, err
 		}
 		// The peer link is a published port and a mount, neither of which can
-		// be added to a container that is already running.
-		if sameDir(conf, confDir) && sameDir(certs, certDir) && sameDir(peers, peerDir) {
+		// be added to a container that is already running. A restart policy
+		// cannot be read from a mount, and a Docker proxy created before it was
+		// given one is created again.
+		if sameDir(conf, confDir) && sameDir(certs, certDir) && sameDir(peers, peerDir) && proxyRestarts(engine) {
 			return false, nil
 		}
 	}
@@ -294,6 +296,10 @@ func proxyRunArgs(engine, confDir, certDir, peerDir string) []string {
 			p := strconv.Itoa(port)
 			args = append(args, "--publish", DockerProxyAddr+":"+p+":"+p)
 		}
+		// Docker starts a container again after the machine restarts only when
+		// it carries a restart policy. The proxy serves every project, so it is
+		// given one; removing it removes the policy with it.
+		args = append(args, "--restart", "unless-stopped")
 	}
 	if peerDir != "" {
 		port := strconv.Itoa(PeerPort)
@@ -440,6 +446,35 @@ func ProxyMounts(engine string) (confDir, certDir, peerDir string, err error) {
 		}
 	}
 	return confDir, certDir, peerDir, nil
+}
+
+// proxyRestarts reports whether the running proxy carries the restart policy
+// it is created with. Apple `container` has no restart policy, so its proxy
+// always does.
+func proxyRestarts(engine string) bool {
+	if engine != DockerEngine {
+		return true
+	}
+	out, err := runEngine(engine, "inspect", ProxyName)
+	if err != nil {
+		return false
+	}
+	return dockerRestartPolicy(out) == "unless-stopped"
+}
+
+// dockerRestartPolicy reads the restart policy out of `docker inspect`.
+func dockerRestartPolicy(out []byte) string {
+	var raw []struct {
+		HostConfig struct {
+			RestartPolicy struct {
+				Name string `json:"Name"`
+			} `json:"RestartPolicy"`
+		} `json:"HostConfig"`
+	}
+	if json.Unmarshal(out, &raw) != nil || len(raw) == 0 {
+		return ""
+	}
+	return raw[0].HostConfig.RestartPolicy.Name
 }
 
 // mount is one bind mount, parsed from either engine's output format.

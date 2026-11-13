@@ -79,6 +79,9 @@ type PeerRoute struct {
 	// Authority is the file holding that peer's certificate authority, which
 	// the peer's own certificate is checked against.
 	Authority string
+	// Via is the relay the proxy connects to instead of Address, as host:port.
+	// Empty sends the connection to Address.
+	Via string
 }
 
 // A container is given a new address every time it is recreated, and the proxy
@@ -270,7 +273,11 @@ func writePeerRoutes(b *strings.Builder, c NginxConfig) {
 		}
 		b.WriteString("    location / {\n")
 		fmt.Fprintf(b, "        add_header %s peer always;\n", RouteHeader)
-		fmt.Fprintf(b, "        proxy_pass https://%s;\n", r.Address)
+		upstream := r.Address
+		if r.Via != "" {
+			upstream = r.Via
+		}
+		fmt.Fprintf(b, "        proxy_pass https://%s;\n", upstream)
 		fmt.Fprintf(b, "        proxy_connect_timeout %s;\n", connectWait)
 		fmt.Fprintf(b, "        proxy_ssl_certificate           %s;\n", c.ClientCert)
 		fmt.Fprintf(b, "        proxy_ssl_certificate_key       %s;\n", c.ClientKey)

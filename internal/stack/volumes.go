@@ -134,13 +134,18 @@ func (e *serviceEngine) volumeCommand(wait time.Duration, args ...string) ([]byt
 func (e *serviceEngine) inspectVolume(name string) (runtimeVolume, bool, error) {
 	out, err := e.volumeCommand(engineReadWait, "inspect", name)
 	if err != nil {
-		if strings.Contains(strings.ToLower(err.Error()), "not found") {
+		if volumeMissing(err) {
 			return runtimeVolume{}, false, nil
 		}
 		return runtimeVolume{}, false, err
 	}
 	var all []runtimeVolume
-	if err = json.Unmarshal(out, &all); err != nil {
+	if e.engine == DockerEngine {
+		all, err = decodeDockerVolumes(out)
+	} else {
+		err = json.Unmarshal(out, &all)
+	}
+	if err != nil {
 		return runtimeVolume{}, false, err
 	}
 	if len(all) != 1 || all[0].Configuration.Name != name {
@@ -148,7 +153,14 @@ func (e *serviceEngine) inspectVolume(name string) (runtimeVolume, bool, error) 
 	}
 	return all[0], true, nil
 }
+
+// checkVolume compares a volume the runtime holds with its declaration. Docker
+// records no size, so on Docker the size is not compared.
 func checkVolume(group string, v *Volume, actual runtimeVolume) error {
+	return checkVolumeOn(AppleEngine, group, v, actual)
+}
+
+func checkVolumeOn(engine, group string, v *Volume, actual runtimeVolume) error {
 	c := actual.Configuration
 	if v.External {
 		return nil
@@ -156,7 +168,7 @@ func checkVolume(group string, v *Volume, actual runtimeVolume) error {
 	if c.Labels[LabelRole] != "volume" || c.Labels[LabelGroup] != group || c.Labels[LabelVolume] != v.Key {
 		return fmt.Errorf("volume %s is not owned by project %s declaration %s", v.Name, group, v.Key)
 	}
-	if c.Labels[LabelConfig] != volumeFingerprint(group, v) || c.Driver != "local" || c.SizeInBytes <= 0 || v.Size > 0 && c.SizeInBytes != v.Size {
+	if c.Labels[LabelConfig] != volumeFingerprint(group, v) || c.Driver != "local" || engine != DockerEngine && (c.SizeInBytes <= 0 || v.Size > 0 && c.SizeInBytes != v.Size) {
 		return fmt.Errorf("volume %s configuration differs; automatic resize or replacement is forbidden", v.Name)
 	}
 	return nil
@@ -180,7 +192,7 @@ func (e *serviceEngine) prepareVolumes(group string, services []*Service, create
 			return err
 		}
 		if found {
-			if err := checkVolume(group, v, actual); err != nil {
+			if err := checkVolumeOn(e.engine, group, v, actual); err != nil {
 				return err
 			}
 		} else if v.External {
@@ -191,6 +203,13 @@ func (e *serviceEngine) prepareVolumes(group string, services []*Service, create
 	}
 	if !create {
 		return nil
+	}
+	for _, v := range missing {
+		// Docker's local driver takes no size, so a declared size cannot be
+		// created there and is refused before anything is created.
+		if e.engine == DockerEngine && v.Size > 0 {
+			return fmt.Errorf("volume %s declares a size; Docker's local driver creates a volume without one", v.Name)
+		}
 	}
 	for _, v := range missing {
 		args := []string{"create", "--label", LabelRole + "=volume", "--label", LabelGroup + "=" + group, "--label", LabelVolume + "=" + v.Key, "--label", LabelConfig + "=" + volumeFingerprint(group, v)}
@@ -209,7 +228,7 @@ func (e *serviceEngine) prepareVolumes(group string, services []*Service, create
 		if !found {
 			return fmt.Errorf("created volume %s is unavailable", v.Name)
 		}
-		if err := checkVolume(group, v, actual); err != nil {
+		if err := checkVolumeOn(e.engine, group, v, actual); err != nil {
 			return err
 		}
 	}

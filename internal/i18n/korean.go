@@ -5,7 +5,7 @@ package i18n
 // plural form, because Korean has one form for both.
 var korean = map[string]string{
 	// Menu bar.
-	"Open bay":    "bay 열기",
+	"Open bay":             "bay 열기",
 	"Reading the machine…": "머신 상태 읽는 중…",
 	"Quit":                 "종료",
 	"…and %d more":         "…외 %d개",
@@ -115,8 +115,8 @@ var korean = map[string]string{
 	"%d s":              "%d초",
 
 	// Domains.
-	"delegated to bay on this machine": "이 머신에서 bay에 위임된 도메인",
-	"Add domain…": "도메인 추가…",
+	"delegated to bay on this machine":         "이 머신에서 bay에 위임된 도메인",
+	"Add domain…":                              "도메인 추가…",
 	"projects without one of their own use it": "자체 도메인이 없는 프로젝트가 사용",
 	"default":      "기본",
 	"pinned by %s": "%s이(가) 고정",
@@ -253,12 +253,12 @@ var korean = map[string]string{
 	"copied %d lines":                 "%d줄 복사됨",
 	"logs: %v":                        "로그: %v",
 	"doctor: bay is not beside this application": "진단: 이 애플리케이션 옆에 bay이 없습니다",
-	"bay doctor": "bay 진단",
-	"Started %s":          "%s을(를) 시작했습니다",
-	"Stopped %s":          "%s을(를) 정지했습니다",
-	"Restarted %s":        "%s을(를) 다시 시작했습니다",
-	"Removed %s":          "%s을(를) 제거했습니다",
-	"Remove %s?":          "%s을(를) 제거할까요?",
+	"bay doctor":   "bay 진단",
+	"Started %s":   "%s을(를) 시작했습니다",
+	"Stopped %s":   "%s을(를) 정지했습니다",
+	"Restarted %s": "%s을(를) 다시 시작했습니다",
+	"Removed %s":   "%s을(를) 제거했습니다",
+	"Remove %s?":   "%s을(를) 제거할까요?",
 	"Its containers are removed and the project leaves the list. Each container's own filesystem goes with it; volumes and the project's files are kept, and Start from its Compose file brings it back.": "컨테이너를 지우고 프로젝트를 목록에서 뺍니다. 각 컨테이너 자체의 파일시스템도 함께 지워집니다. 볼륨과 프로젝트 파일은 남으며, Compose 파일에서 시작하면 프로젝트가 돌아옵니다.",
 	"RESOURCES":                           "사용량",
 	"read while this screen is open":      "이 화면이 열려 있는 동안 읽음",

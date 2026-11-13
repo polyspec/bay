@@ -46,6 +46,35 @@ An engine that is absent, or present with nothing answering its socket,
 contributes no containers and is not an error. A machine with one engine
 behaves as it did before the other was supported.
 
+The Docker command speaks to the daemon its configuration names: `DOCKER_HOST`,
+then the context `DOCKER_CONTEXT` names, then the current context in the
+Docker configuration file. A daemon whose address names another machine is
+not this machine's engine and contributes no containers. The address names this
+machine when it is the default, a Unix socket or a named pipe, or when its host
+is a loopback address, `localhost` or an address of one of this machine's
+interfaces; the scheme does not decide it, so `tcp://127.0.0.1:2375` is this
+machine and `ssh://root@192.168.2.3` is not. A host name other than `localhost`
+is not resolved, so the answer does not depend on the network. It publishes the proxy's ports on its own loopback address and
+mounts paths of its own file system, so rules 1, 4 and 6 fail for it. The
+machine that daemon runs on runs `bay` itself and is reached as a
+peer. A program named in `DOCKER_BIN` is used as given.
+
+## Machines that are not macOS
+
+On macOS the machine setup is the resolver entries under `/etc/resolver`, the
+authority in the login keychain, the DNS agent and the relay daemon under
+launchd. Another system, Linux among them, has no per-domain resolver and no
+login keychain, so its setup is its own: the authority in the certificate
+store the system has, a systemd agent that follows the approved peers and
+names every domain the proxy serves in a marked block of `/etc/hosts`, and an
+optional firewall. `bay` runs projects and the proxy on Docker there.
+Each part is read from the system; one the system lacks the tool for is
+reported, not guessed at ([peers](peers.md#a-machine-that-is-not-macos)).
+
+The address the link announces is the IPv4 address of the interface holding
+the default route. Docker creates a bridge for each network, and a bridge can
+come before that interface in the system's list of addresses.
+
 Routes, domain conflicts, certificates and peer state are read from every
 engine's containers merged into one list. A domain is therefore claimed once
 per machine, not once per engine, and two containers on different engines

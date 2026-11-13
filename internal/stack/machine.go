@@ -85,6 +85,10 @@ type Settings struct {
 	// what reports it. It is off until it is turned on, because it writes a
 	// line for every such request.
 	LinkLog bool `json:"linkLog,omitempty"`
+	// OnlyFrom are the hosts a machine that is not macOS accepts new
+	// connections from on the network, applied by "bay install". Empty
+	// means no firewall. A Mac does not use it.
+	OnlyFrom []string `json:"onlyFrom,omitempty"`
 }
 
 // DefaultDomain is the domain a project uses when none is set. RFC 6761

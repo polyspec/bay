@@ -14,12 +14,15 @@ import (
 // It announces this machine while the link is open, it follows an approved peer
 // that comes back at another address, which is what happens when the network
 // hands out a different one, and it reads what domains each approved peer holds
-// so that one added or withdrawn over there is served or dropped here.
+// so that one added or withdrawn over there is served or dropped here. It also
+// records where the relay the Apple proxy reaches approved peers through
+// listens; the relay itself is a launchd daemon.
 func servePeers(ctx context.Context, dir string) {
 	m := stack.NewMachine(dir)
 	go announceSelf(ctx, m)
 	go followPeers(ctx, m)
 	go refreshDomains(ctx, m)
+	go recordRelayAddress(ctx, m)
 }
 
 // domainRefresh is how often each approved peer is asked what it holds. The

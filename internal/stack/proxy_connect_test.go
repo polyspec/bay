@@ -70,6 +70,7 @@ esac
 	if err := os.WriteFile(binary, []byte(body), 0o700); err != nil {
 		t.Fatal(err)
 	}
+	warmExecutable(t, binary)
 	t.Setenv("CONTAINER_BIN", binary)
 	t.Setenv("DOCKER_BIN", filepath.Join(dir, "no-docker"))
 	return f

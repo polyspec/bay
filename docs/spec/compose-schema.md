@@ -28,6 +28,7 @@ readable by other Compose tools.
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `services.<name>.x-bay.domains` | list of string | none: the service is internal | Domains the proxy routes to this service, each under one of the project's domains. Each domain gets its own certificate and route. A service without it runs and other services reach it by name, but the proxy does not route to it and issues it no certificate. |
+| `services.<name>.x-bay.trust` | boolean | true | Whether the container trusts the certificates this machine trusts: the system's public roots and this machine's authority, which issues the certificates of its projects and of its peers' names. They are mounted read-only over /etc/ssl/certs/ca-certificates.crt, /etc/pki/tls/certs/ca-bundle.crt and /etc/ssl/cert.pem and named by SSL_CERT_FILE, CURL_CA_BUNDLE, REQUESTS_CA_BUNDLE and NODE_EXTRA_CA_CERTS; for Java a PKCS #12 store is mounted at /etc/bay/truststore.p12 and named by JAVA_TOOL_OPTIONS. A path the service mounts itself and a variable it sets itself are left to the service. false gives the container its image's store only. |
 
 ## Service labels
 

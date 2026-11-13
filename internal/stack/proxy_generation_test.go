@@ -72,6 +72,7 @@ cat "$BAY_GENERATION_INSTANCES"
 	if err := os.WriteFile(binary, []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
+	warmExecutable(t, binary)
 	t.Setenv("CONTAINER_BIN", binary)
 	// The fixture is the only engine this test has: naming a command that does
 	// not run leaves the other contributing nothing.

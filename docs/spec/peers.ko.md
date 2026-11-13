@@ -165,6 +165,75 @@ hosts 파일도, 특권 포트도 필요 없다.
 제공하고, 창이 그 이름이 여러 곳에서 제공된다고 알린다. 한쪽에서 도메인을 바꾸면
 끝난다.
 
+## macOS가 아닌 머신
+
+Docker가 있는 Linux 머신은 자신을 승인한 피어에게 자기 이름을 제공하고, 자기 이름과
+피어의 이름에는 `/etc/hosts`의 이름으로 닿는다([구조](architecture.ko.md#macos가-아닌-머신)).
+설치와 점검은 Mac과 같은 명령으로 한다.
+
+```sh
+bay install -dry-run                 # install이 바꿀 것. 아무것도 바꾸지 않는다
+bay install -only-from 192.168.2.1   # 적용. 다시 실행하면 아무것도 바꾸지 않는다
+bay check                            # 항목마다 한 줄. 빠진 것이 있으면 1로 끝난다
+bay doctor                           # 같은 항목과 머신 상태
+```
+
+설치 항목은 시스템에서 읽는다. 이 시스템에서 install이 바꾸는 방법을 모르는 항목은
+`check`와 `doctor`가 무엇을 설치해야 하는지와 함께 보고하고, install은 건드리지
+않는다.
+
+| 항목 | 갖춰진 조건 | install이 하는 일 |
+| --- | --- | --- |
+| 인증기관 | `<state>/ca.crt`가 있다 | 만든다 |
+| docker 엔진 | `docker info`가 답한다 | 없음. Docker를 설치한다 |
+| 신뢰 | 시스템이 가진 저장소에 인증기관이 있다: `update-ca-certificates`의 `/usr/local/share/ca-certificates`(Debian, Ubuntu, Alpine), 또는 `update-ca-trust`의 `/etc/pki/ca-trust/source/anchors`나 `/etc/ca-certificates/trust-source/anchors`(Fedora, RHEL, Arch) | 거기에 인증기관을 쓰고 도구를 실행한다. 둘 다 없으면 아무것도 하지 않는다 |
+| 방화벽 | 아래 참고 | 쓰고 올린다. systemd나 nft가 없으면 아무것도 하지 않는다 |
+| 에이전트 | `bay-agent.service`가 `bayd ... -hosts`를 실행한다 | 등록, 활성화, 시작한다. systemd가 없으면 아무것도 하지 않는다 |
+| 프록시 네트워크의 이름 | Docker 프록시가 `bay` 네트워크에서 같은 이름을 네트워크 별칭으로 가져, Docker DNS가 그 네트워크의 모든 컨테이너에 답한다 | 그 이름으로 프록시를 네트워크에 다시 연결한다. 컨테이너는 다시 만들지 않는다 |
+| `/etc/hosts`의 이름 | 두 표시 줄 사이 블록이 모든 경로의 도메인과 승인한 피어의 도메인을 127.0.0.1로 적는다 | 블록을 쓴다. 블록 밖은 바꾸지 않는다 |
+
+에이전트는 30초마다 승인한 피어가 가진 도메인을 읽고, 바뀌면 프록시를 다시 쓰고
+블록을 맞춘다. 피어의 이름은 127.0.0.1의 이 머신 프록시에 닿고, 프록시가 피어의
+링크로 전달한다. 컨테이너는 호스트의 `/etc/hosts`를 읽지 않는다. `bay`
+네트워크의 컨테이너는 같은 이름을 Docker DNS로 프록시에 해석한다. 프록시 인증서는
+그 컨테이너가 이 머신의 인증기관을 신뢰할 때만 검증되고, 그것은 이미지에 달려 있다.
+
+방화벽은 `-only-from`으로 요청한다. 방화벽은 nftables 테이블
+`inet bay`이고 `/etc/bay/firewall.nft`에 있으며 부팅 때
+`bay-firewall.service`가 올린다. 기본 경로의 인터페이스에서 지정한
+호스트의 새 연결과, 이 머신이 연 연결의 응답만 받는다. 그래서 이 머신은 전과 같이
+네트워크에 나간다. Docker의 규칙과 머신 자신의 브리지는 건드리지 않는다. 호스트는
+`machine.json`의 `onlyFrom`에 기록되므로 다음 `install`도 그대로 유지한다.
+`-only-from none`은 방화벽을 제거한다. 기본 경로가 다른 인터페이스로 옮겨 가면
+`check`가 방화벽을 빠졌다고 보고하고 `install`이 새 인터페이스로 다시 쓴다.
+
+다른 기계와 같이 양쪽 방향으로 승인한다.
+
+1. Linux 머신에서 `bay peer open`이 링크를 게시하고,
+   `bay peer add <mac-주소>:8443`이 Mac을 승인한다. 그 뒤 링크는 Mac의
+   클라이언트 인증서를 받아들인다.
+2. Mac에서 `bay peer add <linux-주소>:8443`이 Linux 머신을 승인한다.
+   Mac의 resolver가 Linux 머신의 이름에 Mac의 프록시로 답하고, 그 프록시가 요청을
+   링크로 전달한다.
+
+## Mac의 relay
+
+Apple 프록시는 가상 머신 안에서 실행되고, Mac은 기본 경로의 인터페이스에서만 그
+주소를 자기 주소로 바꾼다. Mac이 공유하는 네트워크에 연결한 보드처럼 다른
+인터페이스로 닿는 피어는 컨테이너 주소를 받고, 그 응답은 돌아오지 않는다. 그래서
+Apple 프록시는 모든 피어에 자기 네트워크 게이트웨이의 relay(`192.168.65.1:8444`)를
+거쳐 연결한다. relay는 TLS handshake의 이름을 읽고, Mac에서 그 이름을 제공하는 승인된
+피어의 링크로 연결하고, 바이트를 복사한다. TLS 세션은 프록시와 피어의 것으로 남는다.
+
+relay는 launchd 데몬 `dev.bay.relay`이다
+(`/Library/LaunchDaemons/dev.bay.relay.plist`, `bayd -relay -state <dir>`
+실행, `/var/log/bay-relay.log`에 기록). macOS는 launchd가 사용자를 위해 띄운
+프로그램이 로컬 네트워크에 연결하는 것을 묻지 않고 거부한다. 사용자가 허용한
+애플리케이션만 예외이고, 데몬은 이 제한을 받지 않는다. DNS 에이전트가 게이트웨이를
+`<state>/peer-relay`에 기록하고, 데몬은 그것이 이 Mac의 주소이고 포트가 8444일 때만
+거기서 listen한다. `bay install`이 데몬을 등록하고, `check`가 보고하고,
+`uninstall`이 제거한다. 등록하기 전에는 프록시가 각 피어에 직접 연결한다.
+
 ## 하지 않는 것
 
 - 도메인에 기계 이름을 넣지 않는다. `web.<기계>.test` 같은 것은 없다.

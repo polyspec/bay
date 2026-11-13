@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 )
@@ -33,6 +34,11 @@ type Install struct {
 	// Elevate runs the helper as root. Nil uses sudo, which requires a
 	// terminal.
 	Elevate Elevator
+	// RelayBin is the bayd binary the relay daemon runs, and State the
+	// state directory it reads. An empty RelayBin leaves the daemon out of the
+	// setup.
+	RelayBin string
+	State    string
 }
 
 // Elevator runs one command with administrator rights.
@@ -42,18 +48,65 @@ type Elevator func(exe string, args []string) error
 // there is nothing to elevate for.
 func (in Install) Pending() []SetupStep {
 	var steps []SetupStep
-	for _, text := range in.privilegedSteps() {
-		steps = append(steps, SetupStep{Text: text, Asks: AsksAdministrator})
-	}
-	if in.UntrustCA != "" && CATrusted(in.UntrustCA) {
-		steps = append(steps, SetupStep{
-			Text: "stop trusting the retired " + in.UntrustCA, Asks: AsksTrustSettings})
-	}
-	if in.CAPath != "" && !CATrusted(in.CAPath) {
-		steps = append(steps, SetupStep{
-			Text: "trust " + in.CAPath + " in your keychain", Asks: AsksTrustSettings})
+	for _, item := range in.Items() {
+		if !item.OK {
+			steps = append(steps, item.SetupStep)
+		}
 	}
 	return steps
+}
+
+// Items lists every part of the setup this Install covers, whether it is in
+// place or not. The steps that need root come first, because they are applied
+// first.
+func (in Install) Items() []SetupItem {
+	var items []SetupItem
+	for _, d := range in.Domains {
+		items = append(items, SetupItem{
+			Name: ResolverPath(d), OK: in.resolverInstalled(d),
+			SetupStep: SetupStep{Text: "write " + ResolverPath(d), Asks: AsksAdministrator},
+		})
+	}
+	for _, d := range in.retiring() {
+		items = append(items, SetupItem{
+			Name:      ResolverPath(d),
+			SetupStep: SetupStep{Text: "remove " + ResolverPath(d), Asks: AsksAdministrator},
+		})
+	}
+	if in.RelayBin != "" {
+		items = append(items, SetupItem{
+			Name: "relay " + RelayDaemonLabel, OK: !in.relayPending(),
+			SetupStep: SetupStep{Text: "register the peer relay " + RelayDaemonPath(), Asks: AsksAdministrator},
+		})
+	}
+	if in.UntrustCA != "" && CATrusted(in.UntrustCA) {
+		items = append(items, SetupItem{
+			Name:      "trust " + in.UntrustCA,
+			SetupStep: SetupStep{Text: "stop trusting the retired " + in.UntrustCA, Asks: AsksTrustSettings},
+		})
+	}
+	if in.CAPath != "" {
+		items = append(items, SetupItem{
+			Name: "trust " + in.CAPath, OK: CATrusted(in.CAPath),
+			SetupStep: SetupStep{Text: "trust " + in.CAPath + " in your keychain", Asks: AsksTrustSettings},
+		})
+	}
+	return items
+}
+
+// relayPending reports whether the relay daemon is missing, registered with
+// other arguments, or not running.
+func (in Install) relayPending() bool {
+	return in.RelayBin != "" && !(RelayDaemonCurrent(in.RelayBin, in.State) && RelayDaemonLoaded())
+}
+
+// SetupItem is one part of a machine's setup and whether it is in place. When it
+// is not, its step says what "bay install" does about it; a step with
+// no text is one install cannot take, and the name says what to do.
+type SetupItem struct {
+	Name string
+	OK   bool
+	SetupStep
 }
 
 // SetupStep is one part of the machine setup that is not in place yet, and what
@@ -102,6 +155,9 @@ func (in Install) privilegedSteps() []string {
 	}
 	for _, d := range in.retiring() {
 		steps = append(steps, "remove "+ResolverPath(d))
+	}
+	if in.relayPending() {
+		steps = append(steps, "register the peer relay "+RelayDaemonPath())
 	}
 	return steps
 }
@@ -154,6 +210,9 @@ func (in Install) Ensure() error {
 		if len(in.Retire) > 0 {
 			args = append(args, "-retire", strings.Join(in.Retire, ","))
 		}
+		if in.RelayBin != "" {
+			args = append(args, "-relaybin", in.RelayBin, "-state", in.State)
+		}
 		if err := in.elevate(args...); err != nil {
 			return err
 		}
@@ -188,6 +247,11 @@ func (in Install) applyAsRoot() error {
 		}
 		fmt.Printf("removed %s\n", path)
 	}
+	if in.relayPending() {
+		if err := installRelayDaemon(in.RelayBin, in.State); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
@@ -215,6 +279,9 @@ func (in Install) applyTrust() error {
 	}
 	return nil
 }
+
+// ElevateArgs runs this executable as root with these arguments.
+func (in Install) ElevateArgs(args ...string) error { return in.elevate(args...) }
 
 // elevate runs the helper as root through whichever mechanism the caller has.
 func (in Install) elevate(args ...string) error {
@@ -411,17 +478,53 @@ func untrustCA(path string) error {
 	return nil
 }
 
-// sudoRun runs the helper through sudo, which reads the password from the
-// caller's terminal. An application has no terminal and supplies its own
-// Elevator.
+// sudoRun runs the helper as root. From a terminal it uses sudo, which reads
+// the password there. Without one, on macOS, it asks in the system's
+// administrator dialog, so a command run from a program or an editor without a
+// terminal can still be answered by the person at the Mac. An application
+// supplies its own Elevator.
 func sudoRun(exe string, args []string) error {
-	if !hasTerminal() {
+	if hasTerminal() {
+		cmd := exec.Command("sudo", append([]string{"--", exe}, args...)...)
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+		return cmd.Run()
+	}
+	if runtime.GOOS != "darwin" {
 		return fmt.Errorf("administrator rights are needed and there is no terminal to ask on; " +
 			"run \"bay install\" from a terminal")
 	}
-	cmd := exec.Command("sudo", append([]string{"--", exe}, args...)...)
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	return cmd.Run()
+	fmt.Fprintln(os.Stderr, "no terminal to ask on; macOS asks for an administrator password in a dialog")
+	out, err := exec.Command("osascript", "-e", adminScript(exe, args)).CombinedOutput()
+	os.Stdout.Write(adminOutput(out))
+	if err != nil {
+		if strings.Contains(string(out), "-128") {
+			return fmt.Errorf("the administrator dialog was cancelled")
+		}
+		return fmt.Errorf("running as administrator: %s", strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+// adminScript is the AppleScript that runs the helper with administrator
+// privileges. Every argument is quoted for the shell, and the command for
+// AppleScript.
+func adminScript(exe string, args []string) string {
+	words := []string{shellQuote(exe)}
+	for _, a := range args {
+		words = append(words, shellQuote(a))
+	}
+	return "do shell script " + appleScriptQuote(strings.Join(words, " ")+" 2>&1") +
+		" with administrator privileges"
+}
+
+// adminOutput returns what the helper printed. AppleScript ends lines with
+// carriage returns.
+func adminOutput(out []byte) []byte {
+	s := strings.ReplaceAll(string(out), "\r", "\n")
+	if s != "" && !strings.HasSuffix(s, "\n") {
+		s += "\n"
+	}
+	return []byte(s)
 }
 
 func hasTerminal() bool {

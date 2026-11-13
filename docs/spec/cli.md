@@ -10,24 +10,35 @@ verifies that this file matches the code.
 
 <!-- generated: bay brief --markdown -->
 
-| Command | Summary | Administrator rights |
-| --- | --- | --- |
-| `up` | Start this project's services and register their routes. | Can require |
-| `down` | Remove this project's services and withdraw its routes. | No |
-| `start [service...]` | Start services. With no name, starts every service in the project. | No |
-| `stop [service...]` | Stop services. The containers remain and can be started again. | No |
-| `restart [service...]` | Stop then start services. | No |
-| `logs [-f] [-n N] <service>` | Print one service's output. | No |
-| `domain [add|remove|default] [name]` | List the machine's domains, or change them. | Can require |
-| `status [--json]` | Print the proxy, the DNS server and every registered project. | No |
-| `doctor` | Report what machine setup is missing. Changes nothing. | No |
-| `peer [open|close|find|add|remove] [address|name|fingerprint]` | List the machines whose domains this one reaches, or change them. | No |
-| `sync` | Rewrite the proxy configuration from the containers that are running. | No |
-| `install` | Apply the machine setup now instead of during the next up. | Can require |
-| `uninstall` | Remove the DNS agent and the resolver entries. | Can require |
-| `brief [--json]` | Print the full usage contract on one screen. | No |
-| `schema [--json]` | Print the Compose extension contract. | No |
-| `help [command]` | Print help for one command, or the command list. | No |
+| Command | Summary | Access | Administrator rights |
+| --- | --- | --- | --- |
+| `up` | Start this project's services and register their routes. | change | Can require |
+| `down` | Remove this project's services and withdraw its routes. | remove | No |
+| `start [service...]` | Start services. With no name, starts every service in the project. | change | No |
+| `stop [service...]` | Stop services. The containers remain and can be started again. | change | No |
+| `restart [service...]` | Stop then start services. | change | No |
+| `logs [-f] [-n N] <service>` | Print one service's output. | read | No |
+| `domain [add|remove|default] [name]` | List the machine's domains, or change them. | remove | Can require |
+| `status [--json]` | Print the proxy, the DNS server and every registered project. | read | No |
+| `doctor` | Report what machine setup is missing. Changes nothing. | read | No |
+| `check` | Report each part of the machine setup and fail when any is missing. Changes nothing. | read | No |
+| `peer [open|close|find|add|remove] [address|name|fingerprint]` | List the machines whose domains this one reaches, or change them. | remove | No |
+| `sync` | Rewrite the proxy configuration from the containers that are running. | change | No |
+| `install [-dry-run] [-only-from host,...|none]` | Apply the machine setup that is missing. Running it again changes nothing. | change | Can require |
+| `uninstall` | Remove the machine setup install wrote. | remove | Can require |
+| `brief [--json]` | Print the full usage contract on one screen. | read | No |
+| `schema [--json]` | Print the Compose extension contract. | read | No |
+| `skill [print|install]` | Print the agent skill, or write it where agents read skills. | change | No |
+| `mcp [install]` | Serve the commands to an agent as an MCP server on standard input and output, or register it. | change | No |
+| `help [command]` | Print help for one command, or the command list. | read | No |
+
+## Exit status
+
+| Status | Meaning |
+| --- | --- |
+| `0` | The command did what it states. For check, every part of the setup is in place. |
+| `1` | The command failed, or check found a part missing. Standard error says why and names the command that reports more. |
+| `2` | The command line names no command or an unknown one. |
 
 ## Effects
 
@@ -63,6 +74,10 @@ Reads state without registering the selected Compose project, creating certifica
 
 Reads public certificate and setup state, including the selected project's domains without saving them. Creates no files and reads no private keys.
 
+### `check`
+
+Prints one line per part: ok or missing, and for a missing part what "install" would do about it. Exits non-zero when any part is missing, so a script can call it before relying on the machine.
+
 ### `peer`
 
 With no argument it lists them and says whether the link is open. "open" answers the link and announces this machine to the network, which another machine reads to approve this one; "close" stops both. "find" lists the machines announcing themselves. "add" takes an address, or the name of a machine that announced itself, reads what it says about itself, checks that it holds the authority it names, prints the fingerprint and asks before approving. "remove" withdraws an approval. Every change rewrites the proxy configuration. Nothing is added to the keychain.
@@ -73,11 +88,19 @@ Writes the server blocks and issues any certificate a route needs, then reloads 
 
 ### `install`
 
-Writes /etc/resolver entries, adds the certificate authority to the user's trust settings, and registers the DNS launchd agent. Registers no project.
+On macOS: writes /etc/resolver entries, adds the certificate authority to the user's trust settings, registers the DNS launchd agent and the peer relay launchd daemon. On another system: creates the certificate authority and, when -only-from names hosts, an nftables firewall that accepts new connections on the default route's interface only from them; the hosts are recorded, so the next install keeps them, and "none" removes the firewall. Each part already in place is left alone. -dry-run prints what would change and changes nothing. Registers no project.
 
 ### `uninstall`
 
-Removes /etc/resolver entries and the launchd agent. The certificate authority stays in the trust settings.
+On macOS removes /etc/resolver entries, the launchd agent and the relay daemon; the certificate authority stays in the trust settings. On another system removes the firewall.
+
+### `skill`
+
+print writes SKILL.md to standard output. install writes it to ~/.claude/skills/bay/ and ~/.agents/skills/bay/, for each of ~/.claude and ~/.agents that exists, only when the content differs. "bay install", "bay up", "make install" and the MCP server at its start do the same, and check reports a skill that is missing or out of date.
+
+### `mcp`
+
+Offers each command that is not terminal-only as a tool, annotated read-only, idempotent or destructive from its access, and brief, schema and status as resources. A tool runs this executable with the given arguments in the given project directory and returns its output and exit status. A command's standard input is empty, so a question to a person is answered no. install registers this executable in Claude Code's user configuration as "bay" through the claude command, only when the registration differs; "bay install" does the same where claude is installed, and check reports a missing or stale registration. Serving rewrites the agent skill when it differs from this executable's, so the skill follows an update.
 
 ## Rules callers can rely on
 
@@ -85,12 +108,14 @@ Removes /etc/resolver entries and the launchd agent. The certificate authority s
 | --- | --- |
 | One proxy container per machine, named bay-edge. | Projects share it. Its configuration is rebuilt from every running project. |
 | Routes are read from container labels, not from Compose files. | Removing a project's containers removes its routes without editing a file. |
-| Domains are machine state, delegated once in /etc/resolver. | A project inherits the machine default unless its Compose file pins one. |
+| Domains are machine state, delegated once in /etc/resolver on macOS and named in a marked block of /etc/hosts elsewhere. | A project inherits the machine default unless its Compose file pins one. |
 | Certificates are issued and reissued automatically. | One per routed domain, plus a default certificate for unrouted names. |
 | Container addresses change on every start. | The proxy names backends and resolves them per request, so addresses are never pinned. |
 | up, down, start, stop and restart return after the proxy serves the new configuration. | Reloading nginx is asynchronous, so the commands poll the proxy's health endpoint. |
 | up, start and restart publish the route of a started service after the proxy connects to it. | A healthcheck runs inside the service's container, so the proxy runs its own connection attempt to the service's address. |
-| Only /etc/resolver writes require administrator rights. | Trusting the certificate authority uses the user's trust settings. |
+| Only machine setup requires administrator rights: /etc/resolver entries and the relay daemon on macOS; the firewall, the agent, the hosts block and the system trust store elsewhere. | Trusting the certificate authority on macOS uses the user's trust settings. |
+| Every service container trusts this machine's authority unless its Compose file sets x-bay.trust: false. | A program in a container verifies against its image's store, which does not hold the authority that issues the local names. |
+| Machine setup is applied only by install, which changes nothing that is in place; check and install -dry-run report it without changing it. | A setup step done by hand is not checked, repeated or removed by anything. |
 
 ## Diagnostics
 

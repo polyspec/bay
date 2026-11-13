@@ -72,10 +72,13 @@ type Service struct {
 	// key does not change.
 	StopGrace *int `json:",omitempty"`
 	// StopSignal is the stop_signal name. It is omitted when the key is not set.
-	StopSignal         string `json:",omitempty"`
-	DependsOn          map[string]string
-	Healthcheck        *Healthcheck
-	OneShot            bool
+	StopSignal  string `json:",omitempty"`
+	DependsOn   map[string]string
+	Healthcheck *Healthcheck
+	OneShot     bool
+	// Trust gives the container the certificates this machine trusts (see
+	// trust_bundle.go). It is on unless x-bay.trust is false.
+	Trust              bool
 	NamedVolumes       []*Volume
 	dependencyIdentity map[string]string
 
@@ -91,10 +94,10 @@ type Service struct {
 // composeFile holds the Compose keys this tool reads. Unknown keys are ignored
 // so that a file written for other tools loads without change.
 type composeFile struct {
-	Name         string                     `yaml:"name"`
-	Services     map[string]*composeService `yaml:"services"`
-	Bay *projectSettings           `yaml:"x-bay"`
-	Volumes      map[string]yaml.Node       `yaml:"volumes"`
+	Name     string                     `yaml:"name"`
+	Services map[string]*composeService `yaml:"services"`
+	Bay      *projectSettings           `yaml:"x-bay"`
+	Volumes  map[string]yaml.Node       `yaml:"volumes"`
 }
 
 type projectSettings struct {
@@ -107,6 +110,7 @@ type projectSettings struct {
 // x-bay mapping.
 type serviceSettings struct {
 	Domains yaml.Node `yaml:"domains"`
+	Trust   *bool     `yaml:"trust"`
 }
 
 type composeService struct {
@@ -129,7 +133,7 @@ type composeService struct {
 	StopSignal    *string          `yaml:"stop_signal"`
 	DependsOn     yaml.Node        `yaml:"depends_on"`
 	Healthcheck   yaml.Node        `yaml:"healthcheck"`
-	Bay  *serviceSettings `yaml:"x-bay"`
+	Bay           *serviceSettings `yaml:"x-bay"`
 }
 
 // FindComposeFile returns the path when it names a file, or the first known
@@ -286,7 +290,7 @@ func (c *Config) build(file *composeFile) error {
 }
 
 func (c *Config) service(name string, cs *composeService, network string) (*Service, error) {
-	s := &Service{Name: strings.ToLower(name), Network: network}
+	s := &Service{Name: strings.ToLower(name), Network: network, Trust: true}
 	if !validName(s.Name) {
 		return nil, fmt.Errorf("service name %q must be letters, digits, - or _", name)
 	}
@@ -343,6 +347,9 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 		s.Domains, err = c.serviceDomains(cs.Bay.Domains)
 		if err != nil {
 			return nil, fmt.Errorf("service %q: x-bay.domains: %w", name, err)
+		}
+		if cs.Bay.Trust != nil {
+			s.Trust = *cs.Bay.Trust
 		}
 	}
 	// A domain is forwarded to a port, and a port is never assumed.

@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 )
@@ -45,7 +46,17 @@ func MachineName() string {
 
 // LANAddress returns the address other machines on the network reach this one
 // at. The container network is left out: it exists only on this machine.
+//
+// On Linux the address is the one on the interface holding the default route.
+// Docker creates a bridge for each network, and a bridge can come before the
+// network's interface in the list, so the first address found is not the one a
+// peer reaches.
 func LANAddress() string {
+	if runtime.GOOS == "linux" {
+		if ip := interfaceIPv4(defaultRouteInterface()); ip != "" {
+			return ip
+		}
+	}
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		return ""

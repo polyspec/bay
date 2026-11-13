@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/polyspec/bay/internal/contract"
@@ -22,12 +23,20 @@ const (
 	endMarker   = "<!-- end generated -->"
 )
 
+// A target with Whole set is generated as a whole file; the others have a
+// generated section.
 var targets = []struct {
 	Path   string
 	Render func(io.Writer)
+	Whole  bool
 }{
-	{"docs/spec/cli.md", contract.MarkdownCLI},
-	{"docs/spec/compose-schema.md", contract.MarkdownSchema},
+	{"docs/spec/cli.md", contract.MarkdownCLI, false},
+	{"docs/spec/compose-schema.md", contract.MarkdownSchema, false},
+	{"README.md", contract.MarkdownAgents, false},
+	{"README.ko.md", contract.MarkdownAgents, false},
+	// The skill is committed so an agent installer that reads a repository
+	// finds it; "bay skill install" writes the same bytes.
+	{"skills/bay/SKILL.md", contract.Skill, true},
 }
 
 func main() {
@@ -37,6 +46,9 @@ func main() {
 	failed := false
 	for _, t := range targets {
 		current, err := os.ReadFile(t.Path)
+		if t.Whole && os.IsNotExist(err) {
+			current, err = nil, nil
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "docsgen: %v\n", err)
 			failed = true
@@ -44,7 +56,10 @@ func main() {
 		}
 		var body bytes.Buffer
 		t.Render(&body)
-		next, err := replace(string(current), body.String())
+		next, err := body.String(), error(nil)
+		if !t.Whole {
+			next, err = replace(string(current), body.String())
+		}
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "docsgen: %s: %v\n", t.Path, err)
 			failed = true
@@ -56,6 +71,11 @@ func main() {
 		if !*write {
 			fmt.Fprintf(os.Stderr,
 				"docsgen: %s does not match the code; run \"make docs-generate\"\n", t.Path)
+			failed = true
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(t.Path), 0o755); err != nil {
+			fmt.Fprintf(os.Stderr, "docsgen: %v\n", err)
 			failed = true
 			continue
 		}

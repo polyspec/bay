@@ -2,6 +2,48 @@
 
 동작 변경과 각 변경에 대해 실행한 검증을 기록한다. 날짜는 변경한 날이다.
 
+## 2026-11-14
+
+### 에이전트가 최신 skill과 MCP 서버를 찾는다
+
+`bay mcp install`과, `claude` 명령이 있으면 `install`이 실행 파일의 절대 경로로 Claude Code 사용자 설정에 MCP 서버를 등록하며, 등록이 다를 때만 바꾼다. `check`는 없거나 낡은 등록을 알린다. `make install`과 시작하는 MCP 서버가 바이너리와 다른 skill을 다시 쓴다.
+
+검증: `make install`이 skill을 쓰고 `/opt/homebrew/bin/bay mcp`를 등록했다. 두 번째 `bay install`은 아무것도 바꾸지 않았고 `check`가 둘 다 `ok`로 보고했다. `TestTheMCPRegistrationFollowsTheExecutable` 통과.
+
+### 에이전트가 계약에서 도구를 배운다: skill, MCP 서버, README
+
+모든 명령이 접근 수준(`read`, `change`, `remove`)과 사람에게 묻는 것을 선언하고, 계약에 `schemaVersion`과 종료 상태(0 완료, 1 실패 또는 설정 누락, 2 알 수 없는 명령. 전에는 알 수 없는 명령이 1로 끝났다)가 들어간다. 이 하나의 선언에서 `bay skill print`가 SKILL.md를 만들고, `bay skill install`과 `install`이 `~/.claude/skills/bay/`과 `~/.agents/skills/bay/` 중 디렉터리가 있는 곳에 내용이 다를 때만 쓰며, `check`가 없거나 낡은 skill을 알린다. `bay mcp`는 터미널 전용이 아닌 모든 명령을 접근 수준에 따른 읽기 전용·파괴적 표시를 단 MCP 도구로 제공하고(이 실행 파일을 주어진 디렉터리에서 빈 표준 입력으로 실행), `brief`, `schema`, `status`를 리소스로 제공한다. README의 에이전트 섹션과 `skills/bay/SKILL.md`는 `make docs-generate`가 생성하고 `make check`가 검사한다. 규칙과 머신 상태 목록에 릴레이 데몬, Linux 설정, 컨테이너 신뢰 저장소를 넣었다.
+
+검증: `make check` 통과. `bay skill install`을 두 번 실행하자 두 번 다 `current`를 출력했고 파일 수정 시각이 바뀌지 않았다. 표준 입력으로 `bay mcp`가 도구 16개를 나열했고 `check` 도구가 오류 없이 check 출력을 돌려줬다. `TestMCPToolsFollowTheContract`, `TestMCPToolRunsTheCommand`, `TestSkillsAreWrittenWhereAgentsAre`, `TestCommittedSkillIsCurrent` 통과. 테스트는 더 이상 홈 디렉터리에 쓰지 않는다.
+
+### 모든 서비스 컨테이너가 머신이 신뢰하는 것을 신뢰한다
+
+컨테이너 안 프로그램은 이미지의 인증서 저장소로 검증했으므로, 이 머신과 피어가 제공하는 이름(이 머신의 인증기관이 발급한 인증서)은 그 안에서 검증에 실패했다. 이제 `install`과 `up`이 `<state>/trust/`를 쓴다. 시스템 공인 루트와 인증기관(`ca-bundle.crt`), 인증기관 단독, Java용 PKCS #12 저장소이고, 내용이 바뀔 때만 파일을 제자리에서 다시 쓴다. 각 서비스 컨테이너는 묶음을 `/etc/ssl/certs/ca-certificates.crt`, `/etc/pki/tls/certs/ca-bundle.crt`, `/etc/ssl/cert.pem`에 읽기 전용으로, Java 저장소를 `/etc/bay/truststore.p12`에 마운트하고, `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, `JAVA_TOOL_OPTIONS`를 갖고 만들어진다. 서비스가 직접 정한 경로나 변수는 그대로 두고, `x-bay.trust: false`가 끈다. 이 인자는 설정 식별값에 들어가므로 인자 없이 만들어진 컨테이너는 다시 만들어진다. Apple `container`가 파일 마운트의 원본 폴더를 함께 폴더째 마운트하면 폴더 마운트를 버렸기 때문에 모든 마운트는 파일 하나씩이다. `check`가 저장소를 보고한다.
+
+검증: Mac(Apple `container`)과 ODROID(Docker)의 `alpine:3.20` 서비스에서 검증을 켠 `wget`이 `https://mac-hello.test`, `https://odroid-hello.test`, `https://example.com`을 받았다. ODROID의 `eclipse-temurin:21-jdk-alpine` 서비스에서 Java `HttpsURLConnection`이 셋 모두 200으로 답했다. 두 번째 `install`은 아무것도 바꾸지 않았다. 식별값에 인자를 넣기 전에는 인자가 바뀌어도 옛 컨테이너가 남아 모든 요청이 검증에 실패했고, `TestTrustArgumentsArePartOfTheIdentity`가 이를 검사한다. 전체 실행에서 실패한 프록시 테스트 4개(`TestARouteIsPublishedAfterTheProxyConnectsToIt` 외 3개)는 변경 없는 `HEAD`에서도 실패했다. `syspolicyd`가 막혀 있는 동안 새로 쓴 두 줄 스크립트가 첫 실행에 80초와 44초, 두 번째 실행에 0초가 걸려 엔진 읽기 제한 15초를 넘었다. 이제 fixture가 시간을 재는 호출 전에 엔진 스크립트를 한 번 실행하고, 4개 모두 통과한다.
+
+### `install`은 빠진 것만 적용하고, `check`와 `install -dry-run`이 그것을 보고한다
+
+`check`, `doctor`, `install -dry-run`은 설치 항목 목록 하나를 읽고, `install`은 빠진 항목만 적용한다. 그래서 다시 실행하면 아무것도 바꾸지 않는다. `check`는 항목마다 한 줄을 출력하고 빠진 것이 있으면 1로 끝난다. `install -dry-run`은 `install`이 바꿀 것을 출력하고 아무것도 바꾸지 않는다. macOS가 아닌 머신의 항목은 인증기관, Docker 엔진(보고만 하고 설치하지 않는다), 그리고 `install -only-from <호스트>`를 주었을 때 `bay-firewall.service`가 올리는 nftables 방화벽이다. 방화벽은 기본 경로의 인터페이스에서 그 호스트의 새 연결만 받는다. 호스트는 `machine.json`에 기록된다.
+
+### macOS가 아닌 머신이 피어의 이름에 닿는다
+
+Linux에서 `install`은 `bay-agent.service`(`-hosts`를 준 bayd)를 등록하고, 시스템이 가진 인증서 저장소에 인증기관을 넣는다. 에이전트는 `/etc/hosts`의 표시된 블록에 모든 경로와 승인한 피어의 도메인을 127.0.0.1로 적어 둔다. 시스템에 저장소, systemd, nft가 없으면 `check`와 `doctor`가 무엇을 설치해야 하는지 보고하고, install은 그 항목에 대해 아무것도 바꾸지 않는다. macOS에서 터미널이 없으면 관리자 단계는 실패하지 않고 시스템 대화상자로 묻는다.
+
+Docker 프록시 네트워크의 컨테이너는 같은 이름을 Docker DNS로 해석한다. 프록시는 제공하는 모든 이름을 네트워크 별칭으로 갖고, 목록이 다를 때만 네트워크에 다시 연결해서 바꾼다. `check`가 이 이름을 보고하고, `install`과 모든 프록시 재작성이 적용한다.
+
+검증: ODROID에서 `check`가 네트워크의 이름이 빠졌다고 보고했고, `install -dry-run`이 프록시 재작성을 나열했고, `install`이 적용했고, 두 번째 `install`은 `ok` 외의 줄을 출력하지 않았고, 네트워크의 `alpine:3.20` 컨테이너에서 `nslookup mac-hello.test`가 프록시 주소 172.18.0.3을 답했고 `wget https://mac-hello.test`가 Mac 서비스 페이지를 돌려주었다(`--no-check-certificate` 사용). ODROID에서 `install -dry-run`이 인증기관 추가를 나열했고, `install`이 추가했고, 두 번째 `install`은 `ok` 6줄을 출력하고 아무것도 바꾸지 않았고, `curl https://mac-hello.test`(Mac의 서비스)와 `curl https://odroid-hello.test`가 `--cacert` 없이 답했다. Mac에서 터미널 없이 `bay install`이 대화상자로 relay 데몬을 등록했고, `curl https://odroid-hello.test`가 relay를 거쳐 200으로 답했다. `TestTheTrustStoreIsReadFromTheSystem`, `TestWithoutSystemd`, `TestTheHostsBlock`, `TestAdminScriptQuotesEveryArgument`가 통과한다.
+
+### Apple 프록시는 relay 데몬을 거쳐 피어에 연결한다
+
+Mac의 Apple 프록시는 기본 경로가 아닌 네트워크의 피어에 연결하지 못했다. 피어가 컨테이너 주소로 응답했고 그 응답이 돌아오지 않았다(`504`). 이제 프록시는 `192.168.65.1:8444`에 연결하고, launchd 데몬 `dev.bay.relay`가 TLS 이름을 읽고 Mac에서 승인된 피어로 연결한다. macOS가 사용자 에이전트의 연결을 묻지 않고 `no route to host`로 거부했기 때문에 relay는 데몬이다. `install`이 등록하고 `uninstall`이 제거한다.
+
+### Docker가 프로젝트의 서비스를 실행한다
+
+엔진이 Docker인 머신에서는 Docker의 명령과 형식으로 서비스를 나열하고 만들고 검사한다. 서비스와 프록시는 `--restart unless-stopped`를 갖는다. 다른 머신의 Docker endpoint는 이 머신의 엔진으로 세지 않는다. macOS가 아닌 머신에는 resolver 항목, DNS 에이전트, 신뢰 설정이 없다.
+
+검증: `go test ./...`와 `make check`가 통과한다. `TestTheRelayPassesTheSessionToThePeerServingTheName`, `TestTheRelayListensOnlyOnThisMachineAtItsPort`, `TestTheRelayIsPartOfTheMacSetup`, `TestFirewallRules`, `TestEnsureInstalledOnAMachineThatIsNotMacOS`, Docker 해석 테스트를 포함한다. ODROID-N2+(DietPi, Docker 29.9.3)에서 `bay install -only-from 192.168.2.1`이 방화벽을 쓰고 올렸고, 두 번째 `install`은 아무것도 바꾸지 않았고, `check`는 0으로 끝났고, 재부팅 뒤에도 서비스 컨테이너가 실행 중인 채로 `check`가 0으로 끝났다. Mac에서 launchd 에이전트가 ODROID로 연결하면 `no route to host`로 실패했고 같은 연결을 터미널에서 하면 성공했다. `check`는 relay 데몬을 빠졌다고 보고하고 `install -dry-run`은 그 등록을 나열한다.
+
 ## 2026-11-10
 
 ### `up`의 volume 명령마다 자기 bound가 있다

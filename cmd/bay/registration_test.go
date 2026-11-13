@@ -39,7 +39,7 @@ func TestStatusDoesNotRegisterTheWorkingDirectoryProject(t *testing.T) {
 func TestInstallDoesNotRegisterTheWorkingDirectoryProject(t *testing.T) {
 	m, _ := queryFixture(t)
 	before := registeredElsewhere(t, m)
-	_, err := captureQuery(t, func() error { return install(m) })
+	_, err := captureQuery(t, func() error { return install(m, nil) })
 	if err == nil || !strings.Contains(err.Error(), "bayd") {
 		t.Fatalf("install err = %v, want the missing bayd", err)
 	}

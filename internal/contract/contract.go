@@ -5,8 +5,28 @@
 package contract
 
 // Purpose states what this tool does.
-const Purpose = "bay runs Compose projects on Apple `container` and " +
-	"serves each service over HTTPS at a local domain name. No host port is published."
+const Purpose = "bay runs Compose projects on Apple `container` and on Docker, " +
+	"serves each service over HTTPS at a local domain name, and reaches the domains of " +
+	"approved peer machines. No service port is published."
+
+// SchemaVersion is the version of this contract's machine-readable form:
+// brief --json, schema --json, the agent skill and the MCP server. It changes
+// when a field is removed or changes meaning.
+const SchemaVersion = 1
+
+// Access says what a command can do to the machine, so a caller, a person or an
+// agent, knows which commands it may run without asking.
+type Access string
+
+const (
+	// Reads changes nothing.
+	Reads Access = "read"
+	// Changes creates, starts or rewrites things. Running it again with the
+	// same input changes nothing more.
+	Changes Access = "change"
+	// Removes can remove containers, routes, approvals or machine setup.
+	Removes Access = "remove"
+)
 
 // Command declares one command line command.
 type Command struct {
@@ -22,6 +42,34 @@ type Command struct {
 	Root bool
 	// Example is a command line.
 	Example string
+	// Access is what the command can do to the machine.
+	Access Access
+	// Asks is what the command can put in front of a person, empty when it
+	// never asks. A caller with no one at the keyboard cannot answer it.
+	Asks string
+	// Terminal marks a command that is not offered as an agent tool: it serves
+	// the tools itself, or prints what a resource already holds.
+	Terminal bool
+}
+
+const (
+	asksPassword = "the administrator password, in a system dialog or on the terminal, when a step needs root"
+	asksApproval = "approval of the other machine's fingerprint, read from standard input; with no one to answer, nothing is approved"
+)
+
+// ExitCode declares what one exit status means.
+type ExitCode struct {
+	Code    int
+	Meaning string
+}
+
+// ExitCodes are the exit statuses of every command.
+func ExitCodes() []ExitCode {
+	return []ExitCode{
+		{0, "The command did what it states. For check, every part of the setup is in place."},
+		{1, "The command failed, or check found a part missing. Standard error says why and names the command that reports more."},
+		{2, "The command line names no command or an unknown one."},
+	}
 }
 
 // Commands returns every command in display order.
@@ -35,35 +83,42 @@ func Commands() []Command {
 				"Removes the containers of services the Compose file no longer declares, stopping a running one first, and withdraws their routes.",
 			Root:    true,
 			Example: "bay up",
+			Access:  Changes,
+			Asks:    asksPassword,
 		},
 		{
 			Name: "down", Args: "",
 			Summary: "Remove this project's services and withdraw its routes.",
 			Effect:  "Removes the project's containers. Removes the proxy when no route remains.",
 			Example: "bay down",
+			Access:  Removes,
 		},
 		{
 			Name: "start", Args: "[service...]",
 			Summary: "Start services. With no name, starts every service in the project.",
 			Effect:  "Reconciles selected services and their dependencies, reuses unchanged containers, checks startup conditions, then updates the proxy.",
 			Example: "bay start web",
+			Access:  Changes,
 		},
 		{
 			Name: "stop", Args: "[service...]",
 			Summary: "Stop services. The containers remain and can be started again.",
 			Effect:  "Stops containers and withdraws their routes.",
 			Example: "bay stop db",
+			Access:  Changes,
 		},
 		{
 			Name: "restart", Args: "[service...]",
 			Summary: "Stop then start services.",
 			Effect:  "Recreates selected owned containers, including explicitly retried initializers, after preparing their dependencies; updates the proxy.",
 			Example: "bay restart web",
+			Access:  Changes,
 		},
 		{
 			Name: "logs", Args: "[-f] [-n N] <service>",
 			Summary: "Print one service's output.",
 			Example: "bay logs -f web",
+			Access:  Reads,
 		},
 		{
 			Name: "domain", Args: "[add|remove|default] [name]",
@@ -72,18 +127,31 @@ func Commands() []Command {
 				"default changes the domain projects use when their Compose file names none.",
 			Root:    true,
 			Example: "bay domain add lab.test",
+			Access:  Removes,
+			Asks:    asksPassword,
 		},
 		{
 			Name: "status", Args: "[--json]",
 			Summary: "Print the proxy, the DNS server and every registered project.",
 			Effect:  "Reads state without registering the selected Compose project, creating certificates, or changing machine setup. Missing or unreadable public certificates are reported; private keys are not read.",
 			Example: "bay status --json",
+			Access:  Reads,
 		},
 		{
 			Name: "doctor", Args: "",
 			Summary: "Report what machine setup is missing. Changes nothing.",
 			Effect:  "Reads public certificate and setup state, including the selected project's domains without saving them. Creates no files and reads no private keys.",
 			Example: "bay doctor",
+			Access:  Reads,
+		},
+		{
+			Name: "check", Args: "",
+			Summary: "Report each part of the machine setup and fail when any is missing. Changes nothing.",
+			Effect: "Prints one line per part: ok or missing, and for a missing part what " +
+				"\"install\" would do about it. Exits non-zero when any part is missing, " +
+				"so a script can call it before relying on the machine.",
+			Example: "bay check",
+			Access:  Reads,
 		},
 		{
 			Name: "peer", Args: "[open|close|find|add|remove] [address|name|fingerprint]",
@@ -98,6 +166,8 @@ func Commands() []Command {
 				"approval. Every change rewrites the proxy configuration. Nothing is " +
 				"added to the keychain.",
 			Example: "bay peer add 192.168.0.42:8443",
+			Access:  Removes,
+			Asks:    asksApproval,
 		},
 		{
 			Name: "sync", Args: "",
@@ -106,37 +176,80 @@ func Commands() []Command {
 				"then reloads the proxy and waits until it serves the new configuration. " +
 				"Starts, stops and changes no container.",
 			Example: "bay sync",
+			Access:  Changes,
 		},
 		{
-			Name: "install", Args: "",
-			Summary: "Apply the machine setup now instead of during the next up.",
-			Effect: "Writes /etc/resolver entries, adds the certificate authority to " +
-				"the user's trust settings, and registers the DNS launchd agent. Registers no project.",
+			Name: "install", Args: "[-dry-run] [-only-from host,...|none]",
+			Summary: "Apply the machine setup that is missing. Running it again changes nothing.",
+			Effect: "On macOS: writes /etc/resolver entries, adds the certificate authority " +
+				"to the user's trust settings, registers the DNS launchd agent and the peer " +
+				"relay launchd daemon. On another system: creates the certificate authority " +
+				"and, when -only-from names hosts, an nftables firewall that accepts new " +
+				"connections on the default route's interface only from them; the hosts are " +
+				"recorded, so the next install keeps them, and \"none\" removes the firewall. " +
+				"Each part already in place is left alone. -dry-run prints what would change " +
+				"and changes nothing. Registers no project.",
 			Root:    true,
-			Example: "bay install",
+			Example: "bay install -dry-run",
+			Access:  Changes,
+			Asks:    asksPassword,
 		},
 		{
 			Name: "uninstall", Args: "",
-			Summary: "Remove the DNS agent and the resolver entries.",
-			Effect: "Removes /etc/resolver entries and the launchd agent. " +
-				"The certificate authority stays in the trust settings.",
+			Summary: "Remove the machine setup install wrote.",
+			Effect: "On macOS removes /etc/resolver entries, the launchd agent and the relay " +
+				"daemon; the certificate authority stays in the trust settings. On another " +
+				"system removes the firewall.",
 			Root:    true,
 			Example: "bay uninstall",
+			Access:  Removes,
+			Asks:    asksPassword,
 		},
 		{
 			Name: "brief", Args: "[--json]",
 			Summary: "Print the full usage contract on one screen.",
 			Example: "bay brief",
+			Access:  Reads,
 		},
 		{
 			Name: "schema", Args: "[--json]",
 			Summary: "Print the Compose extension contract.",
 			Example: "bay schema",
+			Access:  Reads,
+		},
+		{
+			Name: "skill", Args: "[print|install]",
+			Summary: "Print the agent skill, or write it where agents read skills.",
+			Effect: "print writes SKILL.md to standard output. install writes it to " +
+				"~/.claude/skills/bay/ and ~/.agents/skills/bay/, for each of " +
+				"~/.claude and ~/.agents that exists, only when the content differs. " +
+				"\"bay install\", \"bay up\", \"make install\" and the MCP server at its start do the same, " +
+				"and check reports a skill that is missing or out of date.",
+			Example:  "bay skill install",
+			Access:   Changes,
+			Terminal: true,
+		},
+		{
+			Name: "mcp", Args: "[install]",
+			Summary: "Serve the commands to an agent as an MCP server on standard input and output, or register it.",
+			Effect: "Offers each command that is not terminal-only as a tool, annotated read-only, " +
+				"idempotent or destructive from its access, and brief, schema and status as resources. " +
+				"A tool runs this executable with the given arguments in the given project directory and " +
+				"returns its output and exit status. A command's standard input is empty, so a question " +
+				"to a person is answered no. install registers this executable in Claude Code's user " +
+				"configuration as \"bay\" through the claude command, only when the registration differs; " +
+				"\"bay install\" does the same where claude is installed, and check reports a missing or stale registration. " +
+				"Serving rewrites the agent skill when it differs from this executable's, so the skill follows an update.",
+			Example:  "bay mcp install",
+			Access:   Changes,
+			Terminal: true,
 		},
 		{
 			Name: "help", Args: "[command]",
-			Summary: "Print help for one command, or the command list.",
-			Example: "bay help up",
+			Summary:  "Print help for one command, or the command list.",
+			Example:  "bay help up",
+			Access:   Reads,
+			Terminal: true,
 		},
 	}
 }
@@ -170,6 +283,14 @@ func ServiceKeys() []Key {
 			"Domains the proxy routes to this service, each under one of the project's domains. " +
 				"Each domain gets its own certificate and route. A service without it runs and " +
 				"other services reach it by name, but the proxy does not route to it and issues it no certificate."},
+		{"services.<name>.x-bay.trust", "boolean", "true",
+			"Whether the container trusts the certificates this machine trusts: the system's public roots and " +
+				"this machine's authority, which issues the certificates of its projects and of its peers' names. " +
+				"They are mounted read-only over /etc/ssl/certs/ca-certificates.crt, /etc/pki/tls/certs/ca-bundle.crt " +
+				"and /etc/ssl/cert.pem and named by SSL_CERT_FILE, CURL_CA_BUNDLE, REQUESTS_CA_BUNDLE and " +
+				"NODE_EXTRA_CA_CERTS; for Java a PKCS #12 store is mounted at /etc/bay/truststore.p12 and " +
+				"named by JAVA_TOOL_OPTIONS. A path the service mounts itself and a variable it sets " +
+				"itself are left to the service. false gives the container its image's store only."},
 	}
 }
 
@@ -244,7 +365,7 @@ func Invariants() []Invariant {
 			"Projects share it. Its configuration is rebuilt from every running project."},
 		{"Routes are read from container labels, not from Compose files.",
 			"Removing a project's containers removes its routes without editing a file."},
-		{"Domains are machine state, delegated once in /etc/resolver.",
+		{"Domains are machine state, delegated once in /etc/resolver on macOS and named in a marked block of /etc/hosts elsewhere.",
 			"A project inherits the machine default unless its Compose file pins one."},
 		{"Certificates are issued and reissued automatically.",
 			"One per routed domain, plus a default certificate for unrouted names."},
@@ -254,8 +375,12 @@ func Invariants() []Invariant {
 			"Reloading nginx is asynchronous, so the commands poll the proxy's health endpoint."},
 		{"up, start and restart publish the route of a started service after the proxy connects to it.",
 			"A healthcheck runs inside the service's container, so the proxy runs its own connection attempt to the service's address."},
-		{"Only /etc/resolver writes require administrator rights.",
-			"Trusting the certificate authority uses the user's trust settings."},
+		{"Only machine setup requires administrator rights: /etc/resolver entries and the relay daemon on macOS; the firewall, the agent, the hosts block and the system trust store elsewhere.",
+			"Trusting the certificate authority on macOS uses the user's trust settings."},
+		{"Every service container trusts this machine's authority unless its Compose file sets x-bay.trust: false.",
+			"A program in a container verifies against its image's store, which does not hold the authority that issues the local names."},
+		{"Machine setup is applied only by install, which changes nothing that is in place; check and install -dry-run report it without changing it.",
+			"A setup step done by hand is not checked, repeated or removed by anything."},
 	}
 }
 
@@ -291,12 +416,20 @@ type StateFile struct {
 // StateFiles are the paths this tool writes.
 func StateFiles() []StateFile {
 	return []StateFile{
-		{"/etc/resolver/<domain>", "Delegates the domain to the DNS server.", true},
-		{"~/Library/LaunchAgents/dev.bay.dns.plist", "Runs the DNS server.", false},
 		{"~/.bay/ca.crt, ca.key", "The certificate authority.", false},
 		{"~/.bay/certs/", "Issued certificates.", false},
 		{"~/.bay/conf.d/stack.conf", "The generated proxy configuration.", false},
-		{"~/.bay/machine.json", "The machine's domains.", false},
+		{"~/.bay/machine.json", "The machine's domains and settings.", false},
 		{"~/.bay/groups.json", "Registered projects.", false},
+		{"~/.bay/peers.json, peers/", "Approved peers and their authorities.", false},
+		{"~/.bay/trust/", "The certificates service containers trust.", false},
+		{"~/.claude/skills/bay/, ~/.agents/skills/bay/", "The agent skill, where those directories exist.", false},
+		{"/etc/resolver/<domain>", "macOS: delegates the domain to the DNS server.", true},
+		{"~/Library/LaunchAgents/dev.bay.dns.plist", "macOS: runs the DNS server.", false},
+		{"/Library/LaunchDaemons/dev.bay.relay.plist", "macOS: runs the relay containers use to reach peers.", true},
+		{"/etc/systemd/system/bay-agent.service", "Linux: runs the agent that keeps the hosts block and the peer document.", true},
+		{"/etc/hosts (marked block)", "Linux: names the domains the proxy serves.", true},
+		{"/etc/bay/firewall.nft, bay-firewall.service", "Linux: accepts new connections only from the hosts install -only-from named.", true},
+		{"/usr/local/share/ca-certificates/bay.crt", "Linux: the authority in the system trust store; the path follows the system.", true},
 	}
 }

@@ -39,7 +39,16 @@ func TestMain(m *testing.M) {
 		}
 		os.Exit(99)
 	}
-	os.Exit(m.Run())
+	// No test writes the agent skill into the home directory of whoever runs
+	// the tests. The state directory's default was read before this.
+	home, err := os.MkdirTemp("", "bay-home")
+	if err != nil {
+		panic(err)
+	}
+	os.Setenv("HOME", home)
+	code := m.Run()
+	os.RemoveAll(home)
+	os.Exit(code)
 }
 
 type fileState struct {

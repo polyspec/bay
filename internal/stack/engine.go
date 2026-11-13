@@ -72,6 +72,10 @@ func listFrom(readers []engineReader) ([]Instance, error) {
 // engineBin returns the command used to control an engine, or an empty string
 // when the command is not on PATH. An environment variable overrides the name so
 // that a test can substitute its own program.
+//
+// The docker command that speaks to a daemon on another machine returns an
+// empty string: that daemon is not this machine's engine. A program given in
+// DOCKER_BIN is used as it is, because it is a test's own program.
 func engineBin(engine string) string {
 	env := "CONTAINER_BIN"
 	if engine == DockerEngine {
@@ -79,6 +83,9 @@ func engineBin(engine string) string {
 	}
 	if bin := os.Getenv(env); bin != "" {
 		return bin
+	}
+	if engine == DockerEngine && !endpointOnThisMachine(dockerEndpoint()) {
+		return ""
 	}
 	if path, err := exec.LookPath(engine); err == nil {
 		return path

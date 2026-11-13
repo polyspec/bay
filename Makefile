@@ -71,6 +71,13 @@ install: all
 	cp $(BIN)/bay $(BIN)/bayd "$(PREFIX)/bin/"
 	rm -rf "$(APPDIR)/baybar.app"
 	cp -R $(APP) "$(APPDIR)/"
+	@# The agent skill and the MCP registration follow the installed binary. As
+	@# root they would land in root's home, so sudo leaves them to "bay install".
+	@# A machine without an agent has neither, which is not a failure here.
+	@if [ "$$(id -u)" != 0 ]; then \
+	  "$(PREFIX)/bin/bay" skill install || true; \
+	  "$(PREFIX)/bin/bay" mcp install || true; \
+	fi
 	@echo
 	@echo "installed $(PREFIX)/bin/bay, $(PREFIX)/bin/bayd"
 	@echo "installed $(APPDIR)/baybar.app"

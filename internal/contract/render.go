@@ -26,7 +26,7 @@ func Brief(w io.Writer) {
 	fmt.Fprintln(w, "  Reads the Compose file, starts one container per service, issues a")
 	fmt.Fprintln(w, "  certificate for each domain, and adds the routes to the machine's")
 	fmt.Fprintln(w, "  proxy. It returns after the proxy serves them. Nothing is published")
-	fmt.Fprintln(w, "  to a host port and /etc/hosts is not touched.")
+	fmt.Fprintln(w, "  to a host port. On macOS /etc/hosts is not touched.")
 
 	fmt.Fprintln(w, "\nCOMPOSE FILE")
 	fmt.Fprintln(w, "  A project is a Compose file: compose.yaml, compose.yml,")
@@ -73,6 +73,11 @@ func Brief(w io.Writer) {
 		fmt.Fprintf(w, "  %-*s  %s\n", width, d.Symptom, d.Command)
 	}
 
+	fmt.Fprintln(w, "\nEXIT STATUS")
+	for _, e := range ExitCodes() {
+		fmt.Fprintf(w, "  %d  %s\n", e.Code, strings.TrimPrefix(indent(wrap(e.Meaning, 72), "     "), "     "))
+	}
+
 	fmt.Fprintln(w, "\nMACHINE STATE")
 	for _, s := range StateFiles() {
 		if s.Root {
@@ -85,13 +90,17 @@ func Brief(w io.Writer) {
 	fmt.Fprintln(w, "  bay schema        every Compose key and its default")
 	fmt.Fprintln(w, "  bay help <cmd>    what one command changes")
 	fmt.Fprintln(w, "  bay status --json the current state, for another program")
+	fmt.Fprintln(w, "  bay skill         the same contract as an agent skill")
+	fmt.Fprintln(w, "  bay mcp           the commands as MCP tools, for an agent")
 }
 
 // BriefJSON writes the same contract as JSON.
 func BriefJSON(w io.Writer) error {
 	doc := map[string]any{
+		"schemaVersion": SchemaVersion,
 		"purpose":       Purpose,
 		"commands":      Commands(),
+		"exitCodes":     ExitCodes(),
 		"projectKeys":   ProjectKeys(),
 		"serviceKeys":   ServiceKeys(),
 		"serviceLabels": ServiceLabels(),
@@ -206,10 +215,11 @@ func Help(w io.Writer, name string) bool {
 		}
 		fmt.Fprintf(w, "%s\n\n%s\n", head, wrap(c.Summary, 78))
 		if c.Effect != "" {
-			fmt.Fprintf(w, "\nEffect\n%s\n", indent(wrap(c.Effect, 74), "  "))
+			fmt.Fprintf(w, "\nEffect\n%s", indent(wrap(c.Effect, 74), "  "))
 		}
-		if c.Root {
-			fmt.Fprintln(w, "\nThis command can require administrator rights.")
+		fmt.Fprintf(w, "\nAccess\n  %s\n", accessText(c.Access))
+		if c.Asks != "" {
+			fmt.Fprintf(w, "\nAsks a person for\n%s", indent(wrap(c.Asks, 74), "  "))
 		}
 		if c.Example != "" {
 			fmt.Fprintf(w, "\nExample\n  %s\n", c.Example)
@@ -271,4 +281,17 @@ func wrap(s string, width int) string {
 	}
 	out.WriteString(line.String())
 	return out.String()
+}
+
+// accessText says what an access level lets a caller do without asking.
+func accessText(a Access) string {
+	switch a {
+	case Reads:
+		return "read: changes nothing"
+	case Changes:
+		return "change: creates, starts or rewrites; running it again changes nothing more"
+	case Removes:
+		return "remove: can remove containers, routes, approvals or setup"
+	}
+	return string(a)
 }

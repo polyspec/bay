@@ -49,12 +49,19 @@ var (
 	ttl       = flag.Uint("ttl", 5, "TTL in seconds advertised for answers")
 	install   = flag.Bool("install", false, "write /etc/resolver/<domain> and exit; acquires root itself")
 	privApply = flag.Bool("privileged-apply", false, "internal: apply the privileged setup steps")
+	hosts     = flag.Bool("hosts", false, "keep the names the proxy serves in /etc/hosts (a machine that is not macOS)")
+	relay     = flag.Bool("relay", false, "run the peer relay daemon for the state directory instead of the DNS server")
 	state     = flag.String("state", defaultState(), "bay state directory, read to announce this machine and follow its peers")
 )
 
 func main() {
 	flag.Parse()
 	log.SetFlags(log.Ltime)
+
+	if *relay {
+		serveRelay(context.Background(), *state)
+		return
+	}
 
 	var doms []string
 	for _, d := range strings.Split(strings.ToLower(*domain), ",") {
@@ -102,6 +109,9 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	time.AfterFunc(peerPollDelay, func() { servePeers(ctx, *state) })
+	if *hosts {
+		go keepHostsFile(ctx, stack.NewMachine(*state))
+	}
 
 	go serveTCP(ln, r)
 	serveUDP(pc, r)

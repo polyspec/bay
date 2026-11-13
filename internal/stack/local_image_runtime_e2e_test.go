@@ -76,7 +76,7 @@ func TestLocalImageTagActualRuntime(t *testing.T) {
 		t.Fatalf("valid local tag did not initialize: %v", err)
 	}
 	in, found, err := Lookup(svc.ContainerName)
-	if err != nil || !found || in.ImageDigest != digest || in.State != "stopped" || !e.completed(in, serviceFingerprint(group, svc, digest)) {
+	if err != nil || !found || in.ImageDigest != digest || in.State != "stopped" || !e.completed(in, serviceFingerprint(group, svc, digest, trustArguments(e.dir, svc))) {
 		t.Fatalf("local-tag completion lacks exact image identity: %+v, %v", in, err)
 	}
 	logs, err := exec.CommandContext(ctx, engineBin(ServiceEngine()), "logs", svc.ContainerName).Output()
