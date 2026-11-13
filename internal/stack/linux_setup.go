@@ -170,7 +170,8 @@ func (l LinuxSetup) agentCurrent() bool {
 		return false
 	}
 	return exec.Command("systemctl", "is-enabled", "--quiet", agentUnit).Run() == nil &&
-		exec.Command("systemctl", "is-active", "--quiet", agentUnit).Run() == nil
+		exec.Command("systemctl", "is-active", "--quiet", agentUnit).Run() == nil &&
+		!residentStale(systemdPID(agentUnit), l.DNSBin)
 }
 
 // hostsItem is the block of /etc/hosts naming what the proxy serves.

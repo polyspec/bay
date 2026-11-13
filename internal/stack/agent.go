@@ -138,8 +138,12 @@ func agentIsCurrent(got, domains []string, addr, bin, state string) bool {
 
 // DNSAgentLoaded reports whether launchd currently knows about the job.
 func DNSAgentLoaded() bool {
-	target := "gui/" + strconv.Itoa(os.Getuid()) + "/" + DNSAgentLabel
-	return exec.Command("launchctl", "print", target).Run() == nil
+	return exec.Command("launchctl", "print", dnsAgentTarget()).Run() == nil
+}
+
+// dnsAgentTarget is the job as launchctl names it.
+func dnsAgentTarget() string {
+	return "gui/" + strconv.Itoa(os.Getuid()) + "/" + DNSAgentLabel
 }
 
 func buildPlist(label string, args []string, stdout, stderr string) string {

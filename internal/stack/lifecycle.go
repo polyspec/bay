@@ -484,7 +484,8 @@ func (r *Runtime) install(caPath string) (Install, error) {
 }
 
 func (r *Runtime) dnsAgentCurrent(domains []string) bool {
-	return DNSAgentLoaded() && DNSAgentServes(domains, r.Addr, r.DNSBin, r.Machine.Dir)
+	return DNSAgentLoaded() && DNSAgentServes(domains, r.Addr, r.DNSBin, r.Machine.Dir) &&
+		!residentStale(launchdPID(dnsAgentTarget()), r.DNSBin)
 }
 
 // SetupItems lists every part of this machine's setup and whether it is in
@@ -522,10 +523,14 @@ func (r *Runtime) setupItems(extra ...string) ([]SetupItem, error) {
 	in.Domains = unionDomains(in.Domains, extra)
 	items = append(items, in.Items()...)
 	items = append(items, TrustItem(r.Machine.Dir))
-	return append(items, SetupItem{
+	agent := SetupItem{
 		Name: "dns agent " + DNSAgentLabel, OK: r.dnsAgentCurrent(in.Domains),
 		SetupStep: SetupStep{Text: "register " + DNSAgentLabel},
-	}), nil
+	}
+	if residentStale(launchdPID(dnsAgentTarget()), r.DNSBin) {
+		agent.Name += " (runs an older " + r.DNSBin + ")"
+	}
+	return append(items, agent), nil
 }
 
 func unionDomains(a, b []string) []string {

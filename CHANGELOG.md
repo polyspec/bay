@@ -5,6 +5,12 @@ the day the change was made.
 
 ## 2026-11-14
 
+### A resident process running a replaced executable is not in place
+
+The DNS agent, the relay daemon and the Linux agent exit when their executable is replaced, and launchd or systemd starts the new one; a process started from a version that predates that kept running the old code, and `check` passed because the job was registered exactly as `install` would register it. A resident is now in place only when it started after its executable last changed (the inode's change time, which no archive or copy sets back); `check` names one that did not as `runs an older …`, and `install` restarts it (`restart the peer relay dev.bay.relay`).
+
+Verification: on the Mac, the relay daemon started at 03:02 from a bayd replaced at 06:05; `check` reported it missing, `install -dry-run` showed the restart, `install` restarted it under the administrator dialog, `check` exited 0 and a second `install` changed nothing. `TestResidentStale` and `TestResidentStaleThisProcess` pass on macOS and on the ODROID (Linux, arm64).
+
 ### Commands running at once keep each other's state
 
 Several `up`s at once lost projects from the registry: each read `groups.json`, changed it and wrote it back through the same `groups.json.tmp`, so one took another's temporary file (`rename … groups.json.tmp …: no such file or directory`) or wrote back a registry without another's project (`project … is not registered`). Shared files (the registry, the settings, the approved peers, the store containers trust) are now read and rewritten under a lock in `<state>/locks/`, through a temporary file of the writer's own; publishing the proxy (its configuration, certificates and container) takes a second lock, so two commands never both create it.

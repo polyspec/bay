@@ -4,6 +4,12 @@
 
 ## 2026-11-14
 
+### 교체된 실행 파일을 돌리는 상주 프로세스는 갖춰진 것이 아니다
+
+DNS 에이전트, relay 데몬, Linux 에이전트는 실행 파일이 바뀌면 끝나고 launchd나 systemd가 새것을 띄운다. 그 기능 이전 버전으로 시작한 프로세스는 옛 코드로 계속 돌았고, 작업 등록이 `install`이 쓸 것과 똑같아서 `check`는 통과했다. 이제 상주 프로세스는 실행 파일이 마지막으로 바뀐 뒤(아카이브나 복사로 되돌릴 수 없는 inode 변경 시각) 시작했을 때만 갖춰진 것이다. 아니면 `check`가 `runs an older …`로 알리고 `install`이 재시작한다(`restart the peer relay dev.bay.relay`).
+
+검증: Mac에서 relay 데몬은 03:02에 시작했고 bayd는 06:05에 교체됐다. `check`가 빠졌다고 알렸고 `install -dry-run`이 재시작을 보였으며, `install`이 관리자 대화상자를 거쳐 재시작했고 `check`는 0으로 끝났으며 두 번째 `install`은 아무것도 바꾸지 않았다. `TestResidentStale`, `TestResidentStaleThisProcess`는 macOS와 ODROID(Linux, arm64)에서 통과했다.
+
 ### 동시에 도는 명령이 서로의 상태를 지킨다
 
 `up` 여럿을 동시에 돌리면 등록에서 프로젝트가 사라졌다: 각자 `groups.json`을 읽고 고쳐 같은 `groups.json.tmp`로 다시 써서, 남의 임시 파일을 가져가거나(`rename … groups.json.tmp …: no such file or directory`) 남의 프로젝트가 빠진 등록을 써 넣었다(`project … is not registered`). 공유 파일(등록, 설정, 승인한 peer, 컨테이너가 신뢰하는 저장소)은 이제 `<state>/locks/`의 잠금 아래에서 읽고 고쳐 쓰며, 쓰는 쪽마다 다른 임시 파일을 쓴다. 프록시 게시(설정, 인증서, 컨테이너)는 두 번째 잠금을 잡아 두 명령이 함께 프록시를 만들지 않는다.

@@ -77,10 +77,15 @@ func (in Install) Items() []SetupItem {
 		})
 	}
 	if in.RelayBin != "" {
-		items = append(items, SetupItem{
+		item := SetupItem{
 			Name: "relay " + RelayDaemonLabel, OK: !in.relayPending(),
 			SetupStep: SetupStep{Text: "register the peer relay " + RelayDaemonPath(), Asks: AsksAdministrator},
-		})
+		}
+		if in.relayStale() && RelayDaemonCurrent(in.RelayBin, in.State) {
+			item.Name += " (runs an older " + in.RelayBin + ")"
+			item.Text = "restart the peer relay " + RelayDaemonLabel
+		}
+		items = append(items, item)
 	}
 	items = append(items, appleDomainItems(in.AppleDomain)...)
 	if in.UntrustCA != "" && CATrusted(in.UntrustCA) {
@@ -99,9 +104,15 @@ func (in Install) Items() []SetupItem {
 }
 
 // relayPending reports whether the relay daemon is missing, registered with
-// other arguments, or not running.
+// other arguments, not running, or running a replaced executable.
 func (in Install) relayPending() bool {
-	return in.RelayBin != "" && !(RelayDaemonCurrent(in.RelayBin, in.State) && RelayDaemonLoaded())
+	return in.RelayBin != "" && !(RelayDaemonCurrent(in.RelayBin, in.State) && RelayDaemonLoaded() && !in.relayStale())
+}
+
+// relayStale reports whether the running daemon started before its executable
+// was replaced.
+func (in Install) relayStale() bool {
+	return in.RelayBin != "" && residentStale(launchdPID("system/"+RelayDaemonLabel), in.RelayBin)
 }
 
 // SetupItem is one part of a machine's setup and whether it is in place. When it
@@ -163,7 +174,9 @@ func (in Install) privilegedSteps() []string {
 	for _, d := range in.retiring() {
 		steps = append(steps, "remove "+ResolverPath(d))
 	}
-	if in.relayPending() {
+	if in.relayStale() && RelayDaemonCurrent(in.RelayBin, in.State) {
+		steps = append(steps, "restart the peer relay "+RelayDaemonLabel)
+	} else if in.relayPending() {
 		steps = append(steps, "register the peer relay "+RelayDaemonPath())
 	}
 	if appleDomainRootPending(in.AppleDomain) {
