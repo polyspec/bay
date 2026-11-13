@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"golang.org/x/sys/unix"
 	"io"
 	"os"
 	"os/exec"
@@ -625,7 +626,9 @@ func Exec(name string, command []string, user, workdir string, env []string) (in
 		return 0, fmt.Errorf("%s is %s; run bay start", name, in.State)
 	}
 	args := []string{"exec", "--interactive"}
-	if info, err := os.Stdin.Stat(); err == nil && info.Mode()&os.ModeCharDevice != 0 {
+	// A terminal, not any character device: /dev/null is one too, and the
+	// engine refuses a terminal over it.
+	if isTerminal(os.Stdin) {
 		args = append(args, "--tty")
 	}
 	if user != "" {
@@ -653,4 +656,10 @@ func Exec(name string, command []string, user, workdir string, env []string) (in
 		return 0, err
 	}
 	return 0, nil
+}
+
+// isTerminal reports whether f is a terminal.
+func isTerminal(f *os.File) bool {
+	_, err := unix.IoctlGetTermios(int(f.Fd()), termiosRequest)
+	return err == nil
 }

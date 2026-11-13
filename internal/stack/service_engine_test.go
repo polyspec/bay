@@ -307,6 +307,7 @@ func lifecycleConfig(t *testing.T) *Config {
 services:
   db:
     image: postgres
+    expose: ["5432"]
     healthcheck: {test: [CMD, pg_isready, -h127.0.0.1, -U, postgres], interval: 1ms, timeout: 10ms, retries: 3}
   initialize:
     image: platform

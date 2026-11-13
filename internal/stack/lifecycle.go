@@ -77,17 +77,32 @@ func (r *Runtime) say(format string, args ...any) {
 
 // Up registers the project, applies any missing machine setup, starts every
 // service and republishes the routes.
-func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
+func (r *Runtime) Up(cfg *Config) (res SyncResult, err error) {
 	if err := r.ownsSetup(); err != nil {
 		return SyncResult{}, err
 	}
 	// Registering is what makes the project this machine's, and the window
 	// draws from the registry, so it comes before the work: the project is on
-	// the screen while its images are pulled, and it is still there when the
-	// run fails.
+	// the screen while its images are pulled. A first up that fails before it
+	// made a container withdraws the registration again, so a refused run
+	// leaves nothing behind.
+	registered := false
+	if groups, err := r.Machine.Groups(); err == nil {
+		for _, g := range groups {
+			registered = registered || g.Name == cfg.Name
+		}
+	}
 	if err := r.Machine.Register(cfg.Ref()); err != nil {
 		return SyncResult{}, err
 	}
+	defer func() {
+		if err == nil || registered {
+			return
+		}
+		if made, lerr := r.ProjectContainers(cfg.Name); lerr == nil && len(made) == 0 {
+			_ = r.Machine.Unregister(cfg.Name)
+		}
+	}()
 	engine := r.engine()
 	if err := engine.preflight(cfg.Name, cfg.Sorted()); err != nil {
 		return SyncResult{}, err
@@ -116,7 +131,7 @@ func (r *Runtime) Up(cfg *Config) (SyncResult, error) {
 	if err := engine.start(cfg, cfg.Sorted(), false); err != nil {
 		return SyncResult{}, err
 	}
-	res, err := r.sync(containerNames(cfg.Sorted()))
+	res, err = r.sync(containerNames(cfg.Sorted()))
 	if err != nil {
 		return res, err
 	}

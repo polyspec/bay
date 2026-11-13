@@ -36,10 +36,31 @@ func (e *serviceEngine) waitServiceName(name string) error {
 		return err
 	}
 	if !found || in.State != "running" {
-		return fmt.Errorf("%s is unavailable for hostname readiness", name)
+		return e.failureWithLogOf(fmt.Sprintf("service %s stopped before its name answered", name), name)
 	}
-	return waitServiceName(ctx, in, e.subscribeName, e.progress)
+	// A container that stops removes its name, so the wait would last until
+	// its bound; the stop ends it at once.
+	watch, stop := context.WithCancelCause(ctx)
+	defer stop(nil)
+	go func() {
+		for watch.Err() == nil {
+			if sleepContext(watch, 500*time.Millisecond) != nil {
+				return
+			}
+			if now, ok, err := e.lookup(watch, name); err == nil && (!ok || now.State != "running") {
+				stop(errStoppedDuringWait)
+				return
+			}
+		}
+	}()
+	err = waitServiceName(watch, in, e.subscribeName, e.progress)
+	if errors.Is(context.Cause(watch), errStoppedDuringWait) {
+		return e.failureWithLogOf(fmt.Sprintf("service %s stopped before its name answered", name), name)
+	}
+	return err
 }
+
+var errStoppedDuringWait = errors.New("the container stopped")
 
 func waitServiceName(ctx context.Context, in Instance, subscribe nameSubscriber, say func(string)) (result error) {
 	host := in.Name + "." + BackendDomain

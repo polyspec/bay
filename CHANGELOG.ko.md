@@ -4,6 +4,14 @@
 
 ## 2026-11-14
 
+### 곧바로 끝나는 작업, 터미널 없는 exec, 거부된 첫 실행
+
+- `up`이 볼 때 이미 끝난 포트 없는 서비스는 완료로 보고 이름을 기다리지 않는다. 포트가 있는 서비스가 이름을 기다리는 중에 멈추면 60초 뒤(`hostname readiness failed: context deadline exceeded`)가 아니라 곧바로 실패한다.
+- `exec`는 표준 입력이 터미널일 때만 터미널을 요청한다. `/dev/null`도 문자 장치라서 엔진이 거부했다(`Operation not supported by device`).
+- 컨테이너를 만들기 전에 실패한 첫 `up`은 프로젝트 등록을 거둔다(`-no-pull`이 없는 이미지를 거부한 뒤에도 `status`에 남았다).
+
+검증: Mac에서 `echo 1.0` 서비스와 대기 서비스가 있는 프로젝트가 4.6초에 exit 0으로 올라왔다. `bay exec db echo via-null </dev/null`이 출력하고 0으로 끝났다. `up -no-pull`이 없는 이미지를 거부한 뒤 `status --json`에 프로젝트가 없었다.
+
 ### 이미지 저장소를 덮지 않는 신뢰, 파일대로의 entrypoint와 restart
 
 이 기계를 신뢰하는 서비스는 프로세스 앞에서 bayinit(`/etc/bay/init`에 마운트한 정적 프로그램)이 먼저 돈다: 인증기관(`/etc/bay/ca.crt`)을 이미지 자신의 저장소에 더하고, `update-ca-certificates`와 `update-ca-trust`가 읽는 원본 위치에도 두고, 이미지나 파일의 entrypoint와 command를 실행한다. `/etc/ssl/certs/ca-certificates.crt` 등 저장소 경로를 더는 덮어 마운트하지 않으므로 컨테이너 안에서 `ca-certificates` 설치가 된다(읽기 전용 묶음 때문에 실패했다). 변수는 `/etc/bay/ca-bundle.crt`를 가리킨다. 저장소를 쓸 수 없는 사용자의 컨테이너는 그대로 시작하고 변수로 신뢰한다. `make`가 bayinit을 linux/arm64와 amd64로 빌드해 내장한다.

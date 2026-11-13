@@ -470,26 +470,39 @@ func stoppedIdentity(group string, s *Service, in Instance, created, fingerprint
 // started waits for the service's container to run and reports it, so a caller
 // that streams progress can attach to the container while a healthcheck waits.
 func (e *serviceEngine) started(ctx context.Context, s *Service) error {
-	if err := e.waitRunning(ctx, s.ContainerName); err != nil {
+	ended, err := e.waitRunning(ctx, s.ContainerName, s.Port == 0)
+	if err != nil {
 		return err
+	}
+	if ended {
+		e.say("%s: ran and ended", s.Name)
+		return nil
 	}
 	e.say("%s: started container %s", s.Name, s.ContainerName)
 	return nil
 }
 
-func (e *serviceEngine) waitRunning(ctx context.Context, name string) error {
+// waitRunning waits for a container to run with an address. A service with no
+// port that has already ended is done rather than failed: a job that ends at
+// once is what it is for. It reports whether the container had ended.
+func (e *serviceEngine) waitRunning(ctx context.Context, name string, mayEnd bool) (bool, error) {
 	deadline, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+	ended := false
 	err := e.waitFor(deadline, name, func(in Instance, ok bool) (bool, error) {
+		if ok && in.State == "stopped" && mayEnd {
+			ended = true
+			return true, nil
+		}
 		if ok && in.State == "stopped" {
 			return false, e.failureWithLogOf(fmt.Sprintf("service %s stopped before becoming ready", name), name)
 		}
 		return ok && in.State == "running" && in.IPv4 != "", nil
 	})
 	if err != nil && deadline.Err() != nil {
-		return fmt.Errorf("service %s did not start: %w", name, err)
+		return false, fmt.Errorf("service %s did not start: %w", name, err)
 	}
-	return err
+	return ended, err
 }
 
 // waitFor reads the named container every 100 milliseconds until reached
@@ -718,7 +731,9 @@ func (e *serviceEngine) startLocked(cfg *Config, targets []*Service, restart boo
 				return err
 			}
 		}
-		if !s.OneShot && e.engine == AppleEngine {
+		// A service with no port is not connected to, so its name is not waited
+		// for; a job among them may already have ended.
+		if !s.OneShot && s.Port > 0 && e.engine == AppleEngine {
 			if err = e.waitServiceName(s.ContainerName); err != nil {
 				return err
 			}

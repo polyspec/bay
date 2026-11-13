@@ -5,6 +5,14 @@ the day the change was made.
 
 ## 2026-11-14
 
+### Jobs that end at once, exec without a terminal, refused first runs
+
+- A service with no port that has ended when `up` looks is done, and its name is not waited for; a service with a port that stops while its name is awaited fails at once instead of after 60 s (`hostname readiness failed: context deadline exceeded`).
+- `exec` asks for a terminal only when standard input is one; `/dev/null` is a character device and the engine refused it (`Operation not supported by device`).
+- A first `up` that fails before it creates a container withdraws the project's registration (it stayed in `status` after `-no-pull` refused a missing image).
+
+Verification: on the Mac, a project with `echo 1.0` and a listening service came up in 4.6 s with exit 0; `bay exec db echo via-null </dev/null` printed and exited 0; after `up -no-pull` refused a missing image, `status --json` did not list the project.
+
 ### Trust without covering the image's store; entrypoint and restart as the file says
 
 A service that trusts this machine starts with bayinit, a static program mounted at `/etc/bay/init`, in front of its process: it appends the authority (`/etc/bay/ca.crt`) to the image's own store and drops it where `update-ca-certificates` and `update-ca-trust` read sources, then runs the image's or the file's entrypoint and command. Nothing is mounted over `/etc/ssl/certs/ca-certificates.crt` or the other store paths any more, so installing `ca-certificates` in a container works (it failed on the read-only bundle). The variables now name `/etc/bay/ca-bundle.crt`. A container whose user cannot write the store starts unchanged and trusts through the variables. `make` builds bayinit for linux/arm64 and amd64 and embeds it.
