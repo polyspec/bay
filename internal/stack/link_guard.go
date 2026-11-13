@@ -10,10 +10,11 @@ import (
 
 // Energy-efficient ethernet (IEEE 802.3az) lets the link idle in a low-power
 // state between frames. On the ODROID-N2+ (stmmac with an RTL8211F PHY) a wake
-// from that state failed (phy_eee_wakeup_error), and the link dropped several
-// times a day, once for eight minutes with the link reported up. A machine
-// reached as a peer is worth the fraction of a watt, so the setup keeps
-// energy-efficient ethernet off on the interface that holds the default route.
+// from that state failed (phy_eee_wakeup_error); a failed wake loses frames
+// while the link stays up. A machine reached as a peer is worth the fraction of
+// a watt, so the setup keeps energy-efficient ethernet off on the interface
+// that holds the default route. The link also went down and up with it off, so
+// those drops have another cause.
 //
 // The part covers interfaces whose PHY the kernel's phylib drives (they have a
 // phydev link in sysfs), which is where the setting lives; a virtual interface,

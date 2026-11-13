@@ -8,7 +8,7 @@
 
 ODROID의 링크가 00:55에 켜진 뒤로 쉬는 중에도 부하 중에도 열세 번 내려갔다 올라왔고, 한 번은 링크가 붙어 있다고 하면서 8분 동안 프레임을 주고받지 못했다. 인터페이스(stmmac + RTL8211F PHY)는 에너지 절약 이더넷이 켜져 있었고, 저전력 대기에서 깨어나기에 실패한 기록이 있었다(`phy_eee_wakeup_error_n: 1`). 이제 Linux의 `install`은 기본 경로를 가진 인터페이스의 에너지 절약 이더넷을 `bay-link.service`로 끄며, 이 유닛이 부팅 때마다 다시 적용한다. `check`는 `ethtool --show-eee`로 읽는다. 커널이 PHY를 직접 다루는 인터페이스(`/sys/class/net/<if>/phydev`)에만 적용하므로, CI 러너 같은 가상 인터페이스에는 해당하지 않는다. 적용할 때 링크가 한 번 다시 협상한다.
 
-검증: ODROID에서 `install -dry-run`이 이 부분을 보였고 `install`이 `energy-efficient ethernet is off on eth0`를 출력했으며, `ethtool --show-eee eth0`이 `EEE status: disabled`를 읽었다. 링크는 한 번 다시 협상했고(07:26:09–07:26:12), 두 번째 `install`은 아무것도 바꾸지 않았으며 유닛을 재시작해도 링크는 붙어 있었고 `check`는 0으로 끝났다. 단절이 멈추는지는 `/sys/class/net/eth0/carrier_changes`로 본다(변경 직후 29). `TestLinkPartOnlyForAPHYTheKernelDrives`가 통과한다.
+검증: ODROID에서 `install -dry-run`이 이 부분을 보였고 `install`이 `energy-efficient ethernet is off on eth0`를 출력했으며, `ethtool --show-eee eth0`이 `EEE status: disabled`를 읽었다. 링크는 한 번 다시 협상했고(07:26:09–07:26:12), 두 번째 `install`은 아무것도 바꾸지 않았으며 유닛을 재시작해도 링크는 붙어 있었고 `check`는 0으로 끝났다. 단절은 멈추지 않았다. 에너지 절약 이더넷을 끈 상태에서 깨어나기 실패가 더 없이 07:28:08에 링크가 다시 내려갔다 올라왔으므로 단절의 원인은 따로 있고 아직 모른다. 이 부분은 기록된 깨어나기 실패(링크가 붙은 채 프레임을 잃는다) 때문에 남긴다. `TestLinkPartOnlyForAPHYTheKernelDrives`가 통과한다.
 
 ### 부하가 걸린 Linux 기계가 네트워크에서 빠지지 않고 느려진다
 
