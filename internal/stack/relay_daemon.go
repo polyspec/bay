@@ -139,11 +139,7 @@ func RecordRelayAddress(dir, address string) error {
 	if b, err := os.ReadFile(path); err == nil && strings.TrimSpace(string(b)) == address {
 		return nil
 	}
-	tmp := path + ".tmp"
-	if err := os.WriteFile(tmp, []byte(address+"\n"), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, path)
+	return replaceFile(path, []byte(address+"\n"), 0o644)
 }
 
 // RecordedRelayAddress returns where the record says the relay listens, or an

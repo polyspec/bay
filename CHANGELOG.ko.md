@@ -4,6 +4,12 @@
 
 ## 2026-11-14
 
+### 동시에 도는 명령이 서로의 상태를 지킨다
+
+`up` 여럿을 동시에 돌리면 등록에서 프로젝트가 사라졌다: 각자 `groups.json`을 읽고 고쳐 같은 `groups.json.tmp`로 다시 써서, 남의 임시 파일을 가져가거나(`rename … groups.json.tmp …: no such file or directory`) 남의 프로젝트가 빠진 등록을 써 넣었다(`project … is not registered`). 공유 파일(등록, 설정, 승인한 peer, 컨테이너가 신뢰하는 저장소)은 이제 `<state>/locks/`의 잠금 아래에서 읽고 고쳐 쓰며, 쓰는 쪽마다 다른 임시 파일을 쓴다. 프록시 게시(설정, 인증서, 컨테이너)는 두 번째 잠금을 잡아 두 명령이 함께 프록시를 만들지 않는다.
+
+검증: Mac에서 `bay -p parN up -no-pull --json` 다섯 개를 동시에 돌려 모두 0으로 끝났고 각자 자기 프로젝트를 출력했으며 다섯 모두 등록됐다. `down` 다섯 개를 동시에 돌려 모두 0으로 끝났고 남은 컨테이너와 등록이 없었다. `TestConcurrentRegistrationsAreAllKept`는 프로젝트 24개를 동시에 등록한다.
+
 ### 곧바로 끝나는 작업, 터미널 없는 exec, 거부된 첫 실행
 
 - `up`이 볼 때 이미 끝난 포트 없는 서비스는 완료로 보고 이름을 기다리지 않는다. 포트가 있는 서비스가 이름을 기다리는 중에 멈추면 60초 뒤(`hostname readiness failed: context deadline exceeded`)가 아니라 곧바로 실패한다.

@@ -133,6 +133,10 @@ func bundleSum(b []byte) string {
 // EnsureTrust writes the store containers read when it differs from what the
 // system and the authority hold. It changes nothing when the store is current.
 func EnsureTrust(dir string) error {
+	return withLock(dir, stateLockName, stateLockWait, func() error { return ensureTrust(dir) })
+}
+
+func ensureTrust(dir string) error {
 	roots, _, ok := findSystemRoots()
 	if !ok {
 		return nil

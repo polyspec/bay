@@ -122,11 +122,9 @@ func (m *Machine) SaveSettings(s Settings) error {
 	if err != nil {
 		return err
 	}
-	tmp := m.settingsPath() + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), groupsFileMode); err != nil {
-		return err
-	}
-	return os.Rename(tmp, m.settingsPath())
+	return withLock(m.Dir, stateLockName, stateLockWait, func() error {
+		return replaceFile(m.settingsPath(), append(b, '\n'), groupsFileMode)
+	})
 }
 
 // AddDomain delegates another domain on this machine.
@@ -297,30 +295,28 @@ func (m *Machine) Unregister(name string) error {
 }
 
 func (m *Machine) mutateGroups(fn func(map[string]GroupRef)) error {
-	byName := map[string]GroupRef{}
-	if b, err := os.ReadFile(m.groupsPath()); err == nil {
-		if err := json.Unmarshal(b, &byName); err != nil {
-			return fmt.Errorf("%s: %w", m.groupsPath(), err)
-		}
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	fn(byName)
-
 	if err := os.MkdirAll(m.Dir, groupsDirIsMine); err != nil {
 		return err
 	}
-	b, err := json.MarshalIndent(byName, "", "  ")
-	if err != nil {
-		return err
-	}
-	// Write through a temporary file so an interrupted write cannot truncate
-	// the registry.
-	tmp := m.groupsPath() + ".tmp"
-	if err := os.WriteFile(tmp, append(b, '\n'), groupsFileMode); err != nil {
-		return err
-	}
-	return os.Rename(tmp, m.groupsPath())
+	// The registry is read and written back under the state lock, so a
+	// command running at the same time cannot write back a registry that
+	// misses this change.
+	return withLock(m.Dir, stateLockName, stateLockWait, func() error {
+		byName := map[string]GroupRef{}
+		if b, err := os.ReadFile(m.groupsPath()); err == nil {
+			if err := json.Unmarshal(b, &byName); err != nil {
+				return fmt.Errorf("%s: %w", m.groupsPath(), err)
+			}
+		} else if !os.IsNotExist(err) {
+			return err
+		}
+		fn(byName)
+		b, err := json.MarshalIndent(byName, "", "  ")
+		if err != nil {
+			return err
+		}
+		return replaceFile(m.groupsPath(), append(b, '\n'), groupsFileMode)
+	})
 }
 
 // Domains returns the domains the resolver entries must cover: the machine's

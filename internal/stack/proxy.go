@@ -39,7 +39,17 @@ func SyncProxy(m *Machine) (SyncResult, error) {
 // to the container's address. The proxy of the engine keep runs also without a
 // route, because a command is about to start services that it routes to. say,
 // when set, reports the wait before it begins.
-func syncProxy(m *Machine, verify []string, keep string, say func(string)) (SyncResult, error) {
+func syncProxy(m *Machine, verify []string, keep string, say func(string)) (res SyncResult, err error) {
+	err = withLock(m.Dir, proxyLockName, proxyLockWait, func() error {
+		var inner error
+		res, inner = syncProxyLocked(m, verify, keep, say)
+		return inner
+	})
+	return res, err
+}
+
+// syncProxyLocked publishes the proxy; the caller holds the proxy lock.
+func syncProxyLocked(m *Machine, verify []string, keep string, say func(string)) (SyncResult, error) {
 	// The proxy is one container per engine and it serves this state
 	// directory's configuration and certificates, so a state directory that
 	// does not own the machine setup does not replace it.

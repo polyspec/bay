@@ -5,6 +5,12 @@ the day the change was made.
 
 ## 2026-11-14
 
+### Commands running at once keep each other's state
+
+Several `up`s at once lost projects from the registry: each read `groups.json`, changed it and wrote it back through the same `groups.json.tmp`, so one took another's temporary file (`rename … groups.json.tmp …: no such file or directory`) or wrote back a registry without another's project (`project … is not registered`). Shared files (the registry, the settings, the approved peers, the store containers trust) are now read and rewritten under a lock in `<state>/locks/`, through a temporary file of the writer's own; publishing the proxy (its configuration, certificates and container) takes a second lock, so two commands never both create it.
+
+Verification: five `bay -p parN up -no-pull --json` at once on the Mac exited 0, each printed its own project, and all five were registered; five `down`s at once exited 0 and left no container and no registration. `TestConcurrentRegistrationsAreAllKept` registers 24 projects at once.
+
 ### Jobs that end at once, exec without a terminal, refused first runs
 
 - A service with no port that has ended when `up` looks is done, and its name is not waited for; a service with a port that stops while its name is awaited fails at once instead of after 60 s (`hostname readiness failed: context deadline exceeded`).

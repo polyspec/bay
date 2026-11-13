@@ -100,25 +100,27 @@ func RemovePeer(dir, fingerprint string) error {
 
 // writePeers reads the file, applies the change and writes it back.
 func writePeers(dir string, change func(map[string]Peer)) error {
-	byFingerprint := map[string]Peer{}
-	b, err := os.ReadFile(peersFile(dir))
-	switch {
-	case err == nil:
-		if err := json.Unmarshal(b, &byFingerprint); err != nil {
-			return fmt.Errorf("reading %s: %w", peersFile(dir), err)
-		}
-	case !os.IsNotExist(err):
-		return err
-	}
-	change(byFingerprint)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	out, err := json.MarshalIndent(byFingerprint, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(peersFile(dir), append(out, '\n'), 0o644)
+	return withLock(dir, stateLockName, stateLockWait, func() error {
+		byFingerprint := map[string]Peer{}
+		b, err := os.ReadFile(peersFile(dir))
+		switch {
+		case err == nil:
+			if err := json.Unmarshal(b, &byFingerprint); err != nil {
+				return fmt.Errorf("reading %s: %w", peersFile(dir), err)
+			}
+		case !os.IsNotExist(err):
+			return err
+		}
+		change(byFingerprint)
+		out, err := json.MarshalIndent(byFingerprint, "", "  ")
+		if err != nil {
+			return err
+		}
+		return replaceFile(peersFile(dir), append(out, '\n'), 0o644)
+	})
 }
 
 // PeerAtAddress returns the peer already approved at an address when the
