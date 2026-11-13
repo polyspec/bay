@@ -5,6 +5,12 @@ the day the change was made.
 
 ## 2026-11-14
 
+### Energy-efficient ethernet off on a Linux machine's uplink
+
+The ODROID's link went down and up thirteen times since it started at 00:55, at rest as well as under load, and once stopped passing frames for eight minutes with the link reported up. Its interface (stmmac with an RTL8211F PHY) had energy-efficient ethernet active and had recorded a failed wake from low-power idle (`phy_eee_wakeup_error_n: 1`). `install` on Linux now turns energy-efficient ethernet off on the interface holding the default route, through `bay-link.service`, which applies it again at boot; `check` reads it from `ethtool --show-eee`. The part applies only to an interface whose PHY the kernel drives (`/sys/class/net/<if>/phydev`), so a virtual interface, such as a CI runner's, has none. The link renegotiates once when it is applied.
+
+Verification: on the ODROID, `install -dry-run` listed the part, `install` reported `energy-efficient ethernet is off on eth0`, `ethtool --show-eee eth0` read `EEE status: disabled`, the link renegotiated once (07:26:09–07:26:12), a second `install` changed nothing, restarting the unit left the link up, and `check` exited 0. Whether the drops stop is read from `/sys/class/net/eth0/carrier_changes`, 29 after the change. `TestLinkPartOnlyForAPHYTheKernelDrives` passes.
+
 ### A loaded Linux machine slows down instead of dropping off the network
 
 On the ODROID (3.7 GiB) a project's containers took the memory to its floor (`kswapd0` warned in `mm/page_alloc.c`), and the machine stopped answering on the network for eight minutes while its link stayed up, until the link went down and up. `install` on Linux now applies two more parts, which `check` and `install -dry-run` report:

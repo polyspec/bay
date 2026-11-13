@@ -139,7 +139,7 @@ Offers each command that is not terminal-only as a tool, annotated read-only, id
 - **Serve the domains a project declares over HTTPS.** One proxy per machine, routes from container labels, certificates issued and renewed by the tool.
 - **Reach the names of approved peer machines.** Over the mutually authenticated peer link, and only to machines approved by fingerprint.
 - **Be a dependable step for a person, a script or an agent.** Exit status that says whether the request was done, JSON output where a program reads the result, nothing left behind by an interrupted command, and the same result when run twice.
-- **Keep a Linux machine reachable while projects use it.** The containers bay runs share a slice that slows them past 70% of memory and holds them under 80% with at most 10% in swap, and the kernel keeps a reserve for the network driver, so a loaded machine is slow but answers.
+- **Keep a Linux machine reachable while projects use it.** The containers bay runs share a slice that slows them past 70% of memory and holds them under 80% with at most 10% in swap, and the kernel keeps a reserve for the network driver, so a loaded machine is slow but answers; energy-efficient ethernet stays off on its uplink, whose wake from low-power idle dropped the link.
 - **Apply the machine setup only on request.** install applies what is missing; every other command reads the setup and names install when a part is missing.
 
 ## What it does not do

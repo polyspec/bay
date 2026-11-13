@@ -25,7 +25,6 @@ func TestMemoryReserveFollowsTheMachine(t *testing.T) {
 	}
 }
 
-
 func TestMemoryReserveItemReadsTheLiveValues(t *testing.T) {
 	savedInfo, savedDir, savedVM := memInfoPath, sysctlDir, procSysVM
 	t.Cleanup(func() { memInfoPath, sysctlDir, procSysVM = savedInfo, savedDir, savedVM })

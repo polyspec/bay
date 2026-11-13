@@ -117,7 +117,9 @@ func (l LinuxSetup) Items() []SetupItem {
 		docker.Name = "docker engine: not answering; install Docker and start it"
 	}
 	items = append(items, docker, l.trustItem(), TrustItem(l.Dir))
-	items = append(items, l.firewallItem(), memoryReserveItem())
+	items = append(items, l.firewallItem())
+	items = append(items, l.linkItems()...)
+	items = append(items, memoryReserveItem())
 	if docker.OK {
 		items = append(items, containerSliceItem())
 	}
@@ -457,7 +459,7 @@ func (l LinuxSetup) ensureRoot(helper string, elevate Elevator) error {
 }
 
 // ApplyRoot applies the steps that need root and are missing: the trust
-// store, the firewall, the memory guard, the agent and the names in /etc/hosts. It runs as root.
+// store, the firewall, the link, the memory guard, the agent and the names in /etc/hosts. It runs as root.
 func (l LinuxSetup) ApplyRoot() error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("must run as root")
@@ -470,6 +472,13 @@ func (l LinuxSetup) ApplyRoot() error {
 	if fw := l.firewallItem(); !fw.OK && fw.Text != "" {
 		if err := l.ApplyFirewall(); err != nil {
 			return err
+		}
+	}
+	for _, it := range l.linkItems() {
+		if !it.OK && it.Text != "" {
+			if err := l.applyLink(); err != nil {
+				return err
+			}
 		}
 	}
 	if it := memoryReserveItem(); !it.OK && it.Text != "" {
@@ -517,7 +526,7 @@ func (l LinuxSetup) installAgent() error {
 }
 
 // RemoveAgent stops the agent, removes its unit, the names it wrote, the
-// memory guard and the authority from the system's store. It runs as root.
+// memory guard, the link unit and the authority from the system's store. It runs as root.
 func RemoveAgent() error {
 	if _, err := os.Stat(agentUnitPath()); err == nil {
 		exec.Command("systemctl", "disable", "--now", agentUnit).Run()
@@ -531,6 +540,9 @@ func RemoveAgent() error {
 		return err
 	}
 	if err := removeMemoryGuard(); err != nil {
+		return err
+	}
+	if err := removeLink(); err != nil {
 		return err
 	}
 	return untrust()

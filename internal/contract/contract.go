@@ -518,6 +518,7 @@ func StateFiles() []StateFile {
 		{"/etc/bay/firewall.nft, bay-firewall.service", "Linux: accepts new connections only from the hosts install -only-from named.", true},
 		{"/usr/local/share/ca-certificates/bay.crt", "Linux: the authority in the system trust store; the path follows the system.", true},
 		{"/etc/systemd/system/bay.slice", "Linux: holds the containers bay runs below the machine's memory; past 70% they slow, at 80% the kernel kills inside the slice only, and swap is held to 10%.", true},
+		{"/etc/systemd/system/bay-link.service", "Linux: keeps energy-efficient ethernet off at boot on the interface holding the default route, where its PHY is the kernel's.", true},
 		{"/etc/sysctl.d/99-bay.conf", "Linux: the free memory the kernel keeps for allocations that cannot wait, such as the network driver's, and when it starts reclaiming.", true},
 	}
 }
