@@ -13,10 +13,18 @@ REGION ?=
 .PHONY: all check clean test e2e docs-check docs-generate install uninstall window release
 all: $(BIN)/bay $(BIN)/bayd $(APP)
 
-$(BIN)/bay: $(shell find cmd/bay internal \( -name '*.go' -o -name '*.c' -o -name '*.h' \))
+# bayinit runs in front of a service's process inside its container, so it is
+# built for Linux, static, and embedded in bay and bayd for both
+# architectures (see internal/stack/bayinit.go).
+INIT := internal/stack/initbin/bayinit-linux-arm64 internal/stack/initbin/bayinit-linux-amd64
+
+internal/stack/initbin/bayinit-linux-%: cmd/bayinit/main.go
+	CGO_ENABLED=0 GOOS=linux GOARCH=$* $(GO) build -trimpath -ldflags "-s -w" -o $@ ./cmd/bayinit
+
+$(BIN)/bay: $(INIT) $(shell find cmd/bay internal \( -name '*.go' -o -name '*.c' -o -name '*.h' \))
 	$(GO) build -o $@ ./cmd/bay
 
-$(BIN)/bayd: $(shell find cmd/bayd internal \( -name '*.go' -o -name '*.c' -o -name '*.h' \))
+$(BIN)/bayd: $(INIT) $(shell find cmd/bayd internal \( -name '*.go' -o -name '*.c' -o -name '*.h' \))
 	$(GO) build -o $@ ./cmd/bayd
 
 # The menu bar app has to be a bundle: LSUIElement is what keeps it out of the
@@ -45,7 +53,7 @@ check: all test docs-check
 	$(GO) vet ./...
 	@test -z "$$(gofmt -l cmd internal)" || { gofmt -l cmd internal; exit 1; }
 
-test:
+test: $(INIT)
 	$(GO) test ./...
 
 docs-check: $(BIN)/bay
@@ -110,7 +118,7 @@ clean:
 # built on macOS; the Linux builds need no cgo.
 #   make release VERSION=v0.1.0
 DIST ?= dist
-release:
+release: $(INIT)
 	@test -n "$(VERSION)" || { echo "make release VERSION=vX.Y.Z"; exit 1; }
 	rm -rf $(DIST) && mkdir -p $(DIST)
 	@set -e; for target in darwin/arm64 darwin/amd64 linux/arm64 linux/amd64; do \

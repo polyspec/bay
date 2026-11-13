@@ -192,7 +192,14 @@ func StartService(group string, s *Service) error {
 	return newServiceEngine("").reconcile(group, s, false)
 }
 
+// serviceArguments are the arguments a service's container is created with,
+// from the Compose file alone.
 func serviceArguments(group string, s *Service, fingerprint string) []string {
+	return append(serviceHead(group, s, fingerprint), fileLaunch(s).tail(s.Image)...)
+}
+
+// serviceHead are the create arguments before the entrypoint and the image.
+func serviceHead(group string, s *Service, fingerprint string) []string {
 	scheme := "http"
 	if s.TLS {
 		scheme = "https"
@@ -239,8 +246,6 @@ func serviceArguments(group string, s *Service, fingerprint string) []string {
 	if s.Memory != "" {
 		args = append(args, "--memory", s.Memory)
 	}
-	args = append(args, s.Image)
-	args = append(args, s.Command...)
 	return args
 }
 

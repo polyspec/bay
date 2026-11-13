@@ -5,6 +5,14 @@ the day the change was made.
 
 ## 2026-11-14
 
+### Trust without covering the image's store; entrypoint and restart as the file says
+
+A service that trusts this machine starts with bayinit, a static program mounted at `/etc/bay/init`, in front of its process: it appends the authority (`/etc/bay/ca.crt`) to the image's own store and drops it where `update-ca-certificates` and `update-ca-trust` read sources, then runs the image's or the file's entrypoint and command. Nothing is mounted over `/etc/ssl/certs/ca-certificates.crt` or the other store paths any more, so installing `ca-certificates` in a container works (it failed on the read-only bundle). The variables now name `/etc/bay/ca-bundle.crt`. A container whose user cannot write the store starts unchanged and trusts through the variables. `make` builds bayinit for linux/arm64 and amd64 and embeds it.
+
+The Compose `entrypoint` replaces the image's (it was passed as arguments to the image's entrypoint), and a command written as one string is split as a shell would split it (quotes were split at blanks). The `restart` key is the Docker restart policy; without it, a service with a port gets `unless-stopped` and one without a port gets none, so a job that ends is not run again (it was restarted 3 s after it ended). On Apple container, which has no restart policy, `up` warns that the key is not applied.
+
+Verification: on the Mac, a `debian:bookworm-slim` service ran `apt-get install ca-certificates curl`, and that curl answered 200 for `https://mac-hello.test` and the peer's `https://odroid-hello.test` with verification on; the container's process was `/etc/bay/init sh -c …`. `TestBayinitRunsTheImagesProcess`, `TestRestartFollowsTheFile`, `TestACommandStringSplitsAsAShellWould` and the updated `TestTrustArguments` pass; `make check` passed.
+
 ### The tool states its task and what it leaves out; harness reports fixed
 
 `brief`, the skill, the README and `docs/spec/cli.md` now state what bay is for and what it does not do, with the reason and what to do instead (`internal/contract/scope.go`): no up or down on another machine, no host port or Unix socket, no wait without a bound, no caller policy, no setup change from a project command.

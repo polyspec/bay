@@ -20,19 +20,23 @@ import (
 // peer, which the proxy serves with a certificate from this authority, would
 // fail verification there.
 //
-// The state directory holds the store the containers read, in trust/:
+// The state directory holds what the containers read, in trust/:
 //
 //   - ca-bundle.crt: the system's public roots and this machine's authority, in
-//     PEM. It is mounted read-only over the store paths images read:
-//     /etc/ssl/certs/ca-certificates.crt (Debian, Ubuntu, Alpine),
-//     /etc/pki/tls/certs/ca-bundle.crt (Fedora, RHEL) and /etc/ssl/cert.pem
-//     (Alpine, LibreSSL), and named by SSL_CERT_FILE, CURL_CA_BUNDLE,
-//     REQUESTS_CA_BUNDLE and NODE_EXTRA_CA_CERTS, which Node adds to its own
-//     roots.
-//   - ca.crt: the authority alone, for a reader that wants only it.
+//     PEM, mounted read-only at /etc/bay/ca-bundle.crt and named by
+//     SSL_CERT_FILE, CURL_CA_BUNDLE, REQUESTS_CA_BUNDLE and
+//     NODE_EXTRA_CA_CERTS, which Node adds to its own roots.
+//   - ca.crt: the authority alone, mounted at /etc/bay/ca.crt, which bayinit
+//     adds to the image's own store before the service's command runs (see
+//     bayinit.go), for programs that read only the store, such as libcurl,
+//     PHP and GnuTLS.
 //   - truststore.p12: the same certificates as a PKCS #12 trust store, mounted
 //     at /etc/bay/truststore.p12 and named by JAVA_TOOL_OPTIONS,
 //     because Java reads neither of the above.
+//   - bayinit: the program above, for this machine's architecture.
+//
+// Nothing is mounted over the image's store, so a package that rewrites it,
+// such as ca-certificates, installs as it does without bay.
 //
 // The files are rewritten in place when their content changes, so a running
 // container's mount reads the new content. A service the Compose file marks
@@ -46,13 +50,6 @@ const (
 	javaTrustStorePath = "/etc/bay/truststore.p12"
 	trustStorePassword = "changeit"
 )
-
-// trustStorePaths are where images read their store from.
-var trustStorePaths = []string{
-	"/etc/ssl/certs/ca-certificates.crt",
-	"/etc/pki/tls/certs/ca-bundle.crt",
-	"/etc/ssl/cert.pem",
-}
 
 // systemRoots are where a system keeps its public roots in PEM, in the order
 // they are looked for: Debian, Ubuntu and Alpine; Fedora and RHEL; macOS. Tests
@@ -100,8 +97,11 @@ func TrustItem(dir string) SetupItem {
 		return SetupItem{Name: name + ": the system has no public roots in PEM at " +
 			strings.Join(systemRoots, ", ") + "; install ca-certificates"}
 	}
+	if _, ok := initBinary(); !ok {
+		name += ", without bayinit in this build: programs that read only the image's store do not trust it; build with make"
+	}
 	return SetupItem{
-		Name: name + " (roots from " + from + ")", OK: trustCurrent(dir, roots),
+		Name: name + " (roots from " + from + ")", OK: trustCurrent(dir, roots) && initCurrent(dir),
 		SetupStep: SetupStep{Text: "write the certificates containers trust in " + TrustDir(dir)},
 	}
 }
@@ -136,6 +136,9 @@ func EnsureTrust(dir string) error {
 	roots, _, ok := findSystemRoots()
 	if !ok {
 		return nil
+	}
+	if err := ensureInit(dir); err != nil {
+		return err
 	}
 	if trustCurrent(dir, roots) {
 		return nil
@@ -216,8 +219,7 @@ func javaTrustStore(bundle []byte) ([]byte, error) {
 // Every mount is of one file. Apple `container` drops a directory mount whose
 // host directory is also the source of a file mount in the same container
 // (observed: the configuration listed both, and the guest held only the file
-// mounts), so the store's directory is never mounted as a whole, and the
-// variables name the files at the paths images read.
+// mounts), so the store's directory is never mounted as a whole.
 func trustArguments(dir string, s *Service) []string {
 	if !s.Trust || dir == "" {
 		return nil
@@ -233,22 +235,21 @@ func trustArguments(dir string, s *Service) []string {
 			taken[parts[1]] = true
 		}
 	}
-	bundle := filepath.Join(TrustDir(dir), "ca-bundle.crt")
 	var args []string
-	for _, p := range trustStorePaths {
-		if !taken[p] {
-			args = append(args, "--volume", bundle+":"+p+":ro")
+	for _, m := range [][2]string{
+		{filepath.Join(TrustDir(dir), "ca-bundle.crt"), bundleContainerPath},
+		{filepath.Join(TrustDir(dir), "ca.crt"), caContainerPath},
+		{store, javaTrustStorePath},
+	} {
+		if !taken[m[1]] {
+			args = append(args, "--volume", m[0]+":"+m[1]+":ro")
 		}
 	}
-	if !taken[javaTrustStorePath] {
-		args = append(args, "--volume", store+":"+javaTrustStorePath+":ro")
-	}
-	pem := trustStorePaths[0]
 	env := [][2]string{
-		{"SSL_CERT_FILE", pem},
-		{"CURL_CA_BUNDLE", pem},
-		{"REQUESTS_CA_BUNDLE", pem},
-		{"NODE_EXTRA_CA_CERTS", pem},
+		{"SSL_CERT_FILE", bundleContainerPath},
+		{"CURL_CA_BUNDLE", bundleContainerPath},
+		{"REQUESTS_CA_BUNDLE", bundleContainerPath},
+		{"NODE_EXTRA_CA_CERTS", bundleContainerPath},
 		{"JAVA_TOOL_OPTIONS", "-Djavax.net.ssl.trustStore=" + javaTrustStorePath +
 			" -Djavax.net.ssl.trustStoreType=PKCS12 -Djavax.net.ssl.trustStorePassword=" + trustStorePassword},
 	}

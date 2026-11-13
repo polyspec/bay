@@ -99,22 +99,28 @@ func TestTrustArguments(t *testing.T) {
 		t.Fatalf("the store's directory is mounted whole: %s", joined)
 	}
 	for _, want := range []string{
-		filepath.Join(TrustDir(dir), "ca-bundle.crt") + ":/etc/ssl/certs/ca-certificates.crt:ro",
-		":/etc/pki/tls/certs/ca-bundle.crt:ro",
-		":/etc/ssl/cert.pem:ro",
+		filepath.Join(TrustDir(dir), "ca-bundle.crt") + ":/etc/bay/ca-bundle.crt:ro",
+		filepath.Join(TrustDir(dir), "ca.crt") + ":/etc/bay/ca.crt:ro",
 		filepath.Join(TrustDir(dir), "truststore.p12") + ":/etc/bay/truststore.p12:ro",
-		"SSL_CERT_FILE=/etc/ssl/certs/ca-certificates.crt",
-		"NODE_EXTRA_CA_CERTS=/etc/ssl/certs/ca-certificates.crt",
+		"SSL_CERT_FILE=/etc/bay/ca-bundle.crt",
+		"NODE_EXTRA_CA_CERTS=/etc/bay/ca-bundle.crt",
 		"JAVA_TOOL_OPTIONS=-Djavax.net.ssl.trustStore=/etc/bay/truststore.p12",
 	} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("arguments lack %q", want)
 		}
 	}
+	// The image's own store is never mounted over: a package that rewrites it,
+	// such as ca-certificates, failed to install.
+	for _, store := range []string{"/etc/ssl/certs/ca-certificates.crt", "/etc/pki/tls/certs/ca-bundle.crt", "/etc/ssl/cert.pem"} {
+		if strings.Contains(joined, ":"+store) {
+			t.Errorf("the image's store %s is mounted over: %s", store, joined)
+		}
+	}
 	own := &Service{Trust: true, Env: map[string]string{"SSL_CERT_FILE": "/mine"},
-		Volumes: []string{"/x:/etc/ssl/cert.pem:ro"}}
+		Volumes: []string{"/x:/etc/bay/ca.crt:ro"}}
 	joined = strings.Join(trustArguments(dir, own), " ")
-	if strings.Contains(joined, "SSL_CERT_FILE=") || strings.Contains(joined, ":/etc/ssl/cert.pem:ro") {
+	if strings.Contains(joined, "SSL_CERT_FILE=") || strings.Contains(joined, ":/etc/bay/ca.crt:ro") {
 		t.Fatalf("the service's own variable or mount was overridden: %s", joined)
 	}
 	if args := trustArguments(dir, &Service{Trust: false}); args != nil {

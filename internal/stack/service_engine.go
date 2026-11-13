@@ -236,6 +236,9 @@ func (e *serviceEngine) preflight(group string, services []*Service) error {
 		return err
 	}
 	for _, s := range services {
+		if e.engine == AppleEngine && s.Restart != "" && s.Restart != "no" {
+			e.say("warning: %s: restart: %s is not applied; Apple container has no restart policy", s.Name, s.Restart)
+		}
 		if e.engine == AppleEngine {
 			for _, t := range s.Tmpfs {
 				if strings.Contains(t, ":") {
@@ -335,8 +338,12 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	if err := ensureServiceCert(e.dir, s); err != nil {
 		return err
 	}
+	launched := e.launchOf(ctx, s)
 	identity := append(trustArguments(e.dir, s), certArguments(e.dir, s)...)
 	identity = append(identity, "domain="+BackendDomain)
+	if encoded, err := json.Marshal(launched); err == nil {
+		identity = append(identity, "launch="+string(encoded))
+	}
 	fingerprint := serviceFingerprint(group, s, digest, identity)
 	same := found && in.Labels[LabelConfig] == fingerprint && in.ImageDigest == digest
 	if same && !restart {
@@ -368,7 +375,7 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	// Create does not execute the process. Inspect its actual image before
 	// starting, since a local tag need not have a name@digest cache alias.
 	e.say("%s: creating its container", s.Name)
-	if _, err = e.command(ctx, e.createArguments(group, s, fingerprint)...); err != nil {
+	if _, err = e.command(ctx, e.createArgumentsWith(group, s, fingerprint, launched)...); err != nil {
 		return fmt.Errorf("service %s create: %w", s.Name, err)
 	}
 	created, ok, err := e.lookup(ctx, s.ContainerName)

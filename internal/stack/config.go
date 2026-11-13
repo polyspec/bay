@@ -58,14 +58,22 @@ type Service struct {
 	ContainerName string
 	Image         string
 	Command       []string
-	Env           map[string]string
-	Volumes       []string
-	Network       string
-	CPUs          int
-	Memory        string
-	User          string
-	ReadOnly      bool
-	CapDrop       []string
+	// Entrypoint replaces the image's entrypoint when EntrypointSet; empty, it
+	// clears it. Both are omitted when unset, so the identity of services
+	// without the key does not change.
+	Entrypoint    []string `json:",omitempty"`
+	EntrypointSet bool     `json:",omitempty"`
+	// Restart is the restart key: no, always, on-failure[:N] or
+	// unless-stopped, empty when unset.
+	Restart  string `json:",omitempty"`
+	Env      map[string]string
+	Volumes  []string
+	Network  string
+	CPUs     int
+	Memory   string
+	User     string
+	ReadOnly bool
+	CapDrop  []string
 	// Tmpfs are the in-memory mounts, each a path inside the container, with
 	// mount options after a colon on Docker. Omitted when empty, so the
 	// identity of services without the key does not change.
@@ -125,7 +133,8 @@ type serviceSettings struct {
 type composeService struct {
 	Image         string           `yaml:"image"`
 	Command       stringOrList     `yaml:"command"`
-	Entrypoint    stringOrList     `yaml:"entrypoint"`
+	Entrypoint    *stringOrList    `yaml:"entrypoint"`
+	Restart       string           `yaml:"restart"`
 	Environment   mapOrList        `yaml:"environment"`
 	Labels        mapOrList        `yaml:"labels"`
 	Volumes       []string         `yaml:"volumes"`
@@ -323,7 +332,21 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 	if s.ContainerName == "" {
 		s.ContainerName = c.Name + "-" + s.Name
 	}
-	s.Command = append(append([]string{}, cs.Entrypoint...), cs.Command...)
+	// The entrypoint replaces the image's, an empty one clears it, and the
+	// command replaces the image's command; a file that sets the entrypoint
+	// and no command runs no image command, as Compose does.
+	s.Command = cs.Command
+	if cs.Entrypoint != nil {
+		s.Entrypoint, s.EntrypointSet = []string(*cs.Entrypoint), true
+		if s.Entrypoint == nil {
+			s.Entrypoint = []string{}
+		}
+	}
+	restart, err := decodeRestart(cs.Restart)
+	if err != nil {
+		return nil, fmt.Errorf("service %q: %w", name, err)
+	}
+	s.Restart = restart
 	s.Env = cs.Environment
 	s.Volumes = cs.Volumes
 	s.Memory = cs.MemLimit
@@ -564,9 +587,14 @@ func (v *stringOrList) UnmarshalYAML(node *yaml.Node) error {
 	switch node.Kind {
 	case yaml.ScalarNode:
 		if node.Value == "" {
+			*v = stringOrList{}
 			return nil
 		}
-		*v = strings.Fields(node.Value)
+		words, err := splitShell(node.Value)
+		if err != nil {
+			return fmt.Errorf("%q: %w", node.Value, err)
+		}
+		*v = words
 		return nil
 	case yaml.SequenceNode:
 		var out []string
@@ -630,4 +658,60 @@ func decodeTmpfs(node yaml.Node) ([]string, error) {
 		}
 	}
 	return list, nil
+}
+
+// splitShell splits a command written as one string the way Compose does: at
+// blanks outside quotes, with single quotes taken literally and a backslash
+// escaping the next character outside single quotes.
+func splitShell(line string) ([]string, error) {
+	var words []string
+	var cur strings.Builder
+	inWord, quote := false, rune(0)
+	escaped := false
+	for _, r := range line {
+		switch {
+		case escaped:
+			cur.WriteRune(r)
+			escaped = false
+		case r == '\\' && quote != '\'':
+			escaped, inWord = true, true
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			} else {
+				cur.WriteRune(r)
+			}
+		case r == '\'' || r == '"':
+			quote, inWord = r, true
+		case r == ' ' || r == '\t' || r == '\n':
+			if inWord {
+				words = append(words, cur.String())
+				cur.Reset()
+				inWord = false
+			}
+		default:
+			cur.WriteRune(r)
+			inWord = true
+		}
+	}
+	if quote != 0 || escaped {
+		return nil, fmt.Errorf("unterminated quote or escape")
+	}
+	if inWord {
+		words = append(words, cur.String())
+	}
+	return words, nil
+}
+
+// decodeRestart checks the restart key.
+func decodeRestart(v string) (string, error) {
+	switch {
+	case v == "", v == "no", v == "always", v == "unless-stopped", v == "on-failure":
+		return v, nil
+	case strings.HasPrefix(v, "on-failure:"):
+		if n, err := strconv.Atoi(strings.TrimPrefix(v, "on-failure:")); err == nil && n > 0 {
+			return v, nil
+		}
+	}
+	return "", fmt.Errorf("restart %q must be no, always, on-failure[:N] or unless-stopped", v)
 }

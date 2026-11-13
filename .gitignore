@@ -34,3 +34,4 @@ design/bay-window.html
 .idea/
 .vscode/
 /dist/
+/internal/stack/initbin/bayinit-*

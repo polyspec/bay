@@ -121,16 +121,31 @@ func decodeDockerVolumes(out []byte) ([]runtimeVolume, error) {
 // container's name and its aliases on a user-defined network, so the name is
 // given as an alias.
 //
-// A Docker machine runs without anyone at it, and Docker starts a container
-// again after the machine restarts only when the container carries a restart
-// policy. A service is given "unless-stopped", so one that `stop` stopped stays
-// stopped; an initializer runs once and is given none.
+// The Compose file's restart key is the container's restart policy. Without
+// it, a service that declares a port is a server that is meant to be up, and
+// a Docker machine runs without anyone at it, so it is given "unless-stopped"
+// and comes back after the machine restarts; one that `stop` stopped stays
+// stopped. A service without a port, such as a job that runs once, is given
+// none: a policy would run it again each time it ended.
 func dockerServiceArguments(s *Service) []string {
 	args := []string{"--network-alias", s.ContainerName + "." + BackendDomain}
-	if !s.OneShot {
-		args = append(args, "--restart", "unless-stopped")
+	if policy := restartPolicy(s); policy != "" {
+		args = append(args, "--restart", policy)
 	}
 	return args
+}
+
+// restartPolicy is the policy a service's container is created with on Docker.
+func restartPolicy(s *Service) string {
+	switch {
+	case s.Restart == "no":
+		return ""
+	case s.Restart != "":
+		return s.Restart
+	case !s.OneShot && s.Port > 0:
+		return "unless-stopped"
+	}
+	return ""
 }
 
 // createArguments returns the arguments a service's container is created with
@@ -138,16 +153,19 @@ func dockerServiceArguments(s *Service) []string {
 // on Docker its own arguments. They are placed before the image, because
 // everything after the image is the service's command.
 func (e *serviceEngine) createArguments(group string, s *Service, fingerprint string) []string {
-	args := serviceArguments(group, s, fingerprint)
-	extra := append(trustArguments(e.dir, s), certArguments(e.dir, s)...)
+	return e.createArgumentsWith(group, s, fingerprint, fileLaunch(s))
+}
+
+// createArgumentsWith returns the create arguments for a service started as l.
+func (e *serviceEngine) createArgumentsWith(group string, s *Service, fingerprint string, l launch) []string {
+	args := serviceHead(group, s, fingerprint)
+	args = append(args, trustArguments(e.dir, s)...)
+	args = append(args, certArguments(e.dir, s)...)
 	if e.engine == DockerEngine {
-		extra = append(extra, dockerServiceArguments(s)...)
+		args = append(args, dockerServiceArguments(s)...)
 	}
-	if len(extra) == 0 {
-		return args
+	if l.Init {
+		args = append(args, "--volume", InitPath(e.dir)+":"+initContainerPath+":ro")
 	}
-	image := len(args) - len(s.Command) - 1
-	out := append([]string{}, args[:image]...)
-	out = append(out, extra...)
-	return append(out, args[image:]...)
+	return append(args, l.tail(s.Image)...)
 }

@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 )
@@ -17,7 +18,7 @@ func TestCLIPrerequisitesIncludeNativeBindings(t *testing.T) {
 	for _, binding := range []string{"events.c", "events.h"} {
 		t.Run(binding, func(t *testing.T) {
 			root := t.TempDir()
-			for _, name := range []string{"cmd/bay", "cmd/bayd", "cmd/baybar", "internal/stack", "bin"} {
+			for _, name := range []string{"cmd/bay", "cmd/bayd", "cmd/baybar", "cmd/bayinit", "internal/stack/initbin", "bin"} {
 				if err := os.MkdirAll(filepath.Join(root, name), 0700); err != nil {
 					t.Fatal(err)
 				}
@@ -26,13 +27,17 @@ func TestCLIPrerequisitesIncludeNativeBindings(t *testing.T) {
 				t.Fatal(err)
 			}
 			earlier := time.Unix(100, 0)
-			for _, name := range []string{"cmd/bay/main.go", "internal/stack/events.c", "internal/stack/events.h", "bin/bay"} {
+			for _, name := range []string{"cmd/bay/main.go", "internal/stack/events.c", "internal/stack/events.h",
+				"cmd/bayinit/main.go", "internal/stack/initbin/bayinit-linux-arm64", "internal/stack/initbin/bayinit-linux-amd64", "bin/bay"} {
 				path := filepath.Join(root, name)
 				if err := os.WriteFile(path, []byte("fixture-only"), 0600); err != nil {
 					t.Fatal(err)
 				}
 				stamp := earlier
-				if name == "bin/bay" {
+				switch {
+				case name == "bin/bay":
+					stamp = earlier.Add(2 * time.Second)
+				case strings.HasPrefix(name, "internal/stack/initbin/"):
 					stamp = earlier.Add(time.Second)
 				}
 				if err := os.Chtimes(path, stamp, stamp); err != nil {
@@ -50,7 +55,7 @@ func TestCLIPrerequisitesIncludeNativeBindings(t *testing.T) {
 				t.Fatalf("unchanged fixture is not current: %v", err)
 			}
 			changed := filepath.Join(root, "internal/stack", binding)
-			stamp := earlier.Add(2 * time.Second)
+			stamp := earlier.Add(3 * time.Second)
 			if err := os.Chtimes(changed, stamp, stamp); err != nil {
 				t.Fatal(err)
 			}

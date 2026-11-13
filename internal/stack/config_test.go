@@ -286,9 +286,10 @@ func TestCommandAcceptsBothSpellings(t *testing.T) {
 	if got := strings.Join(cfg.Services["b"].Command, " "); got != want {
 		t.Errorf("b command = %q", got)
 	}
-	// An entrypoint comes first, the way a container runs it.
-	if got := strings.Join(cfg.Services["c"].Command, " "); got != "/bin/sh -c echo hi" {
-		t.Errorf("c command = %q", got)
+	// An entrypoint replaces the image's: its first word is the entrypoint and
+	// the rest comes before the command.
+	if got := strings.Join(fileLaunch(cfg.Services["c"]).tail("nginx"), " "); got != "--entrypoint /bin/sh nginx -c echo hi" {
+		t.Errorf("c starts as %q", got)
 	}
 }
 

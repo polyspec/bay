@@ -4,6 +4,14 @@
 
 ## 2026-11-14
 
+### 이미지 저장소를 덮지 않는 신뢰, 파일대로의 entrypoint와 restart
+
+이 기계를 신뢰하는 서비스는 프로세스 앞에서 bayinit(`/etc/bay/init`에 마운트한 정적 프로그램)이 먼저 돈다: 인증기관(`/etc/bay/ca.crt`)을 이미지 자신의 저장소에 더하고, `update-ca-certificates`와 `update-ca-trust`가 읽는 원본 위치에도 두고, 이미지나 파일의 entrypoint와 command를 실행한다. `/etc/ssl/certs/ca-certificates.crt` 등 저장소 경로를 더는 덮어 마운트하지 않으므로 컨테이너 안에서 `ca-certificates` 설치가 된다(읽기 전용 묶음 때문에 실패했다). 변수는 `/etc/bay/ca-bundle.crt`를 가리킨다. 저장소를 쓸 수 없는 사용자의 컨테이너는 그대로 시작하고 변수로 신뢰한다. `make`가 bayinit을 linux/arm64와 amd64로 빌드해 내장한다.
+
+Compose `entrypoint`가 이미지의 것을 대체한다(이미지 entrypoint의 인자로 넘어가고 있었다). 한 문자열로 쓴 command는 셸처럼 나눈다(따옴표 안도 공백에서 나뉘었다). `restart` 키가 Docker 재시작 정책이 된다. 없으면 포트가 있는 서비스는 `unless-stopped`, 없는 서비스는 정책 없음이라 끝난 작업이 다시 돌지 않는다(끝나고 3초 뒤 다시 시작됐다). 재시작 정책이 없는 Apple container에서는 `up`이 적용되지 않음을 경고한다.
+
+검증: Mac에서 `debian:bookworm-slim` 서비스가 `apt-get install ca-certificates curl`을 마쳤고, 그 curl이 검증을 켠 채 `https://mac-hello.test`와 peer의 `https://odroid-hello.test`에 200을 받았다. 컨테이너 프로세스는 `/etc/bay/init sh -c …`였다. `TestBayinitRunsTheImagesProcess`, `TestRestartFollowsTheFile`, `TestACommandStringSplitsAsAShellWould`, 바뀐 `TestTrustArguments`가 통과하고 `make check`가 통과했다.
+
 ### 도구의 임무와 하지 않는 일을 명시하고, 하네스 보고를 고친다
 
 `brief`, skill, README, `docs/spec/cli.md`가 bay가 하는 일과 하지 않는 일을 이유와 대안과 함께 적는다(`internal/contract/scope.go`): 다른 기계에서의 up/down, 호스트 포트와 Unix socket 공개, 한도 없는 대기, 호출자의 정책 결정, 프로젝트 명령의 설정 변경은 하지 않는다.
