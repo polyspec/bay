@@ -117,7 +117,10 @@ func (l LinuxSetup) Items() []SetupItem {
 		docker.Name = "docker engine: not answering; install Docker and start it"
 	}
 	items = append(items, docker, l.trustItem(), TrustItem(l.Dir))
-	items = append(items, l.firewallItem())
+	items = append(items, l.firewallItem(), memoryReserveItem())
+	if docker.OK {
+		items = append(items, containerSliceItem())
+	}
 	if l.DNSBin != "" {
 		items = append(items, l.agentItem())
 	}
@@ -453,8 +456,8 @@ func (l LinuxSetup) ensureRoot(helper string, elevate Elevator) error {
 	return Install{Helper: helper, Elevate: elevate}.elevate(args...)
 }
 
-// ApplyRoot applies the steps that need root and are missing: the firewall,
-// the agent and the names in /etc/hosts. It runs as root.
+// ApplyRoot applies the steps that need root and are missing: the trust
+// store, the firewall, the memory guard, the agent and the names in /etc/hosts. It runs as root.
 func (l LinuxSetup) ApplyRoot() error {
 	if os.Geteuid() != 0 {
 		return fmt.Errorf("must run as root")
@@ -467,6 +470,18 @@ func (l LinuxSetup) ApplyRoot() error {
 	if fw := l.firewallItem(); !fw.OK && fw.Text != "" {
 		if err := l.ApplyFirewall(); err != nil {
 			return err
+		}
+	}
+	if it := memoryReserveItem(); !it.OK && it.Text != "" {
+		if err := applyMemoryReserve(); err != nil {
+			return err
+		}
+	}
+	if dockerAnswers() {
+		if it := containerSliceItem(); !it.OK && it.Text != "" {
+			if err := applyContainerSlice(); err != nil {
+				return err
+			}
 		}
 	}
 	if l.DNSBin != "" && !l.agentCurrent() {
@@ -501,8 +516,8 @@ func (l LinuxSetup) installAgent() error {
 	return nil
 }
 
-// RemoveAgent stops the agent, removes its unit, the names it wrote and the
-// authority from the system's store. It runs as root.
+// RemoveAgent stops the agent, removes its unit, the names it wrote, the
+// memory guard and the authority from the system's store. It runs as root.
 func RemoveAgent() error {
 	if _, err := os.Stat(agentUnitPath()); err == nil {
 		exec.Command("systemctl", "disable", "--now", agentUnit).Run()
@@ -513,6 +528,9 @@ func RemoveAgent() error {
 		fmt.Printf("removed %s\n", agentUnitPath())
 	}
 	if _, err := SyncHostsFile(nil); err != nil {
+		return err
+	}
+	if err := removeMemoryGuard(); err != nil {
 		return err
 	}
 	return untrust()

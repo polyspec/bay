@@ -5,6 +5,17 @@ the day the change was made.
 
 ## 2026-11-14
 
+### A loaded Linux machine slows down instead of dropping off the network
+
+On the ODROID (3.7 GiB) a project's containers took the memory to its floor (`kswapd0` warned in `mm/page_alloc.c`), and the machine stopped answering on the network for eight minutes while its link stayed up, until the link went down and up. `install` on Linux now applies two more parts, which `check` and `install -dry-run` report:
+
+- `bay.slice` (`/etc/systemd/system/bay.slice`): every service container bay creates on Docker is placed in it (`--cgroup-parent`). Past `MemoryHigh=75%` the kernel reclaims from the containers and slows them; at `MemoryMax=85%` it kills inside the slice only; `MemorySwapMax=25%` bounds swap. The shell, Docker, the agent, the proxy and the network driver keep the rest. A container created before the slice was registered is created again at the next `up`. The Docker engine must use the systemd cgroup driver; `check` names the setting when it does not.
+- `/etc/sysctl.d/99-bay.conf`: the kernel keeps 1/64 of memory free (32–256 MiB; 58 MiB instead of 22 MiB on the ODROID) for allocations that cannot wait, among them the network driver's receive buffers, and starts reclaiming at 2% (`vm.watermark_scale_factor = 200`).
+
+`uninstall` removes both and reloads the kernel's values from the remaining files.
+
+Verification: on the ODROID, `install -dry-run` of this build listed both parts and `check` reported them missing; `TestMemoryReserveFollowsTheMachine`, `TestMemoryReserveItemReadsTheLiveValues` and `TestContainersLeaveTheSliceAloneWhereTheHostHasNone` pass.
+
 ### A resident process running a replaced executable is not in place
 
 The DNS agent, the relay daemon and the Linux agent exit when their executable is replaced, and launchd or systemd starts the new one; a process started from a version that predates that kept running the old code, and `check` passed because the job was registered exactly as `install` would register it. A resident is now in place only when it started after its executable last changed (the inode's change time, which no archive or copy sets back); `check` names one that did not as `runs an older …`, and `install` restarts it (`restart the peer relay dev.bay.relay`).

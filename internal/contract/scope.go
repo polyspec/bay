@@ -29,6 +29,8 @@ func Duties() []Duty {
 			"Over the mutually authenticated peer link, and only to machines approved by fingerprint."},
 		{"Be a dependable step for a person, a script or an agent.",
 			"Exit status that says whether the request was done, JSON output where a program reads the result, nothing left behind by an interrupted command, and the same result when run twice."},
+		{"Keep a Linux machine reachable while projects use it.",
+			"The containers bay runs share a slice that slows them past 75% of memory and holds them under 85%, and the kernel keeps a reserve for the network driver, so a loaded machine is slow but answers."},
 		{"Apply the machine setup only on request.",
 			"install applies what is missing; every other command reads the setup and names install when a part is missing."},
 	}

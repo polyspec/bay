@@ -341,6 +341,10 @@ func (e *serviceEngine) reconcile(group string, s *Service, restart bool) error 
 	launched := e.launchOf(ctx, s)
 	identity := append(trustArguments(e.dir, s), certArguments(e.dir, s)...)
 	identity = append(identity, "domain="+BackendDomain)
+	// A container created before the slice was registered is created again in it.
+	if parent := serviceCgroupParent(); parent != "" {
+		identity = append(identity, "cgroup-parent="+parent)
+	}
 	if encoded, err := json.Marshal(launched); err == nil {
 		identity = append(identity, "launch="+string(encoded))
 	}

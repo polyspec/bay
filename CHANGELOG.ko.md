@@ -4,6 +4,17 @@
 
 ## 2026-11-14
 
+### 부하가 걸린 Linux 기계가 네트워크에서 빠지지 않고 느려진다
+
+ODROID(3.7 GiB)에서 프로젝트 컨테이너들이 메모리를 바닥까지 썼고(`kswapd0`가 `mm/page_alloc.c`에서 경고), 링크는 붙은 채로 기계가 8분 동안 네트워크에 답하지 않다가 링크가 내려갔다 올라오자 돌아왔다. 이제 Linux의 `install`은 두 부분을 더 적용하고 `check`와 `install -dry-run`이 이를 보고한다.
+
+- `bay.slice`(`/etc/systemd/system/bay.slice`): bay가 Docker에 만드는 서비스 컨테이너는 모두 여기에 들어간다(`--cgroup-parent`). `MemoryHigh=75%`를 넘으면 커널이 컨테이너에서 회수하며 느리게 하고, `MemoryMax=85%`에서는 슬라이스 안에서만 죽인다. `MemorySwapMax=25%`가 스왑을 묶는다. 셸, Docker, 에이전트, 프록시, 네트워크 드라이버는 나머지를 쓴다. 슬라이스 등록 전에 만든 컨테이너는 다음 `up`에서 다시 만든다. Docker 엔진은 systemd cgroup 드라이버를 써야 하며, 아니면 `check`가 고칠 설정을 알려 준다.
+- `/etc/sysctl.d/99-bay.conf`: 커널이 메모리의 1/64(32–256 MiB, ODROID에서는 22 MiB 대신 58 MiB)를 기다릴 수 없는 할당(네트워크 드라이버의 수신 버퍼 등)에 남겨 두고, 2%에서 회수를 시작한다(`vm.watermark_scale_factor = 200`).
+
+`uninstall`은 둘을 지우고 남은 파일에서 커널 값을 다시 읽는다.
+
+검증: ODROID에서 이 빌드의 `install -dry-run`이 두 부분을 보였고 `check`가 빠졌다고 알렸다. `TestMemoryReserveFollowsTheMachine`, `TestMemoryReserveItemReadsTheLiveValues`, `TestContainersLeaveTheSliceAloneWhereTheHostHasNone`가 통과한다.
+
 ### 교체된 실행 파일을 돌리는 상주 프로세스는 갖춰진 것이 아니다
 
 DNS 에이전트, relay 데몬, Linux 에이전트는 실행 파일이 바뀌면 끝나고 launchd나 systemd가 새것을 띄운다. 그 기능 이전 버전으로 시작한 프로세스는 옛 코드로 계속 돌았고, 작업 등록이 `install`이 쓸 것과 똑같아서 `check`는 통과했다. 이제 상주 프로세스는 실행 파일이 마지막으로 바뀐 뒤(아카이브나 복사로 되돌릴 수 없는 inode 변경 시각) 시작했을 때만 갖춰진 것이다. 아니면 `check`가 `runs an older …`로 알리고 `install`이 재시작한다(`restart the peer relay dev.bay.relay`).

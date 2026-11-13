@@ -517,5 +517,7 @@ func StateFiles() []StateFile {
 		{"/etc/hosts (marked block)", "Linux: names the domains the proxy serves.", true},
 		{"/etc/bay/firewall.nft, bay-firewall.service", "Linux: accepts new connections only from the hosts install -only-from named.", true},
 		{"/usr/local/share/ca-certificates/bay.crt", "Linux: the authority in the system trust store; the path follows the system.", true},
+		{"/etc/systemd/system/bay.slice", "Linux: holds the containers bay runs below the machine's memory; past 75% they slow, at 85% the kernel kills inside the slice only.", true},
+		{"/etc/sysctl.d/99-bay.conf", "Linux: the free memory the kernel keeps for allocations that cannot wait, such as the network driver's, and when it starts reclaiming.", true},
 	}
 }

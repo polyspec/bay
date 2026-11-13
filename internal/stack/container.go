@@ -247,6 +247,9 @@ func serviceHead(group string, s *Service, fingerprint string) []string {
 	if s.Memory != "" {
 		args = append(args, "--memory", s.Memory)
 	}
+	if parent := serviceCgroupParent(); parent != "" {
+		args = append(args, "--cgroup-parent", parent)
+	}
 	return args
 }
 
