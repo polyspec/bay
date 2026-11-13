@@ -17,7 +17,7 @@ bay runs Compose projects on Apple `container` and on Docker, serves each servic
 - **Serve the domains a project declares over HTTPS.** One proxy per machine, routes from container labels, certificates issued and renewed by the tool.
 - **Reach the names of approved peer machines.** Over the mutually authenticated peer link, and only to machines approved by fingerprint.
 - **Be a dependable step for a person, a script or an agent.** Exit status that says whether the request was done, JSON output where a program reads the result, nothing left behind by an interrupted command, and the same result when run twice.
-- **Keep a Linux machine reachable while projects use it.** The containers bay runs share a slice that slows them past 75% of memory and holds them under 85%, and the kernel keeps a reserve for the network driver, so a loaded machine is slow but answers.
+- **Keep a Linux machine reachable while projects use it.** The containers bay runs share a slice that slows them past 70% of memory and holds them under 80% with at most 10% in swap, and the kernel keeps a reserve for the network driver, so a loaded machine is slow but answers.
 - **Apply the machine setup only on request.** install applies what is missing; every other command reads the setup and names install when a part is missing.
 
 ## What it does not do
@@ -179,5 +179,5 @@ Do not edit these; the commands write them and an edit is replaced or breaks the
 - `/etc/hosts (marked block)` Linux: names the domains the proxy serves.
 - `/etc/bay/firewall.nft, bay-firewall.service` Linux: accepts new connections only from the hosts install -only-from named.
 - `/usr/local/share/ca-certificates/bay.crt` Linux: the authority in the system trust store; the path follows the system.
-- `/etc/systemd/system/bay.slice` Linux: holds the containers bay runs below the machine's memory; past 75% they slow, at 85% the kernel kills inside the slice only.
+- `/etc/systemd/system/bay.slice` Linux: holds the containers bay runs below the machine's memory; past 70% they slow, at 80% the kernel kills inside the slice only, and swap is held to 10%.
 - `/etc/sysctl.d/99-bay.conf` Linux: the free memory the kernel keeps for allocations that cannot wait, such as the network driver's, and when it starts reclaiming.

@@ -60,7 +60,7 @@ func TestContainersLeaveTheSliceAloneWhereTheHostHasNone(t *testing.T) {
 		t.Fatalf("macOS: cgroup parent %q, want none", got)
 	}
 	body := containerSliceBody()
-	for _, want := range []string{"MemoryHigh=75%", "MemoryMax=85%", "MemorySwapMax=25%"} {
+	for _, want := range []string{"MemoryHigh=70%", "MemoryMax=80%", "MemorySwapMax=10%"} {
 		if !strings.Contains(body, want) {
 			t.Errorf("slice lacks %s:\n%s", want, body)
 		}

@@ -28,10 +28,13 @@ const (
 	// containerSlice holds the containers bay runs on Docker.
 	containerSlice = "bay.slice"
 	// containerMemoryHigh, containerMemoryMax and containerSwapMax are shares
-	// of the machine's memory, as systemd reads them.
-	containerMemoryHigh = "75%"
-	containerMemoryMax  = "85%"
-	containerSwapMax    = "25%"
+	// of the machine's memory, as systemd reads them. Swap is often zram, which
+	// keeps what is swapped out in memory the slice is not charged for, so the
+	// slice's memory and its swap together stay at 90%: what is left is the
+	// system's even when the swapped pages do not compress.
+	containerMemoryHigh = "70%"
+	containerMemoryMax  = "80%"
+	containerSwapMax    = "10%"
 	// watermarkScale starts reclaim when 2% of memory is left above the low
 	// watermark, instead of the default 0.1%.
 	watermarkScale = 200

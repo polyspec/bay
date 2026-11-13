@@ -8,12 +8,12 @@
 
 ODROID(3.7 GiB)에서 프로젝트 컨테이너들이 메모리를 바닥까지 썼고(`kswapd0`가 `mm/page_alloc.c`에서 경고), 링크는 붙은 채로 기계가 8분 동안 네트워크에 답하지 않다가 링크가 내려갔다 올라오자 돌아왔다. 이제 Linux의 `install`은 두 부분을 더 적용하고 `check`와 `install -dry-run`이 이를 보고한다.
 
-- `bay.slice`(`/etc/systemd/system/bay.slice`): bay가 Docker에 만드는 서비스 컨테이너는 모두 여기에 들어간다(`--cgroup-parent`). `MemoryHigh=75%`를 넘으면 커널이 컨테이너에서 회수하며 느리게 하고, `MemoryMax=85%`에서는 슬라이스 안에서만 죽인다. `MemorySwapMax=25%`가 스왑을 묶는다. 셸, Docker, 에이전트, 프록시, 네트워크 드라이버는 나머지를 쓴다. 슬라이스 등록 전에 만든 컨테이너는 다음 `up`에서 다시 만든다. Docker 엔진은 systemd cgroup 드라이버를 써야 하며, 아니면 `check`가 고칠 설정을 알려 준다.
+- `bay.slice`(`/etc/systemd/system/bay.slice`): bay가 Docker에 만드는 서비스 컨테이너는 모두 여기에 들어간다(`--cgroup-parent`). `MemoryHigh=70%`를 넘으면 커널이 컨테이너에서 회수하며 느리게 하고, `MemoryMax=80%`에서는 슬라이스 안에서만 죽인다. `MemorySwapMax=10%`가 스왑을 묶는다. 스왑은 흔히 zram이라 슬라이스에 계산되지 않는 메모리에 남으므로, 메모리와 스왑을 합쳐 90%를 넘지 않는다. 셸, Docker, 에이전트, 프록시, 네트워크 드라이버는 나머지를 쓴다. 슬라이스 등록 전에 만든 컨테이너는 다음 `up`에서 다시 만든다. Docker 엔진은 systemd cgroup 드라이버를 써야 하며, 아니면 `check`가 고칠 설정을 알려 준다.
 - `/etc/sysctl.d/99-bay.conf`: 커널이 메모리의 1/64(32–256 MiB, ODROID에서는 22 MiB 대신 58 MiB)를 기다릴 수 없는 할당(네트워크 드라이버의 수신 버퍼 등)에 남겨 두고, 2%에서 회수를 시작한다(`vm.watermark_scale_factor = 200`).
 
 `uninstall`은 둘을 지우고 남은 파일에서 커널 값을 다시 읽는다.
 
-검증: ODROID에서 이 빌드의 `install -dry-run`이 두 부분을 보였고 `check`가 빠졌다고 알렸다. `TestMemoryReserveFollowsTheMachine`, `TestMemoryReserveItemReadsTheLiveValues`, `TestContainersLeaveTheSliceAloneWhereTheHostHasNone`가 통과한다.
+검증: ODROID에서 `install -dry-run`이 두 부분을 보였고 `install`이 적용했으며(`min_free_kbytes` 60292, 슬라이스 2.6/3.0/0.4 GiB로 활성) 두 번째 `install`은 아무것도 바꾸지 않았다. `/dev/urandom`을 계속 메모리에 읽어 들이는 서비스가 2640 MiB와 스왑 376 MiB에서 묶였고, 2분 동안 기계는 300 MiB를 남겼으며 ssh는 0.23초, ping은 1ms 안에 답했다. 스왑을 25%까지 허용했을 때는 압축되는 데이터에서도 82 MiB만 남았기에 스왑을 10%로 묶는다. `TestMemoryReserveFollowsTheMachine`, `TestMemoryReserveItemReadsTheLiveValues`, `TestContainersLeaveTheSliceAloneWhereTheHostHasNone`가 통과한다.
 
 ### 교체된 실행 파일을 돌리는 상주 프로세스는 갖춰진 것이 아니다
 

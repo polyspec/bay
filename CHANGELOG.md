@@ -9,12 +9,12 @@ the day the change was made.
 
 On the ODROID (3.7 GiB) a project's containers took the memory to its floor (`kswapd0` warned in `mm/page_alloc.c`), and the machine stopped answering on the network for eight minutes while its link stayed up, until the link went down and up. `install` on Linux now applies two more parts, which `check` and `install -dry-run` report:
 
-- `bay.slice` (`/etc/systemd/system/bay.slice`): every service container bay creates on Docker is placed in it (`--cgroup-parent`). Past `MemoryHigh=75%` the kernel reclaims from the containers and slows them; at `MemoryMax=85%` it kills inside the slice only; `MemorySwapMax=25%` bounds swap. The shell, Docker, the agent, the proxy and the network driver keep the rest. A container created before the slice was registered is created again at the next `up`. The Docker engine must use the systemd cgroup driver; `check` names the setting when it does not.
+- `bay.slice` (`/etc/systemd/system/bay.slice`): every service container bay creates on Docker is placed in it (`--cgroup-parent`). Past `MemoryHigh=70%` the kernel reclaims from the containers and slows them; at `MemoryMax=80%` it kills inside the slice only; `MemorySwapMax=10%` bounds swap, which is often zram and kept in memory the slice is not charged for, so memory and swap together stay at 90%. The shell, Docker, the agent, the proxy and the network driver keep the rest. A container created before the slice was registered is created again at the next `up`. The Docker engine must use the systemd cgroup driver; `check` names the setting when it does not.
 - `/etc/sysctl.d/99-bay.conf`: the kernel keeps 1/64 of memory free (32–256 MiB; 58 MiB instead of 22 MiB on the ODROID) for allocations that cannot wait, among them the network driver's receive buffers, and starts reclaiming at 2% (`vm.watermark_scale_factor = 200`).
 
 `uninstall` removes both and reloads the kernel's values from the remaining files.
 
-Verification: on the ODROID, `install -dry-run` of this build listed both parts and `check` reported them missing; `TestMemoryReserveFollowsTheMachine`, `TestMemoryReserveItemReadsTheLiveValues` and `TestContainersLeaveTheSliceAloneWhereTheHostHasNone` pass.
+Verification: on the ODROID, `install -dry-run` listed both parts, `install` applied them (`min_free_kbytes` 60292, the slice active at 2.6/3.0/0.4 GiB) and a second `install` changed nothing. A service that kept reading `/dev/urandom` into memory was held at 2640 MiB with 376 MiB in swap; for two minutes the machine kept 300 MiB available, ssh answered in 0.23 s and ping in under 1 ms. With 25% of swap allowed, compressible data had left 82 MiB available, which is why swap is held to 10%. `TestMemoryReserveFollowsTheMachine`, `TestMemoryReserveItemReadsTheLiveValues` and `TestContainersLeaveTheSliceAloneWhereTheHostHasNone` pass.
 
 ### A resident process running a replaced executable is not in place
 
