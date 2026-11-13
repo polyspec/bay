@@ -35,6 +35,27 @@ bay up
 메뉴바 앱까지 쓰려면 저장소를 클론해 `make`와 `sudo make install`을 실행한다.
 [설치](docs/operations/install.ko.md) 참고.
 
+### 고정 release (Linux, CI)
+
+release마다 macOS와 Linux의 arm64, amd64용 `bay`와 `bayd`, 그리고 `SHA256SUMS`가
+있다. release나 `make`로 만든 빌드에는 컨테이너 자신의 저장소에 이 기계의
+인증기관을 넣는 bayinit이 들어 있다. `go install`로 만든 빌드에는 없고, `bay
+check`가 그렇다고 알린다. Linux에서는 설정과 명령을 root로 실행하므로 CI 작업은
+`sudo`로 실행한다:
+
+```sh
+VERSION=v0.0.1
+ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+NAME=bay_${VERSION}_linux_${ARCH}
+curl -fsSLO https://github.com/polyspec/bay/releases/download/$VERSION/$NAME.tar.gz
+curl -fsSLO https://github.com/polyspec/bay/releases/download/$VERSION/SHA256SUMS
+grep " $NAME.tar.gz\$" SHA256SUMS | sha256sum -c -
+tar -xzf $NAME.tar.gz
+sudo install -m 755 $NAME/bay $NAME/bayd /usr/local/bin/
+sudo bay install            # root라 아무것도 묻지 않는다
+sudo bay check -scope run   # 실행에 필요한 부분이 빠지면 exit 1
+```
+
 ## 사용법은 명령에 있다
 
 ```sh

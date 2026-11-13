@@ -37,6 +37,27 @@ host; see [Peers](docs/spec/peers.md).
 For the menu bar application as well, clone this repository and run `make`
 then `sudo make install`. See [Install](docs/operations/install.md).
 
+### Pinned release (Linux, CI)
+
+Each release carries `bay` and `bayd` for macOS and Linux on arm64 and amd64,
+with `SHA256SUMS`. A build from a release or from `make` carries bayinit, which
+puts this machine's authority in a container's own store; `go install` does not,
+and `bay check` says so. On Linux the setup and the commands run as root, so a
+CI job runs them with `sudo`:
+
+```sh
+VERSION=v0.0.1
+ARCH=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+NAME=bay_${VERSION}_linux_${ARCH}
+curl -fsSLO https://github.com/polyspec/bay/releases/download/$VERSION/$NAME.tar.gz
+curl -fsSLO https://github.com/polyspec/bay/releases/download/$VERSION/SHA256SUMS
+grep " $NAME.tar.gz\$" SHA256SUMS | sha256sum -c -
+tar -xzf $NAME.tar.gz
+sudo install -m 755 $NAME/bay $NAME/bayd /usr/local/bin/
+sudo bay install            # asks nothing as root
+sudo bay check -scope run   # exit 1 when a part a run needs is missing
+```
+
 ## Usage instructions live in the commands
 
 ```sh
