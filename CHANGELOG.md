@@ -5,6 +5,12 @@ the day the change was made.
 
 ## 2026-11-14
 
+### The hosts block follows Docker's events
+
+v0.0.8 had the agent read every container every 2 seconds to keep the service names in `/etc/hosts`. It now follows `docker events` for a container starting, ending, being removed or changing networks, and rewrites the block when one comes; new domains read from an approved peer signal it too. The stream is opened again 2 seconds after it ends, as it does when the daemon restarts, and the whole block is read again once a minute for what no event reports: a peer approved or removed by a command, or the file rewritten by another program. A command that waits for its services' names polls the file every 100 ms.
+
+Verification: on the ODROID the agent ran `docker events` with the filters above. After `docker stop` of a service, outside bay, its name was gone within 11 ms; after `docker start` gave it another address (172.19.0.7 to 172.19.0.8, the first taken by another container), the new address was in the file 754 ms after the start command was issued, the start included. `TestDockerEventsAreFollowed` passes.
+
 ### A program on a Linux host reaches an internal service by its name
 
 On Linux a service's name `<container>.bay.test` resolved inside containers, through Docker's DNS, and not on the host, so a test suite run on the host failed to reach its databases (13 failures in session-store's CI); on macOS the DNS agent answers it. The block in `/etc/hosts` now also names each running service container on Docker at `<container>.bay.test` with its address on its Docker network, which the host routes to. The agent checks it every 2 seconds instead of 10 and follows a container that starts again with another address; `up`, `start` and `restart` return once the file names the services they started, waiting up to 30 seconds for the agent, or writing it when run as root.

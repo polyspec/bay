@@ -80,6 +80,7 @@ func refreshDomains(ctx context.Context, m *stack.Machine) {
 		if !changed {
 			continue
 		}
+		nudgeHosts()
 		if _, err := stack.SyncProxy(m); err != nil {
 			log.Printf("serving what the approved machines now hold: %v", err)
 			continue

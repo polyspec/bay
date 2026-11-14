@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -17,6 +18,15 @@ func TestMain(m *testing.M) {
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stdout
 		_ = runLogs(cmd, true)
+		os.Exit(0)
+	}
+	// With DOCKER_EVENTS_HELPER set the test binary acts as `docker events`:
+	// it records its arguments and prints three events.
+	if path := os.Getenv("DOCKER_EVENTS_HELPER"); path != "" {
+		os.WriteFile(path, []byte(strings.Join(os.Args[1:], " ")), 0o644)
+		fmt.Println("container start")
+		fmt.Println("container die")
+		fmt.Println("network connect")
 		os.Exit(0)
 	}
 	// No test writes the agent skill into the home directory of whoever runs

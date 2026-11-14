@@ -8,30 +8,71 @@ import (
 	"github.com/polyspec/bay/internal/stack"
 )
 
-// hostsCheck is how often the agent compares /etc/hosts with what the proxy
-// serves and with the service containers' addresses. A command that starts a
-// service waits for its name here, so this is short; a peer's domains are read
-// every domainRefresh.
-const hostsCheck = 2 * time.Second
+const (
+	// hostsSettle gathers the events of one change, such as a project of
+	// several services coming up, into one write.
+	hostsSettle = 100 * time.Millisecond
+	// hostsResync reads everything again without an event, for a change no
+	// event reports: a peer approved or removed by a command, or the hosts
+	// file rewritten by another program.
+	hostsResync = time.Minute
+	// eventsRetry is the wait before the event stream is opened again after
+	// it ended, as it does when the Docker daemon restarts.
+	eventsRetry = 2 * time.Second
+)
 
-// keepHostsFile keeps the names the proxy serves in /etc/hosts, on a machine
-// that has no per-domain resolver. It writes only when the names change.
+// hostsChanged is signalled by whatever changes the names: a Docker event,
+// and new domains read from an approved peer.
+var hostsChanged = make(chan struct{}, 1)
+
+func nudgeHosts() {
+	select {
+	case hostsChanged <- struct{}{}:
+	default:
+	}
+}
+
+// keepHostsFile keeps the names the proxy serves and the service containers'
+// names in /etc/hosts, on a machine that has no per-domain resolver. It
+// rewrites the block when Docker reports that a container started, ended, was
+// removed or changed networks, and when an approved peer's domains change.
+// It writes only when the entries change.
 func keepHostsFile(ctx context.Context, m *stack.Machine) {
-	t := time.NewTicker(hostsCheck)
-	defer t.Stop()
-	for {
-		entries, err := stack.HostsEntries(m)
-		if err == nil {
-			if wrote, err := stack.SyncHostsFile(entries); err != nil {
-				log.Printf("hosts: %v", err)
-			} else if wrote {
-				log.Printf("hosts: named %d name(s), %d of them service containers", len(entries), stack.ServiceHostNames(entries))
+	go func() {
+		for ctx.Err() == nil {
+			if err := stack.WatchDockerEvents(ctx, nudgeHosts, nudgeHosts); err != nil && ctx.Err() == nil {
+				log.Printf("hosts: %v; reading again in %s", err, eventsRetry)
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(eventsRetry):
 			}
 		}
+	}()
+	resync := time.NewTicker(hostsResync)
+	defer resync.Stop()
+	for {
+		syncHosts(m)
 		select {
 		case <-ctx.Done():
 			return
-		case <-t.C:
+		case <-hostsChanged:
+			time.Sleep(hostsSettle)
+		case <-resync.C:
 		}
+	}
+}
+
+func syncHosts(m *stack.Machine) {
+	entries, err := stack.HostsEntries(m)
+	if err != nil {
+		log.Printf("hosts: %v", err)
+		return
+	}
+	if wrote, err := stack.SyncHostsFile(entries); err != nil {
+		log.Printf("hosts: %v", err)
+	} else if wrote {
+		log.Printf("hosts: named %d name(s), %d of them service containers", len(entries), stack.ServiceHostNames(entries))
 	}
 }

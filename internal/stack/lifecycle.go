@@ -226,7 +226,7 @@ func (r *Runtime) awaitHostNames() error {
 			r.say("waiting up to %s for the agent to name the services in %s", keptCatchUp, hostsPath)
 			said = true
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(100 * time.Millisecond)
 	}
 }
 
