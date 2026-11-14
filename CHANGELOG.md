@@ -5,6 +5,12 @@ the day the change was made.
 
 ## 2026-11-14
 
+### A job takes down what it brought up, whatever an earlier run left
+
+A job took its project down afterwards only when the project had no container at all before the job. On the ODROID, fsm's `build` job ended under v0.0.7 failing both to remove its container and to take the project down (`container inspect: No such container`, the race fixed in v0.0.8), so the `build` container was left; the `check` job that followed counted that container as a project kept up and left its PostgreSQL and MySQL running for three hours (polyspec/bay#1, which put it down to the agent taking the job over; the run takes the project down itself, and the takeover did not change that). A job now counts the project as kept up only when a container of one of its declared, non-job services was running; then it removes only the containers its run created, and otherwise takes the project down. When taking down fails, the job's `reason` says so and names `bay down`, so it shows in `bay job show` and the notification instead of only the log.
+
+Verification: `TestAJobTakesDownWhatAnEarlierRunLeft` passes.
+
 ### The hosts block follows Docker's events
 
 v0.0.8 had the agent read every container every 2 seconds to keep the service names in `/etc/hosts`. It now follows `docker events` for a container starting, ending, being removed or changing networks, and rewrites the block when one comes; new domains read from an approved peer signal it too. The stream is opened again 2 seconds after it ends, as it does when the daemon restarts, and the whole block is read again once a minute for what no event reports: a peer approved or removed by a command, or the file rewritten by another program. A command that waits for its services' names polls the file every 100 ms.

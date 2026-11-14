@@ -172,3 +172,36 @@ func TestSchedulesAreFollowedOncePerProject(t *testing.T) {
 		t.Fatalf("after unfollow: %+v", list)
 	}
 }
+
+func TestAJobTakesDownWhatAnEarlierRunLeft(t *testing.T) {
+	cfg, err := Load(writeCompose(t, `name: ci
+services:
+  db:
+    image: postgres:18
+    expose: ["5432"]
+  check:
+    image: debian:trixie
+    x-bay: {job: true}
+`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	in := func(service, state string) Instance {
+		return Instance{Name: "ci-" + service, State: state, Labels: map[string]string{LabelService: service}}
+	}
+	for _, c := range []struct {
+		name    string
+		before  []Instance
+		serving bool
+	}{
+		{"nothing", nil, false},
+		{"a job's container left running", []Instance{in("check", "running")}, false},
+		{"a service no longer declared", []Instance{in("build", "running")}, false},
+		{"a service left stopped", []Instance{in("db", "exited")}, false},
+		{"a service a person keeps up", []Instance{in("build", "exited"), in("db", "running")}, true},
+	} {
+		if got := servedBeforeJob(cfg, c.before); got != c.serving {
+			t.Errorf("%s: served %v, want %v", c.name, got, c.serving)
+		}
+	}
+}

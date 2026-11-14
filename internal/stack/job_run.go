@@ -17,28 +17,43 @@ import (
 type JobOutcome struct {
 	ExitCode   int
 	PeakMemory uint64
+	// LeftUp says why what the job brought up is still there: taking it down
+	// after the job failed. Empty when nothing of the run was left.
+	LeftUp string
 }
 
 // RunJob runs one job service of a project to completion: it brings the
 // project's other services up as up does, runs the job's container with its
-// output written to out, removes the container, and takes the project down
-// again when it was not running before. Ending ctx stops the container, waiting
-// its stop grace period, and still takes the project down.
-func (r *Runtime) RunJob(ctx context.Context, cfg *Config, name string, out io.Writer) (JobOutcome, error) {
+// output written to out, removes the container, and takes down what it brought
+// up. A project that served before the job keeps what served; otherwise the
+// whole project is taken down. Ending ctx stops the container, waiting its stop
+// grace period, and still takes down what the job brought up.
+func (r *Runtime) RunJob(ctx context.Context, cfg *Config, name string, out io.Writer) (outcome JobOutcome, err error) {
 	s, ok := cfg.Services[strings.ToLower(name)]
 	if !ok || !s.Job {
 		return JobOutcome{}, fmt.Errorf("project %s has no job %q", cfg.Name, name)
 	}
-	before, err := r.ProjectContainers(cfg.Name)
+	listed, cancel := context.WithTimeout(context.Background(), r.engine().timeout)
+	before, err := r.engine().projectContainers(listed, cfg.Name)
+	cancel()
 	if err != nil {
 		return JobOutcome{}, err
 	}
-	wasRunning := len(before) > 0
+	serving := servedBeforeJob(cfg, before)
 	defer func() {
-		if !wasRunning {
-			if _, err := r.Down(cfg.Name); err != nil {
-				fmt.Fprintf(out, "bay: taking %s down after the job: %v\n", cfg.Name, err)
+		var down error
+		if serving {
+			kept := make(map[string]string, len(before))
+			for _, in := range before {
+				kept[in.Name] = in.Created
 			}
+			down = r.RemoveCreatedSince(cfg.Name, kept)
+		} else {
+			_, down = r.Down(cfg.Name)
+		}
+		if down != nil {
+			outcome.LeftUp = fmt.Sprintf("what the job brought up was not taken down (%v); bay down removes it", down)
+			fmt.Fprintf(out, "bay: %s\n", outcome.LeftUp)
 		}
 	}()
 	if _, err := r.Up(cfg); err != nil {
@@ -48,6 +63,20 @@ func (r *Runtime) RunJob(ctx context.Context, cfg *Config, name string, out io.W
 		return JobOutcome{}, err
 	}
 	return r.engine().runJob(ctx, cfg.Name, s, out)
+}
+
+// servedBeforeJob reports whether the project served before a job of it ran: a
+// container of one of its services, not of a job, was running. A container a
+// job or an earlier run left behind, stopped or no longer declared, does not
+// make the project one that a person keeps up.
+func servedBeforeJob(cfg *Config, before []Instance) bool {
+	for _, in := range before {
+		s, ok := cfg.Services[strings.ToLower(in.Labels[LabelService])]
+		if ok && !s.Job && in.State == "running" {
+			return true
+		}
+	}
+	return false
 }
 
 func (e *serviceEngine) runJob(ctx context.Context, group string, s *Service, out io.Writer) (JobOutcome, error) {

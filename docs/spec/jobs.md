@@ -62,8 +62,12 @@ output going to the job's log. That run:
 3. records the container's exit status, how long it ran and, on Linux with
    Docker, the most memory it used (`memory.peak` of its control group);
 4. removes the job's container;
-5. takes the project down again when it had no container before the job, and
-   leaves it as it was when it did.
+5. takes down what it brought up. When a service of the project was running
+   before the job, the containers the run created are removed and what ran
+   stays; otherwise the project is taken down. A container an earlier run left
+   behind, stopped, of a job, or of a service the file no longer declares, does
+   not count as running. When taking down fails, the job's `reason` says so and
+   names `bay down`.
 
 A job at its limit, or one cancelled, is stopped with its `stop_signal` and
 `stop_grace_period`, as `stop` stops a service, and still goes through 4 and 5.

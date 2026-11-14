@@ -51,7 +51,7 @@ type Job struct {
 	// the engine's host reports it.
 	PeakMemory uint64 `json:"peakMemory,omitempty"`
 	// Reason says why a job failed or was cancelled, when its exit code does
-	// not.
+	// not, and names what the job brought up that was not taken down.
 	Reason string `json:"reason,omitempty"`
 	// PID is the process running the job, while it runs.
 	PID int `json:"pid,omitempty"`

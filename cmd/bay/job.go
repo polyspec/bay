@@ -440,6 +440,12 @@ func jobRun(m *stack.Machine, args []string) error {
 			exit = &code
 		}
 	}
+	if outcome.LeftUp != "" {
+		if reason != "" {
+			reason += "; "
+		}
+		reason += outcome.LeftUp
+	}
 	if _, ferr := stack.FinishJob(m.Dir, j.ID, state, exit, reason, outcome.PeakMemory); ferr != nil {
 		return ferr
 	}
