@@ -66,7 +66,8 @@ authority in the login keychain, the DNS agent and the relay daemon under
 launchd. Another system, Linux among them, has no per-domain resolver and no
 login keychain, so its setup is its own: the authority in the certificate
 store the system has, a systemd agent that follows the approved peers and
-names every domain the proxy serves in a marked block of `/etc/hosts`, and an
+names every domain the proxy serves, and each running service container at
+`<container>.bay.test`, in a marked block of `/etc/hosts`, and an
 optional firewall. `bay` runs projects and the proxy on Docker there.
 Each part is read from the system; one the system lacks the tool for is
 reported, not guessed at ([peers](peers.md#a-machine-that-is-not-macos)).

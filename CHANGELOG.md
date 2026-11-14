@@ -5,6 +5,17 @@ the day the change was made.
 
 ## 2026-11-14
 
+### A program on a Linux host reaches an internal service by its name
+
+On Linux a service's name `<container>.bay.test` resolved inside containers, through Docker's DNS, and not on the host, so a test suite run on the host failed to reach its databases (13 failures in session-store's CI); on macOS the DNS agent answers it. The block in `/etc/hosts` now also names each running service container on Docker at `<container>.bay.test` with its address on its Docker network, which the host routes to. The agent checks it every 2 seconds instead of 10 and follows a container that starts again with another address; `up`, `start` and `restart` return once the file names the services they started, waiting up to 30 seconds for the agent, or writing it when run as root.
+
+Verification: on the ODROID, after `bay install` the block named `fsm-persist-11607-e90cc26f-build.bay.test` and `odroid-hello-hello.bay.test` at their 172.19.0.x addresses; `bay up` of a project with an internal Redis returned with `hosttest-cache.bay.test` at 172.19.0.5 in `getent hosts`, a `PING` over `/dev/tcp/hosttest-cache.bay.test/6379` from the host answered `+PONG`, and after `bay down` the name was gone; `check` exited 0. `TestServiceContainersAreNamedAtTheirAddresses` passes. A command run without root, as on a CI runner, waits for the agent; that path was not run.
+
+### A container removed by another project no longer fails a wait
+
+Docker has no command that lists and inspects containers at once, so bay lists them and then inspects them; a container another project removed in between failed the inspection, and with it the whole wait: fsm's `check` job failed after 2m18s with `container inspect: Error response from daemon: No such container: 9fd4a8a1…` while waiting for its MySQL health check. The list is now read again when an inspection names a container that is gone, up to five times; any other failure is returned as it is. Verification: `TestAContainerGoneBetweenListAndInspectIsListedAgain` passes. Containers created and removed in a loop next to 80 `bay status` runs did not reproduce the failure with either build, because `status` leaves out an engine that fails, so the fix rests on the test and the recorded failure.
+
+
 ### Jobs: a queue that runs one job at a time and keeps the result
 
 A service with `x-bay.job: true` is a job. `bay job add` queues a run; the agent runs one job at a time, oldest first, with the project's other services up around it, and records its exit status, duration, peak memory (Linux, Docker) and output in `~/.bay/jobs/`. `x-bay.schedule` queues it by cron schedule once `bay job schedule` follows the project; `x-bay.timeout` bounds a run (1h by default, 24h at most). `-key` queues once per key, so a caller that repeats `add` after a dropped connection gets one run. A run is a process of its own that outlives the agent: a restarted or updated agent takes it over (`KillMode=process` in `bay-agent.service`, written by `bay install`). An approved peer serves its jobs at `/__bay/jobs`; `bay job list|show|logs|wait -peer <name>` read them, and `wait -peer` tries again across a lost link until its bound. On macOS the agent notifies when a job here or on a peer ends, including one that ended while the link was down. `start` and `restart` refuse a job, and nothing may depend on one. See [Jobs](docs/spec/jobs.md).

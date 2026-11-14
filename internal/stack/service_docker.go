@@ -31,16 +31,12 @@ const dockerNeverStarted = "0001-01-01T00:00:00Z"
 
 // listDocker reads every container on Docker in the shape the lifecycle reads.
 func (e *serviceEngine) listDocker(ctx context.Context) ([]Instance, error) {
-	out, err := e.command(ctx, "container", "ls", "--all", "--quiet", "--no-trunc")
-	if err != nil {
-		return nil, err
-	}
-	ids := strings.Fields(string(out))
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	out, err = e.command(ctx, append([]string{"inspect", "--type", "container"}, ids...)...)
-	if err != nil {
+	out, err := inspectListed(
+		func() ([]byte, error) { return e.command(ctx, "container", "ls", "--all", "--quiet", "--no-trunc") },
+		func(ids []string) ([]byte, error) {
+			return e.command(ctx, append([]string{"inspect", "--type", "container"}, ids...)...)
+		})
+	if err != nil || out == nil {
 		return nil, err
 	}
 	list, err := decodeDockerInstances(out)
@@ -51,6 +47,37 @@ func (e *serviceEngine) listDocker(ctx context.Context) ([]Instance, error) {
 		list[i] = lifecycleState(list[i])
 	}
 	return list, nil
+}
+
+// listedAttempts bounds how often the containers are listed again when one
+// is removed between the list and its inspection.
+const listedAttempts = 5
+
+// inspectListed lists the containers and inspects them. Docker has no single
+// command for both, so a container removed between the two, by another
+// project or another command, fails the inspection with "No such container"
+// for a container that is simply gone. The list is read again then, so one
+// project's removal never fails another's wait. Nil output means no
+// containers.
+func inspectListed(list func() ([]byte, error), inspect func([]string) ([]byte, error)) ([]byte, error) {
+	var err error
+	for attempt := 0; attempt < listedAttempts; attempt++ {
+		var out []byte
+		if out, err = list(); err != nil {
+			return nil, err
+		}
+		ids := strings.Fields(string(out))
+		if len(ids) == 0 {
+			return nil, nil
+		}
+		if out, err = inspect(ids); err == nil {
+			return out, nil
+		}
+		if !strings.Contains(err.Error(), "No such container") && !strings.Contains(err.Error(), "No such object") {
+			return nil, err
+		}
+	}
+	return nil, err
 }
 
 // lifecycleState gives a Docker container Apple's word for its state and no

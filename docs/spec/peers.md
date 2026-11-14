@@ -218,9 +218,16 @@ and left alone:
 | firewall | see below | writes and loads it; without systemd or nft, nothing |
 | agent | `bay-agent.service` runs `bayd ... -hosts` | registers, enables and starts it; without systemd, nothing |
 | names on the proxy network | the Docker proxy carries the same names as network aliases on the `bay` network, so Docker's DNS answers them to every container on it | connects the proxy to the network again with the names; the container is not recreated |
-| names in `/etc/hosts` | the block between its two marker lines names every route's domain and every approved peer's domain at 127.0.0.1 | writes the block; nothing outside it changes |
+| names in `/etc/hosts` | the block between its two marker lines names every route's domain and every approved peer's domain at 127.0.0.1, and each running service container at `<container>.bay.test` with its address | writes the block; nothing outside it changes |
 | memory reserve | `/etc/sysctl.d/99-bay.conf` is written and in force: `vm.min_free_kbytes` is 1/64 of memory (32–256 MiB) and `vm.watermark_scale_factor` 200 | writes it and loads it with `sysctl -p` |
 | containers held below memory | `/etc/systemd/system/bay.slice` is registered: the containers bay creates on Docker run in it, slowed past 70% of memory, held under 80%, with at most 10% in swap; the Docker engine uses the systemd cgroup driver | writes the slice and starts it; with another driver, nothing, and `check` names the setting |
+
+A program on the host, such as a test suite run outside a container, reaches
+an internal service at the name a container uses, `<container>.bay.test`, at
+the container's address on its Docker network, which the host routes to. The
+agent rewrites the line when the container starts again with another address,
+and `up`, `start` and `restart` return once the file names the services they
+started.
 
 The agent keeps the names in `/etc/hosts` and on the proxy network current by
 itself, so a command that finds them behind a change, such as a peer's new

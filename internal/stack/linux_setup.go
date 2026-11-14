@@ -180,19 +180,27 @@ func (l LinuxSetup) agentCurrent() bool {
 		!residentStale(systemdPID(agentUnit), l.DNSBin)
 }
 
-// hostsItem is the block of /etc/hosts naming what the proxy serves.
+// hostsItem is the block of /etc/hosts naming what the proxy serves and the
+// running service containers.
 func (l LinuxSetup) hostsItem() SetupItem {
-	names, err := HostsNames(NewMachine(l.Dir))
-	item := SetupItem{
-		Name:      "names in " + hostsPath + " (" + strings.Join(names, ", ") + ")",
-		OK:        err == nil && HostsCurrent(names),
+	entries, err := HostsEntries(NewMachine(l.Dir))
+	names, _ := HostsNames(NewMachine(l.Dir))
+	listed := strings.Join(names, ", ")
+	if n := ServiceHostNames(entries); n > 0 {
+		if listed != "" {
+			listed += "; "
+		}
+		listed += fmt.Sprintf("%d service name(s) at .%s", n, BackendDomain)
+	}
+	if listed == "" {
+		listed = "none to name"
+	}
+	return SetupItem{
+		Name:      "names in " + hostsPath + " (" + listed + ")",
+		OK:        err == nil && HostsCurrent(entries),
 		Kept:      true,
-		SetupStep: SetupStep{Text: "write the names the proxy serves in " + hostsPath, Asks: AsksAdministrator},
+		SetupStep: SetupStep{Text: "write the names the proxy serves and the service names in " + hostsPath, Asks: AsksAdministrator},
 	}
-	if len(names) == 0 {
-		item.Name = "names in " + hostsPath + " (none to name)"
-	}
-	return item
 }
 
 const agentUnit = "bay-agent.service"
@@ -502,14 +510,14 @@ func (l LinuxSetup) ApplyRoot() error {
 			return err
 		}
 	}
-	names, err := HostsNames(NewMachine(l.Dir))
+	entries, err := HostsEntries(NewMachine(l.Dir))
 	if err != nil {
 		return err
 	}
-	if wrote, err := SyncHostsFile(names); err != nil {
+	if wrote, err := SyncHostsFile(entries); err != nil {
 		return err
 	} else if wrote {
-		fmt.Printf("named %d domain(s) in %s\n", len(names), hostsPath)
+		fmt.Printf("named %d name(s) in %s\n", len(entries), hostsPath)
 	}
 	return nil
 }

@@ -22,21 +22,21 @@ func TestTheHostsBlock(t *testing.T) {
 	const system = "127.0.0.1\tlocalhost\n::1\tlocalhost ip6-localhost\n"
 	path := useHostsFile(t, system)
 
-	if wrote, err := SyncHostsFile([]string{"a.test", "web.test"}); err != nil || !wrote {
+	if wrote, err := SyncHostsFile(proxied("a.test", "web.test")); err != nil || !wrote {
 		t.Fatalf("wrote %v, %v", wrote, err)
 	}
 	b, _ := os.ReadFile(path)
 	if !strings.HasPrefix(string(b), system) || !strings.Contains(string(b), "127.0.0.1\tweb.test\n") {
 		t.Fatalf("hosts:\n%s", b)
 	}
-	if !HostsCurrent([]string{"a.test", "web.test"}) || HostsCurrent([]string{"a.test"}) {
+	if !HostsCurrent(proxied("a.test", "web.test")) || HostsCurrent(proxied("a.test")) {
 		t.Fatal("current reports the wrong names")
 	}
-	if wrote, _ := SyncHostsFile([]string{"a.test", "web.test"}); wrote {
+	if wrote, _ := SyncHostsFile(proxied("a.test", "web.test")); wrote {
 		t.Fatal("the same names were written again")
 	}
 	os.WriteFile(path, append(b, "10.0.0.9\tlater\n"...), 0o644)
-	if _, err := SyncHostsFile([]string{"b.test"}); err != nil {
+	if _, err := SyncHostsFile(proxied("b.test")); err != nil {
 		t.Fatal(err)
 	}
 	b, _ = os.ReadFile(path)
@@ -50,6 +50,34 @@ func TestTheHostsBlock(t *testing.T) {
 	b, _ = os.ReadFile(path)
 	if string(b) != system+"10.0.0.9\tlater\n" {
 		t.Fatalf("hosts after removing the block:\n%q", b)
+	}
+}
+
+func proxied(names ...string) []HostsEntry {
+	return hostsEntriesFrom(names, nil)
+}
+
+// A running service container on Docker is named at <container>.bay.test with
+// its address, after the proxied names; a stopped one, one without an address
+// and one on Apple's engine, whose names its DNS agent answers, are not.
+func TestServiceContainersAreNamedAtTheirAddresses(t *testing.T) {
+	instances := []ServiceInstance{
+		{Container: "ss-redis", State: "running", IPv4: "172.18.0.5", Engine: DockerEngine},
+		{Container: "ss-mysql", State: "running", IPv4: "172.18.0.4", Engine: DockerEngine},
+		{Container: "ss-old", State: "stopped", IPv4: "172.18.0.6", Engine: DockerEngine},
+		{Container: "ss-new", State: "running", Engine: DockerEngine},
+		{Container: "mac-web", State: "running", IPv4: "192.168.64.3", Engine: AppleEngine},
+	}
+	var lines []string
+	for _, e := range hostsEntriesFrom([]string{"web.test"}, instances) {
+		lines = append(lines, e.Address+" "+e.Name)
+	}
+	want := "127.0.0.1 web.test|172.18.0.4 ss-mysql.bay.test|172.18.0.5 ss-redis.bay.test"
+	if got := strings.Join(lines, "|"); got != want {
+		t.Fatalf("entries %s, want %s", got, want)
+	}
+	if n := ServiceHostNames(hostsEntriesFrom([]string{"web.test"}, instances)); n != 2 {
+		t.Fatalf("service names %d, want 2", n)
 	}
 }
 

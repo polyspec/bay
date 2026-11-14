@@ -135,6 +135,9 @@ func (r *Runtime) Up(cfg *Config) (res SyncResult, err error) {
 	if err != nil {
 		return res, err
 	}
+	if err := r.awaitHostNames(); err != nil {
+		return res, err
+	}
 	r.reportReady(containerNames(cfg.Serving()))
 	return res, nil
 }
@@ -192,6 +195,40 @@ func (r *Runtime) Images(cfg *Config, names []string) ([]ImageState, error) {
 // containers to accept connections. A service that takes longer is reported as
 // starting rather than failing the command.
 const ReadyTimeout = 20 * time.Second
+
+// awaitHostNames returns once /etc/hosts names every running service
+// container at its current address, on a machine that names them there. A
+// command that started a service returns when a program on the host can
+// reach it by name. The agent writes the file; a command run as root writes it
+// itself.
+func (r *Runtime) awaitHostNames() error {
+	if hostSetsUpNames {
+		return nil
+	}
+	deadline := time.Now().Add(keptCatchUp)
+	said := false
+	for {
+		entries, err := HostsEntries(r.Machine)
+		if err != nil {
+			return err
+		}
+		if HostsCurrent(entries) {
+			return nil
+		}
+		if os.Geteuid() == 0 {
+			_, err := SyncHostsFile(entries)
+			return err
+		}
+		if !AgentRuns() || time.Now().After(deadline) {
+			return fmt.Errorf("%s does not name the service containers at their addresses; bay check reports the agent that writes it", hostsPath)
+		}
+		if !said {
+			r.say("waiting up to %s for the agent to name the services in %s", keptCatchUp, hostsPath)
+			said = true
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
 
 // reportReady waits for the named containers to accept connections and reports
 // the ones that did not. The command does not fail: a service may take longer
@@ -302,6 +339,9 @@ func (r *Runtime) StartServices(cfg *Config, names []string) (SyncResult, error)
 	if err != nil {
 		return res, err
 	}
+	if err := r.awaitHostNames(); err != nil {
+		return res, err
+	}
 	r.reportReady(containerNames(targets))
 	return res, nil
 }
@@ -335,6 +375,9 @@ func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, erro
 	}
 	res, err := r.sync(containerNames(targets))
 	if err != nil {
+		return res, err
+	}
+	if err := r.awaitHostNames(); err != nil {
 		return res, err
 	}
 	r.reportReady(containerNames(targets))

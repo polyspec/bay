@@ -160,18 +160,14 @@ func appleContainers() ([]Instance, error) {
 // `docker container ls` returns labels as one joined string and returns no
 // address, so inspect is required.
 func dockerContainers() ([]Instance, error) {
-	out, err := runEngineWithin(engineReadWait, DockerEngine,
-		"container", "ls", "--all", "--quiet", "--no-trunc")
-	if err != nil {
-		return nil, err
-	}
-	ids := strings.Fields(string(out))
-	if len(ids) == 0 {
-		return nil, nil
-	}
-	out, err = runEngineWithin(engineReadWait, DockerEngine,
-		append([]string{"inspect", "--type", "container"}, ids...)...)
-	if err != nil {
+	out, err := inspectListed(
+		func() ([]byte, error) {
+			return runEngineWithin(engineReadWait, DockerEngine, "container", "ls", "--all", "--quiet", "--no-trunc")
+		},
+		func(ids []string) ([]byte, error) {
+			return runEngineWithin(engineReadWait, DockerEngine, append([]string{"inspect", "--type", "container"}, ids...)...)
+		})
+	if err != nil || out == nil {
 		return nil, err
 	}
 	return decodeDockerInstances(out)

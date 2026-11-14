@@ -150,9 +150,9 @@ func TestEnsureInstalledOnAMachineThatIsNotMacOS(t *testing.T) {
 	t.Cleanup(func() { hostSetsUpNames = saved })
 	useFirewallDirs(t)
 	useHostsFile(t, "127.0.0.1\tlocalhost\n")
-	savedRoutes := hostsRoutes
-	hostsRoutes = func() ([]Route, []DomainConflict, error) { return nil, nil, nil }
-	t.Cleanup(func() { hostsRoutes = savedRoutes })
+	savedInstances := hostsInstances
+	hostsInstances = func() ([]ServiceInstance, error) { return nil, nil }
+	t.Cleanup(func() { hostsInstances = savedInstances })
 
 	dir := t.TempDir()
 	r := &Runtime{Machine: NewMachine(dir), Elevate: func(string, []string) error {

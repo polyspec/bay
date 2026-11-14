@@ -550,7 +550,7 @@ func StateFiles() []StateFile {
 		{"~/Library/LaunchAgents/dev.bay.dns.plist", "macOS: runs the DNS server.", false},
 		{"/Library/LaunchDaemons/dev.bay.relay.plist", "macOS: runs the relay containers use to reach peers.", true},
 		{"/etc/systemd/system/bay-agent.service", "Linux: runs the agent that keeps the hosts block and the peer document.", true},
-		{"/etc/hosts (marked block)", "Linux: names the domains the proxy serves.", true},
+		{"/etc/hosts (marked block)", "Linux: names the domains the proxy serves at 127.0.0.1, and each running service container at <container>.bay.test with its address, so a program on the host reaches an internal service by the name a container uses.", true},
 		{"/etc/bay/firewall.nft, bay-firewall.service", "Linux: accepts new connections only from the hosts install -only-from named.", true},
 		{"/usr/local/share/ca-certificates/bay.crt", "Linux: the authority in the system trust store; the path follows the system.", true},
 		{"/etc/systemd/system/bay.slice", "Linux: holds the containers bay runs below the machine's memory; past 70% they slow, at 80% the kernel kills inside the slice only, and swap is held to 10%.", true},

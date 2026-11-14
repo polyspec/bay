@@ -504,3 +504,38 @@ func TestServiceEngineRejectsUnprovenOrExternallyRestartedCompletion(t *testing.
 		})
 	}
 }
+
+func TestAContainerGoneBetweenListAndInspectIsListedAgain(t *testing.T) {
+	lists, inspects := 0, 0
+	out, err := inspectListed(
+		func() ([]byte, error) {
+			lists++
+			if lists == 1 {
+				return []byte("mine\ngone\n"), nil
+			}
+			return []byte("mine\n"), nil
+		},
+		func(ids []string) ([]byte, error) {
+			inspects++
+			for _, id := range ids {
+				if id == "gone" {
+					return nil, errors.New("docker inspect: Error response from daemon: No such container: gone")
+				}
+			}
+			return []byte("[]"), nil
+		})
+	if err != nil || string(out) != "[]" || lists != 2 {
+		t.Fatalf("out %q, err %v, lists %d: want the list read again without the removed container", out, err, lists)
+	}
+	other := errors.New("docker inspect: permission denied")
+	if _, err := inspectListed(
+		func() ([]byte, error) { return []byte("a"), nil },
+		func([]string) ([]byte, error) { return nil, other }); err != other {
+		t.Fatalf("err %v, want any other failure returned as it is", err)
+	}
+	if out, err := inspectListed(
+		func() ([]byte, error) { return nil, nil },
+		func([]string) ([]byte, error) { t.Fatal("inspected nothing"); return nil, nil }); out != nil || err != nil {
+		t.Fatalf("no containers: %q %v", out, err)
+	}
+}

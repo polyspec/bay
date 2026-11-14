@@ -4,6 +4,17 @@
 
 ## 2026-11-14
 
+### Linux 호스트의 프로그램이 내부 서비스에 이름으로 닿는다
+
+Linux에서 서비스 이름 `<container>.bay.test`는 컨테이너 안에서만 Docker DNS로 풀리고 호스트에서는 풀리지 않았다. 그래서 호스트에서 도는 테스트가 데이터베이스에 닿지 못했다(session-store CI에서 13개 실패). macOS에서는 DNS 에이전트가 답한다. 이제 `/etc/hosts` 블록은 Docker에서 실행 중인 서비스 컨테이너마다 `<container>.bay.test`를 호스트가 라우팅하는 Docker 네트워크 주소로 적는다. 에이전트는 10초가 아니라 2초마다 확인하고, 다른 주소로 다시 시작한 컨테이너를 따라간다. `up`, `start`, `restart`는 시작한 서비스의 이름이 파일에 들어간 뒤 끝난다. 에이전트를 최대 30초 기다리고, root로 돌면 직접 쓴다.
+
+검증: ODROID에서 `bay install` 뒤 블록에 `fsm-persist-11607-e90cc26f-build.bay.test`와 `odroid-hello-hello.bay.test`가 172.19.0.x 주소로 들어갔다. 내부 Redis를 가진 프로젝트의 `bay up`이 끝났을 때 `getent hosts`가 `hosttest-cache.bay.test`를 172.19.0.5로 답했고, 호스트에서 `/dev/tcp/hosttest-cache.bay.test/6379`로 보낸 `PING`에 `+PONG`이 왔다. `bay down` 뒤에는 이름이 사라졌고 `check`는 0으로 끝났다. `TestServiceContainersAreNamedAtTheirAddresses` 통과. CI 러너처럼 root가 아닌 명령이 에이전트를 기다리는 경로는 돌려 보지 않았다.
+
+### 다른 프로젝트가 지운 컨테이너가 기다림을 실패시키지 않는다
+
+Docker에는 컨테이너를 나열하면서 inspect하는 명령이 없어서 bay는 나열한 뒤 inspect한다. 그 사이 다른 프로젝트가 지운 컨테이너가 inspect를 실패시켰고, 기다림 전체가 함께 실패했다. fsm의 `check` 작업이 MySQL 헬스체크를 기다리다 2분 18초 만에 `container inspect: Error response from daemon: No such container: 9fd4a8a1…`로 실패했다. 이제 inspect가 사라진 컨테이너를 가리키면 최대 다섯 번까지 다시 나열한다. 다른 실패는 그대로 돌려준다. 검증: `TestAContainerGoneBetweenListAndInspectIsListedAgain` 통과. `bay status` 80번 옆에서 컨테이너를 계속 만들고 지워 봤지만 두 빌드 모두 재현되지 않았다. `status`는 실패한 엔진을 빼고 보이기 때문이다. 그래서 이 수정의 근거는 테스트와 기록된 실패다.
+
+
 ### 작업: 한 번에 하나씩 돌리고 결과를 남기는 큐
 
 `x-bay.job: true`인 서비스가 작업이다. `bay job add`로 실행을 큐에 넣으면 에이전트가 한 번에 하나씩, 넣은 순서대로 프로젝트의 나머지 서비스를 띄운 채 돌리고, 종료 코드, 걸린 시간, 메모리 최고치(Linux, Docker), 출력을 `~/.bay/jobs/`에 남긴다. `x-bay.schedule`은 `bay job schedule`로 프로젝트를 따르게 하면 cron 일정대로 큐에 넣고, `x-bay.timeout`은 한 번 실행의 상한이다(기본 1h, 최대 24h). `-key`는 키마다 한 번만 넣으므로, 연결이 끊겨 `add`를 다시 보낸 호출자도 실행은 하나다. 실행은 에이전트보다 오래 사는 별도 프로세스라, 재시작하거나 업데이트된 에이전트가 넘겨받는다(`bay install`이 쓰는 `bay-agent.service`의 `KillMode=process`). 승인한 peer는 `/__bay/jobs`로 작업을 제공하고, `bay job list|show|logs|wait -peer <name>`이 그것을 읽으며, `wait -peer`는 링크가 끊겨도 상한까지 다시 시도한다. macOS에서는 이 기계나 peer의 작업이 끝나면, 링크가 끊긴 동안 끝난 것까지 알림을 띄운다. `start`와 `restart`는 작업을 거부하고, 무엇도 작업에 의존할 수 없다. [작업](docs/spec/jobs.ko.md) 참고.
