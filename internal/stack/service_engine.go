@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 	"syscall"
@@ -257,7 +258,24 @@ func (e *serviceEngine) preflight(group string, services []*Service) error {
 	return nil
 }
 
-func (e *serviceEngine) image(ctx context.Context, reference string) (string, error) {
+// pullArgs is the engine command that fetches a service's image for the
+// platform it runs: the platform key when set, otherwise linux/<architecture>
+// of this machine. Apple container fetches every platform of an image index
+// without --platform; Docker fetches only the platform of its host without it,
+// so the flag is added there only for the key.
+func pullArgs(engine string, s *Service) []string {
+	platform := s.Platform
+	if platform == "" && engine != DockerEngine {
+		platform = "linux/" + runtime.GOARCH
+	}
+	if platform == "" {
+		return []string{"image", "pull", s.Image}
+	}
+	return []string{"image", "pull", "--platform", platform, s.Image}
+}
+
+func (e *serviceEngine) image(ctx context.Context, s *Service) (string, error) {
+	reference := s.Image
 	out, err := e.command(ctx, "image", "inspect", reference)
 	if err != nil {
 		if !imageMissing(err) {
@@ -267,7 +285,7 @@ func (e *serviceEngine) image(ctx context.Context, reference string) (string, er
 			return "", fmt.Errorf("image %s is not in the local store and -no-pull fetches nothing; run \"bay pull\" first", reference)
 		}
 		e.say("pulling %s", reference)
-		if _, err = e.command(ctx, "image", "pull", reference); err != nil {
+		if _, err = e.command(ctx, pullArgs(e.engine, s)...); err != nil {
 			return "", err
 		}
 		out, err = e.command(ctx, "image", "inspect", reference)
@@ -314,7 +332,7 @@ func serviceFingerprint(group string, s *Service, digest string, trust []string)
 // its container is created with and how it is launched.
 func (e *serviceEngine) identity(ctx context.Context, group string, s *Service) (string, string, launch, error) {
 	e.say("%s: reading %s", s.Name, s.Image)
-	digest, err := e.image(ctx, s.Image)
+	digest, err := e.image(ctx, s)
 	if err != nil {
 		return "", "", launch{}, err
 	}

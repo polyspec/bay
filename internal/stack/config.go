@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -57,7 +58,10 @@ type Service struct {
 	// ContainerName is <project>-<service> unless the file names it.
 	ContainerName string
 	Image         string
-	Command       []string
+	// Platform is the platform key, os/arch[/variant]. It is omitted when the
+	// key is not set, so the identity of other services does not change.
+	Platform string `json:",omitempty"`
+	Command  []string
 	// Entrypoint replaces the image's entrypoint when EntrypointSet; empty, it
 	// clears it. Both are omitted when unset, so the identity of services
 	// without the key does not change.
@@ -145,6 +149,7 @@ type serviceSettings struct {
 
 type composeService struct {
 	Image         string           `yaml:"image"`
+	Platform      *string          `yaml:"platform"`
 	Command       stringOrList     `yaml:"command"`
 	Entrypoint    *stringOrList    `yaml:"entrypoint"`
 	Restart       string           `yaml:"restart"`
@@ -342,6 +347,12 @@ func (c *Config) service(name string, cs *composeService, network string) (*Serv
 		return nil, fmt.Errorf("service %q: image is required", name)
 	}
 	s.Image = cs.Image
+	if cs.Platform != nil {
+		if err := checkPlatform(*cs.Platform); err != nil {
+			return nil, fmt.Errorf("service %q: platform %q: %w", name, *cs.Platform, err)
+		}
+		s.Platform = *cs.Platform
+	}
 	s.ContainerName = cs.ContainerName
 	if s.ContainerName == "" {
 		s.ContainerName = c.Name + "-" + s.Name
@@ -755,4 +766,17 @@ func decodeRestart(v string) (string, error) {
 		}
 	}
 	return "", fmt.Errorf("restart %q must be no, always, on-failure[:N] or unless-stopped", v)
+}
+
+// checkPlatform accepts a platform key that names the platform this machine
+// runs, linux/<architecture> with an optional variant. A container starts
+// from the image variant for this machine, so another platform would be
+// fetched and never run.
+func checkPlatform(value string) error {
+	parts := strings.Split(value, "/")
+	if len(parts) < 2 || len(parts) > 3 || parts[0] != "linux" || parts[1] != runtime.GOARCH ||
+		(len(parts) == 3 && parts[2] == "") {
+		return fmt.Errorf("must be linux/%s, optionally with a variant: bay runs only the platform of this machine", runtime.GOARCH)
+	}
+	return nil
 }

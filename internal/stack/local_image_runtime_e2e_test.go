@@ -28,7 +28,7 @@ func TestLocalImageTagActualRuntime(t *testing.T) {
 	defer cancel()
 	// A unique local reference reproduces the cache semantics of local builds.
 	// The application image and its references are never modified.
-	if _, err := e.image(ctx, "docker.io/library/node:26.8.1-trixie-slim"); err != nil {
+	if _, err := e.image(ctx, &Service{Image: "docker.io/library/node:26.8.1-trixie-slim"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := e.command(ctx, "image", "tag", "docker.io/library/node:26.8.1-trixie-slim", ref); err != nil {
@@ -65,7 +65,7 @@ func TestLocalImageTagActualRuntime(t *testing.T) {
 			}
 		}
 	})
-	digest, err := e.image(ctx, ref)
+	digest, err := e.image(ctx, &Service{Image: ref})
 	if err != nil {
 		t.Fatal(err)
 	}

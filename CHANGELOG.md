@@ -3,6 +3,14 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-11-16
+
+### A pull fetches only the platform the container runs
+
+On Apple container `bay pull` and the pull inside `bay up` ran `container image pull <reference>`, which fetches every platform of a multi-platform image index: pulling postgres by digest stored 8 platform variants and mariadb 4, and the container store grew by about 9 GB in 30 minutes, although a container starts only from the variant for linux and this machine's architecture. Both pulls now pass `--platform`, with the service's Compose `platform` key or `linux/<architecture>` of this machine. On Docker they pass `--platform` only for the key, since Docker fetches only its host platform by default. The `platform` key was ignored before; it is now read, and a value other than `linux/<architecture>`, with or without a variant, is rejected with the service and the value, because bay runs only the variant of this machine.
+
+Verification: `TestPullFetchesOnlyThePlatformItRuns` and `TestPlatformKey` failed to build before the change and pass after it; `make check` passes. No image was pulled from a registry.
+
 ## 2026-11-14
 
 ### A job takes down what it brought up, whatever an earlier run left

@@ -2,6 +2,14 @@
 
 동작 변경과 각 변경에 대해 실행한 검증을 기록한다. 날짜는 변경한 날이다.
 
+## 2026-11-16
+
+### 이미지 받기는 컨테이너가 실행하는 플랫폼만 받는다
+
+Apple container에서 `bay pull`과 `bay up` 안의 받기는 `container image pull <참조>`를 실행했고, 이 명령은 다중 플랫폼 이미지 인덱스의 모든 플랫폼을 받는다. postgres를 digest로 받으면 8개 플랫폼 변형이, mariadb는 4개가 저장되어 컨테이너 저장소가 30분 동안 약 9 GB 늘었다. 컨테이너는 linux와 이 기계의 아키텍처에 맞는 변형으로만 시작한다. 이제 두 받기는 서비스의 Compose `platform` 키나 이 기계의 `linux/<아키텍처>`로 `--platform`을 전달한다. Docker에서는 키가 있을 때만 `--platform`을 전달한다. Docker는 기본으로 호스트 플랫폼만 받기 때문이다. 전에는 `platform` 키를 무시했다. 이제 읽으며, `linux/<아키텍처>`가 아닌 값은 변형이 있든 없든 서비스와 값을 밝혀 거부한다. bay는 이 기계의 변형만 실행하기 때문이다.
+
+검증: `TestPullFetchesOnlyThePlatformItRuns`와 `TestPlatformKey`는 변경 전에 빌드에 실패했고 변경 후 통과한다. `make check`가 통과한다. 레지스트리에서 이미지를 받지 않았다.
+
 ## 2026-11-14
 
 ### 작업은 앞선 실행이 무엇을 남겼든 자기가 올린 것을 내린다

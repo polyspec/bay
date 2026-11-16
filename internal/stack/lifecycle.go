@@ -150,15 +150,20 @@ func (r *Runtime) Pull(cfg *Config, names []string) error {
 	if err != nil {
 		return err
 	}
-	e := r.engine()
-	seen := map[string]bool{}
+	return pullImages(r.engine(), targets)
+}
+
+// pullImages fetches each distinct image and platform of the services once.
+func pullImages(e *serviceEngine, targets []*Service) error {
+	seen := map[[2]string]bool{}
 	for _, s := range targets {
-		if seen[s.Image] {
+		key := [2]string{s.Image, s.Platform}
+		if seen[key] {
 			continue
 		}
-		seen[s.Image] = true
+		seen[key] = true
 		e.say("pulling %s", s.Image)
-		if _, err := e.command(context.Background(), "image", "pull", s.Image); err != nil {
+		if _, err := e.command(context.Background(), pullArgs(e.engine, s)...); err != nil {
 			return fmt.Errorf("pulling %s: %w", s.Image, err)
 		}
 	}

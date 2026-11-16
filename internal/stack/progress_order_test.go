@@ -60,7 +60,7 @@ func TestEachSlowStepIsAnnouncedBeforeItRuns(t *testing.T) {
 		return []byte("[]"), nil
 	}
 	svc := &Service{Name: "db", ContainerName: "p-db", Image: "mysql:8.4"}
-	_, _ = e.image(context.Background(), svc.Image)
+	_, _ = e.image(context.Background(), svc)
 
 	pull, said := -1, -1
 	for i, ev := range events {

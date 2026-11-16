@@ -55,6 +55,7 @@ First match wins.
 | Key | Type | Default | Description |
 | --- | --- | --- | --- |
 | `image` | string | required | Image to run. |
+| `platform` | string | linux/<architecture of this machine> | Platform of the image that is pulled and run, os/arch[/variant]. It must be linux/<architecture of this machine>; another value is rejected, because a container starts from the image variant for this machine. A pull fetches only this platform: on Apple container the pull command receives --platform with the key or the machine default, since that engine otherwise fetches every platform of an image index; on Docker it receives --platform only for the key, since Docker fetches only its host platform by default. |
 | `command` | string or list | the image's command | Process arguments. |
 | `entrypoint` | string or list | the image's entrypoint | Placed before command. |
 | `environment` | mapping or list | empty | Environment variables. |

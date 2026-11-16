@@ -87,7 +87,7 @@ Whatever the command does inside the container. Standard input, output and error
 
 ### `pull`
 
-Pulls each selected service's image, or every service's with no name, whether or not the local store holds it. Creates, starts and changes no container.
+Pulls each selected service's image, or every service's with no name, whether or not the local store holds it, for one platform: the service's platform key, otherwise linux/<architecture> of this machine. Creates, starts and changes no container.
 
 ### `images`
 
