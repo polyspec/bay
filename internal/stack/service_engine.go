@@ -1,6 +1,7 @@
 package stack
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -104,6 +105,18 @@ func serviceCommand(ctx context.Context, engine string, args ...string) ([]byte,
 			return nil, fmt.Errorf("container %s failed: %w", args[0], err)
 		}
 		return nil, nil
+	}
+	// A log is what the service wrote to both of its streams, in one text.
+	if args[0] == "logs" {
+		var log bytes.Buffer
+		cmd.Stdout, cmd.Stderr = &log, &log
+		if err := cmd.Run(); err != nil {
+			if ended := endedByContext(ctx, begun, args); ended != nil {
+				return nil, ended
+			}
+			return nil, fmt.Errorf("container logs: %w: %s", err, strings.TrimSpace(log.String()))
+		}
+		return log.Bytes(), nil
 	}
 	out, err := cmd.Output()
 	if err != nil {

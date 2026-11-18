@@ -3,6 +3,14 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-11-19
+
+### The log of a failing service is read through the project's engine
+
+When a service failed, bay read its log with `Logs`, which looks the container up on Apple container and on Docker and runs the runtime's own command, outside the engine of the project. A failure therefore asked the machine's runtimes even where the project's engine was replaced, as in the tests, and `TestAContainerThatStopsFailsTheHealthcheckAtOnce` took 5 to 9 seconds when the machine's runtime answered slowly, past its limit of 5 seconds, although the wait had noticed the stop at once. The log is now read through the project's engine with `logs -n 30 <container>`, both of its streams in one text.
+
+Verification: `TestAFailureReadsTheLogThroughTheEngine` passes and names the command; `TestAContainerThatStopsFailsTheHealthcheckAtOnce`, which failed with `the stop was noticed after 8.711570584s` on its first of three runs, passes in five runs out of five; `make test` passes, and `internal/stack` takes 17 seconds instead of 40.
+
 ## 2026-11-18
 
 ### A failed container read during a health wait is reported as itself

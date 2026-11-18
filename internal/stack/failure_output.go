@@ -1,8 +1,9 @@
 package stack
 
 import (
-	"bytes"
+	"context"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -49,11 +50,15 @@ func lastLines(s string, n int) string {
 
 // failureWithLogOf reads a container's log and attaches it to the failure. A
 // log that cannot be read is reported as unreadable with the engine's reason,
-// so a failure always says what became of its log.
+// so a failure always says what became of its log. The log is read through the
+// engine's own command, on the engine of the project, as every other read of
+// the service is, so no failure reaches past the engine the project runs on.
 func (e *serviceEngine) failureWithLogOf(reason, name string) error {
-	var out bytes.Buffer
-	if err := Logs(name, false, FailureLogLines, &out); err != nil {
+	ctx, cancel := context.WithTimeout(context.Background(), engineReadWait)
+	defer cancel()
+	out, err := e.command(ctx, "logs", "-n", strconv.Itoa(FailureLogLines), name)
+	if err != nil {
 		return fmt.Errorf("%s\n\nits log could not be read: %v", reason, err)
 	}
-	return failureWithLog(reason, out.String())
+	return failureWithLog(reason, string(out))
 }

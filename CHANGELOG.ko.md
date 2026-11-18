@@ -2,6 +2,14 @@
 
 동작 변경과 각 변경에 대해 실행한 검증을 기록한다. 날짜는 변경한 날이다.
 
+## 2026-11-19
+
+### 실패한 서비스의 로그는 프로젝트의 엔진으로 읽는다
+
+서비스가 실패하면 bay는 `Logs`로 그 로그를 읽었다. `Logs`는 Apple container와 Docker에서 컨테이너를 찾고, 프로젝트의 엔진 밖에서 런타임의 명령을 직접 실행한다. 그래서 실패는 프로젝트의 엔진을 바꾼 곳에서도, 시험에서처럼, 기계의 런타임에 물었다. 기계의 런타임이 늦게 답하면 `TestAContainerThatStopsFailsTheHealthcheckAtOnce`는 5초에서 9초가 걸려 한도 5초를 넘었다. 대기는 멈춤을 곧바로 알아챘는데도 그랬다. 이제 로그는 프로젝트의 엔진으로 `logs -n 30 <container>`를 실행해 읽고, 두 출력 흐름을 한 텍스트로 받는다.
+
+검증: `TestAFailureReadsTheLogThroughTheEngine`이 통과하며 명령을 확인한다. 세 번 중 첫 실행에서 `the stop was noticed after 8.711570584s`로 실패했던 `TestAContainerThatStopsFailsTheHealthcheckAtOnce`는 다섯 번 모두 통과한다. `make test`가 통과하고, `internal/stack`은 40초 대신 17초가 걸린다.
+
 ## 2026-11-18
 
 ### healthcheck 대기 중 컨테이너 읽기 실패는 그 실패로 보고된다

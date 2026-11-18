@@ -1,9 +1,28 @@
 package stack
 
 import (
+	"context"
 	"strings"
 	"testing"
 )
+
+// The log of a failing service is read through the engine's own command, so
+// it comes from the engine the project runs on and from nothing else.
+func TestAFailureReadsTheLogThroughTheEngine(t *testing.T) {
+	var asked []string
+	e := &serviceEngine{dir: t.TempDir(), engine: AppleEngine}
+	e.command = func(ctx context.Context, args ...string) ([]byte, error) {
+		asked = append([]string{}, args...)
+		return []byte("listening failed: address in use\n"), nil
+	}
+	err := e.failureWithLogOf("service db stopped during healthcheck", "p-db")
+	if strings.Join(asked, " ") != "logs -n 30 p-db" {
+		t.Fatalf("the log was read with %q", asked)
+	}
+	if !strings.Contains(err.Error(), "listening failed: address in use") {
+		t.Fatalf("the failure lost the log: %v", err)
+	}
+}
 
 // A service that stops took its reason with it into its log. A failure that
 // names the stage without that reason leaves nothing to act on: a database that
