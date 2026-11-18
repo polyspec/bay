@@ -21,9 +21,13 @@ type fakeServices struct {
 	calls          [][]string
 	events         []string
 	healthFailures int
-	failInit       bool
-	blockInit      bool
-	sequence       int
+	// listFailsAfterExec makes the list read that follows a failed
+	// healthcheck attempt fail once, as a runtime that cannot answer does.
+	listFailsAfterExec bool
+	listFails          bool
+	failInit           bool
+	blockInit          bool
+	sequence           int
 	// stopLag is the number of list reads after an attached start returns
 	// that still report the container running.
 	stopLag int
@@ -53,6 +57,10 @@ func (f *fakeServices) command(ctx context.Context, args ...string) ([]byte, err
 	f.calls = append(f.calls, append([]string{}, args...))
 	switch args[0] {
 	case "ls":
+		if f.listFails {
+			f.listFails = false
+			return nil, errors.New("runtime did not answer")
+		}
 		if f.lagging != "" {
 			if f.stopLag == 0 {
 				in := f.instances[f.lagging]
@@ -148,6 +156,10 @@ func (f *fakeServices) command(ctx context.Context, args ...string) ([]byte, err
 		f.events = append(f.events, "exec:"+args[1])
 		if f.healthFailures > 0 {
 			f.healthFailures--
+			if f.listFailsAfterExec {
+				f.listFailsAfterExec = false
+				f.listFails = true
+			}
 			return nil, errors.New("not ready")
 		}
 		return nil, nil
@@ -230,6 +242,22 @@ func TestServiceEngineReportsStartAndEveryHealthAttempt(t *testing.T) {
 	e.progress = nil
 	if err := e.start(cfg, cfg.Sorted(), false); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestHealthWaitReportsAFailedContainerReadAsItself(t *testing.T) {
+	cfg := lifecycleConfig(t)
+	e, f := fakeEngine(t)
+	f.healthFailures = 1
+	f.listFailsAfterExec = true
+	err := e.start(cfg, cfg.Sorted(), false)
+	if err == nil {
+		t.Fatal("a failed container read during the health wait passed")
+	}
+	// The bound has not passed, so the failure is the read, not a timeout,
+	// and it names the runtime's error.
+	if strings.Contains(err.Error(), "timed out") || !strings.Contains(err.Error(), "runtime did not answer") {
+		t.Fatalf("err=%v", err)
 	}
 }
 

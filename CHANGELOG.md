@@ -3,6 +3,14 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-11-18
+
+### A failed container read during a health wait is reported as itself
+
+Between two healthcheck attempts, bay reads the container's state every second. When that read failed, the wait ended at once and reported `service <name> healthcheck timed out`, although the bound had not passed and the runtime's error was dropped. A MySQL service showed this: `waiting for its healthcheck, up to 11m1s`, then `not healthy yet after 5s (0 of 10 attempts)`, then the timeout. A timeout is now reported only when the bound has passed; a failed read fails the wait with `service <name> healthcheck could not read its container: <error>`.
+
+Verification: `TestHealthWaitReportsAFailedContainerReadAsItself` failed before the change with `service db healthcheck timed out` and passes after it; `make check` passes.
+
 ## 2026-11-16
 
 ### A pull fetches only the platform the container runs

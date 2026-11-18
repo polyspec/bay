@@ -655,7 +655,12 @@ func (e *serviceEngine) healthy(s *Service) error {
 			return e.failureWithLogOf(fmt.Sprintf("service %s stopped during healthcheck", s.Name), s.ContainerName)
 		}
 		if err != nil {
-			return e.failureWithLogOf(fmt.Sprintf("service %s healthcheck timed out", s.Name), s.ContainerName)
+			// Only the end of the bound is a timeout; any other error is a
+			// failed read of the container and is reported as itself.
+			if ctx.Err() != nil {
+				return e.failureWithLogOf(fmt.Sprintf("service %s healthcheck timed out", s.Name), s.ContainerName)
+			}
+			return e.failureWithLogOf(fmt.Sprintf("service %s healthcheck could not read its container: %v", s.Name, err), s.ContainerName)
 		}
 	}
 }

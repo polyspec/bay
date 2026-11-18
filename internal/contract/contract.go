@@ -456,6 +456,7 @@ func ComposeKeys() []Key {
 			"a failure while start_period has not passed since the start is not counted. The next attempt follows interval after a failure. " +
 			"The service is healthy at the first attempt that succeeds; it fails after retries counted failures, or when its container stops, " +
 			"or after start_period + retries x (interval + timeout) + 1s, and the command fails with the service's output. " +
+			"A failed read of the container's state during the wait fails it at once with the runtime's error; only the end of the bound is reported as a timeout. " +
 			"The bound is in the file on purpose: a wait with no limit hides a service that never starts; a slow service gets a longer start_period. " +
 			"There is no monitoring after startup."},
 		{"container_name", "string", "<project>-<service>", "Container name."},

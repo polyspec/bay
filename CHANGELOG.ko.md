@@ -2,6 +2,14 @@
 
 동작 변경과 각 변경에 대해 실행한 검증을 기록한다. 날짜는 변경한 날이다.
 
+## 2026-11-18
+
+### healthcheck 대기 중 컨테이너 읽기 실패는 그 실패로 보고된다
+
+bay는 두 healthcheck 시도 사이에 컨테이너 상태를 1초마다 읽는다. 그 읽기가 실패하면 대기는 곧바로 끝나고 `service <name> healthcheck timed out`을 보고했다. 한도가 지나지 않았는데도 그랬고, 런타임의 오류는 버려졌다. MySQL 서비스에서 이렇게 나타났다: `waiting for its healthcheck, up to 11m1s` 다음에 `not healthy yet after 5s (0 of 10 attempts)`, 그다음 timeout이 나왔다. 이제 timeout은 한도가 지났을 때만 보고한다. 읽기가 실패하면 대기는 `service <name> healthcheck could not read its container: <error>`로 실패한다.
+
+검증: `TestHealthWaitReportsAFailedContainerReadAsItself`는 변경 전 `service db healthcheck timed out`으로 실패했고 변경 후 통과한다. `make check`가 통과한다.
+
 ## 2026-11-16
 
 ### 이미지 받기는 컨테이너가 실행하는 플랫폼만 받는다
