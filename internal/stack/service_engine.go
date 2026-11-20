@@ -44,9 +44,13 @@ func (e *serviceEngine) say(format string, args ...any) {
 }
 
 func newServiceEngine(dir string) *serviceEngine {
-	engine := ServiceEngine()
-	// The network must exist before the first service is created.
-	_ = ensureNetwork(engine)
+	return newServiceEngineOn(dir, ServiceEngine())
+}
+
+// newServiceEngineOn returns the engine for a named engine. The shared network
+// is created by the paths that create containers, not here, so a path that
+// only reads or removes containers touches no engine it need not.
+func newServiceEngineOn(dir, engine string) *serviceEngine {
 	return &serviceEngine{
 		subscribeName: nativeNameSubscription,
 		command: func(ctx context.Context, args ...string) ([]byte, error) {
@@ -742,6 +746,8 @@ func (e *serviceEngine) locked(group string, fn func() error) error {
 }
 
 func (e *serviceEngine) startLocked(cfg *Config, targets []*Service, restart bool) error {
+	// The network must exist before the first service is created.
+	_ = ensureNetwork(e.engine)
 	ordered, err := dependencyOrder(cfg, targets)
 	if err != nil {
 		return err

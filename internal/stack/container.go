@@ -190,17 +190,20 @@ func Remove(name string) error {
 // StartService creates and starts one service container. The container is named
 // <project>-<service>, so two projects can use the same service names.
 func StartService(group string, s *Service) error {
-	return newServiceEngine("").reconcile(group, s, false)
+	engine := newServiceEngine("")
+	// The network must exist before the first service is created.
+	_ = ensureNetwork(engine.engine)
+	return engine.reconcile(group, s, false)
 }
 
 // serviceArguments are the arguments a service's container is created with,
 // from the Compose file alone.
 func serviceArguments(group string, s *Service, fingerprint string) []string {
-	return append(serviceHead(group, s, fingerprint), fileLaunch(s).tail(s.Image)...)
+	return append(serviceHead(ServiceEngine(), group, s, fingerprint), fileLaunch(s).tail(s.Image)...)
 }
 
 // serviceHead are the create arguments before the entrypoint and the image.
-func serviceHead(group string, s *Service, fingerprint string) []string {
+func serviceHead(engine, group string, s *Service, fingerprint string) []string {
 	scheme := "http"
 	if s.TLS {
 		scheme = "https"
@@ -208,7 +211,7 @@ func serviceHead(group string, s *Service, fingerprint string) []string {
 	// An internal service is started with an empty domain label, so the proxy
 	// and the DNS server do not route to it.
 	args := []string{"create", "--name", s.ContainerName,
-		"--network", serviceNetworkOn(ServiceEngine(), s.Network),
+		"--network", serviceNetworkOn(engine, s.Network),
 		"--label", LabelRole + "=" + roleService,
 		"--label", LabelGroup + "=" + group,
 		"--label", LabelService + "=" + s.Name,

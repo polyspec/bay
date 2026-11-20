@@ -33,8 +33,12 @@ func (r *Runtime) RunJob(ctx context.Context, cfg *Config, name string, out io.W
 	if !ok || !s.Job {
 		return JobOutcome{}, fmt.Errorf("project %s has no job %q", cfg.Name, name)
 	}
-	listed, cancel := context.WithTimeout(context.Background(), r.engine().timeout)
-	before, err := r.engine().projectContainers(listed, cfg.Name)
+	engine, err := r.engineFor(cfg)
+	if err != nil {
+		return JobOutcome{}, err
+	}
+	listed, cancel := context.WithTimeout(context.Background(), engine.timeout)
+	before, err := engine.projectContainers(listed, cfg.Name)
 	cancel()
 	if err != nil {
 		return JobOutcome{}, err
@@ -62,7 +66,7 @@ func (r *Runtime) RunJob(ctx context.Context, cfg *Config, name string, out io.W
 	if err := ctx.Err(); err != nil {
 		return JobOutcome{}, err
 	}
-	return r.engine().runJob(ctx, cfg.Name, s, out)
+	return engine.runJob(ctx, cfg.Name, s, out)
 }
 
 // servedBeforeJob reports whether the project served before a job of it ran: a
@@ -82,6 +86,9 @@ func servedBeforeJob(cfg *Config, before []Instance) bool {
 func (e *serviceEngine) runJob(ctx context.Context, group string, s *Service, out io.Writer) (JobOutcome, error) {
 	prep, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
+	// The network must exist before the job's container is created. A project
+	// of the job alone starts no service, so no other path has made it.
+	_ = ensureNetwork(e.engine)
 	if err := e.removeJobContainer(prep, group, s); err != nil {
 		return JobOutcome{}, err
 	}

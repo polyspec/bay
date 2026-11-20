@@ -32,6 +32,17 @@ An engine runs containers. Two are supported and neither is preferred: Apple
 may run on either. An engine is identified by the command that speaks to it, so
 anything answering the Docker socket is the Docker engine here.
 
+A project names the engine that creates its containers under `x-bay.engine`,
+with the same names the engines are identified by; a project that names none
+runs on the first engine present. A value that names no engine is refused when
+the file is read, and a named engine that is not on this machine is refused
+before anything changes. A project that switches engines has the containers on
+the engine it left removed by its next `up`: a domain is claimed once per
+machine (rule 5), and a container left on the old engine holds the claim.
+Reading and removing a project's containers covers every engine, so `down`,
+`stop` and an interrupted run's cleanup take down what a project left on
+another engine.
+
 An engine's command is found the same way by every program that uses it: the
 variable that names it (`CONTAINER_BIN`, `DOCKER_BIN`), then the search path,
 then the directories the engines' installers write to, `/opt/homebrew/bin` and

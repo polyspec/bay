@@ -85,15 +85,17 @@ func interruptible(ctx context.Context) (context.Context, context.CancelFunc) {
 // when each was created. A container created again has the same name and
 // another creation time.
 func (r *Runtime) ProjectContainers(group string) (map[string]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), r.engine().timeout)
-	defer cancel()
-	list, err := r.engine().projectContainers(ctx, group)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[string]string, len(list))
-	for _, in := range list {
-		out[in.Name] = in.Created
+	out := map[string]string{}
+	for _, e := range r.eachEngine() {
+		ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
+		list, err := e.projectContainers(ctx, group)
+		cancel()
+		if err != nil {
+			return nil, err
+		}
+		for _, in := range list {
+			out[in.Name] = in.Created
+		}
 	}
 	return out, nil
 }
@@ -103,7 +105,23 @@ func (r *Runtime) ProjectContainers(group string) (map[string]string, error) {
 // container before, the project's registration is withdrawn too, so an
 // interrupted first up leaves nothing behind. Volumes are kept: they hold data.
 func (r *Runtime) RemoveCreatedSince(group string, before map[string]string) error {
-	e := r.engine()
+	for _, e := range r.eachEngine() {
+		if err := e.removeCreatedSince(group, before); err != nil {
+			return err
+		}
+	}
+	if len(before) == 0 {
+		if err := r.Machine.Unregister(group); err != nil {
+			return err
+		}
+	}
+	_, err := r.sync(nil)
+	return err
+}
+
+// removeCreatedSince removes the containers this project created again on one
+// engine, and none it created before the run.
+func (e *serviceEngine) removeCreatedSince(group string, before map[string]string) error {
 	ctx, cancel := context.WithTimeout(context.Background(), e.timeout)
 	defer cancel()
 	ctx = forCleanup(ctx)
@@ -117,16 +135,7 @@ func (r *Runtime) RemoveCreatedSince(group string, before map[string]string) err
 			created = append(created, in)
 		}
 	}
-	if err := e.removeContainers(ctx, created); err != nil {
-		return err
-	}
-	if len(before) == 0 {
-		if err := r.Machine.Unregister(group); err != nil {
-			return err
-		}
-	}
-	_, err = r.sync(nil)
-	return err
+	return e.removeContainers(ctx, created)
 }
 
 // Interrupted reports whether Interrupt was called and Resume has not been.

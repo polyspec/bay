@@ -21,6 +21,7 @@ readable by other Compose tools.
 | `x-bay.domain` | string | the machine default domain | Local domain the project's service domains fall under. Naming it here pins it to the project. |
 | `x-bay.extra_domains` | list of string | empty | Further local domains the project's service domains may fall under. |
 | `x-bay.network` | string | default | Container network the project's services and the proxy share. |
+| `x-bay.engine` | string | the first engine present | Engine the project's containers are created on: container or docker. A named engine that is not on this machine is an error. A project that switches engines has the containers on the engine it leaves removed by its next up, because a domain is claimed once per machine and a container left there holds the claim. |
 | `name` | string | the Compose file's directory name | Project name. Prefixes every container name. |
 
 ## Service keys

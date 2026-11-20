@@ -259,6 +259,24 @@ func ServiceEngine() string {
 	return AppleEngine
 }
 
+// ServiceEngineOn returns the engine a project that names one creates its
+// containers on. An unnamed engine is the first engine present. A named engine
+// that is not on this machine is an error: the project's containers cannot be
+// created, and creating them on another engine would move the project without
+// the file saying so.
+func ServiceEngineOn(name string) (string, error) {
+	if name == "" {
+		return ServiceEngine(), nil
+	}
+	if name != AppleEngine && name != DockerEngine {
+		return "", fmt.Errorf("x-bay.engine: %q is neither %s nor %s", name, AppleEngine, DockerEngine)
+	}
+	if engineBin(name) == "" {
+		return "", fmt.Errorf("x-bay.engine: %s is not on this machine", name)
+	}
+	return name, nil
+}
+
 // ensureNetwork creates the network shared by the proxy and the services. Apple
 // `container` provides it. Docker has no network named "default" and resolves a
 // container name only on a user-defined network.

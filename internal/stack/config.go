@@ -47,8 +47,11 @@ type Config struct {
 	DomainPinned bool
 	// ExtraDomains are further local domains this project's services may claim.
 	ExtraDomains []string
-	Services     map[string]*Service
-	Volumes      map[string]*Volume
+	// Engine is the engine this project's containers are created on, named by
+	// the Compose file. Empty names the first engine present.
+	Engine   string
+	Services map[string]*Service
+	Volumes  map[string]*Volume
 
 	path string
 }
@@ -133,6 +136,7 @@ type composeFile struct {
 type projectSettings struct {
 	Domain       string   `yaml:"domain"`
 	ExtraDomains []string `yaml:"extra_domains"`
+	Engine       string   `yaml:"engine"`
 	Network      string   `yaml:"network"`
 }
 
@@ -258,6 +262,7 @@ func load(path, fallback, name string) (*Config, error) {
 		cfg.Domain = file.Bay.Domain
 		cfg.DomainPinned = cfg.Domain != ""
 		cfg.ExtraDomains = file.Bay.ExtraDomains
+		cfg.Engine = file.Bay.Engine
 	}
 	if cfg.Domain == "" {
 		cfg.Domain = fallback
@@ -294,6 +299,11 @@ func (c *Config) build(file *composeFile) error {
 		c.Domain = DefaultDomain
 	}
 	c.Domain = normalizeDomain(c.Domain)
+	switch c.Engine {
+	case "", AppleEngine, DockerEngine:
+	default:
+		return fmt.Errorf("x-bay.engine: %q is neither %s nor %s", c.Engine, AppleEngine, DockerEngine)
+	}
 	for i, d := range c.ExtraDomains {
 		c.ExtraDomains[i] = normalizeDomain(d)
 		if c.ExtraDomains[i] == "" {

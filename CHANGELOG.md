@@ -3,6 +3,14 @@
 Entries describe behavior changes and the verification run for each. Dates are
 the day the change was made.
 
+## 2026-11-20
+
+### A project names the engine that creates its containers
+
+Every project's containers were created on the first engine present, so on a machine with both engines the other one ran nothing of this tool's, and a project that needed it could not say so. A project now names its engine under `x-bay.engine` (`container` or `docker`). A value that names no engine is refused when the file is read, and a named engine that is not on this machine is refused before anything changes. A project that switches engines has the containers on the engine it left removed by its next `up`, because a domain is claimed once per machine and a container left there holds the claim. `down`, `stop` and an interrupted run's cleanup now read and remove a project's containers on every engine, so what a project left on another engine is taken down too.
+
+Verification: `go test ./internal/stack -run 'TestAProjectNamesItsEngine|TestTheEngineKeyIsReadAndRefusesAnUnknownEngine|TestAProjectThatSwitchesEnginesLosesItsOldContainers|TestAProjectsContainersAreReadFromEveryEngine' -count=1` passes and `make check` passes. Not run against real containers.
+
 ## 2026-11-19
 
 ### The log of a failing service is read through the project's engine

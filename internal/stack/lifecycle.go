@@ -69,6 +69,50 @@ func (r *Runtime) engine() *serviceEngine {
 	return e
 }
 
+// engineFor returns the service engine a project's Compose file names under
+// x-bay.engine, or the first engine present when it names none. A named engine
+// that is not on this machine is refused here, before anything has changed.
+func (r *Runtime) engineFor(cfg *Config) (*serviceEngine, error) {
+	name, err := ServiceEngineOn(cfg.Engine)
+	if err != nil {
+		return nil, err
+	}
+	e := newServiceEngineOn(r.Machine.Dir, name)
+	e.progress = r.Progress
+	e.noPull = r.NoPull
+	return e, nil
+}
+
+// eachEngine returns one service engine per engine present. Reading and
+// removing a project's containers covers every engine: a project runs on the
+// engine its Compose file names, and a project that switched engines has
+// containers on the engine it left.
+func (r *Runtime) eachEngine() []*serviceEngine {
+	var out []*serviceEngine
+	for _, name := range Engines() {
+		e := newServiceEngineOn(r.Machine.Dir, name)
+		e.progress = r.Progress
+		out = append(out, e)
+	}
+	return out
+}
+
+// takeDownElsewhere removes a group's service containers from every engine
+// other than keep. A domain is claimed once per machine, so a container left on
+// the engine a project left holds the project's domains and keeps its routes
+// published there.
+func (r *Runtime) takeDownElsewhere(group, keep string) error {
+	for _, e := range r.eachEngine() {
+		if e.engine == keep {
+			continue
+		}
+		if err := e.removeProject(group); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func (r *Runtime) say(format string, args ...any) {
 	if r.Progress != nil {
 		r.Progress(fmt.Sprintf(format, args...))
@@ -103,7 +147,16 @@ func (r *Runtime) Up(cfg *Config) (res SyncResult, err error) {
 			_ = r.Machine.Unregister(cfg.Name)
 		}
 	}()
-	engine := r.engine()
+	engine, err := r.engineFor(cfg)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	// A project that switched engines keeps containers on the engine it left;
+	// they are removed before anything is created, because a domain is claimed
+	// once per machine and a container left there holds the claim.
+	if err := r.takeDownElsewhere(cfg.Name, engine.engine); err != nil {
+		return SyncResult{}, err
+	}
 	if err := engine.preflight(cfg.Name, cfg.Serving()); err != nil {
 		return SyncResult{}, err
 	}
@@ -124,7 +177,7 @@ func (r *Runtime) Up(cfg *Config) (res SyncResult, err error) {
 	// A service that the proxy routes to may read the address of the proxy when
 	// it starts, so the proxy runs before the services start.
 	if routed(cfg) {
-		if _, err := syncProxy(r.Machine, nil, ServiceEngine(), r.Progress); err != nil {
+		if _, err := syncProxy(r.Machine, nil, engine.engine, r.Progress); err != nil {
 			return SyncResult{}, err
 		}
 	}
@@ -150,7 +203,11 @@ func (r *Runtime) Pull(cfg *Config, names []string) error {
 	if err != nil {
 		return err
 	}
-	return pullImages(r.engine(), targets)
+	engine, err := r.engineFor(cfg)
+	if err != nil {
+		return err
+	}
+	return pullImages(engine, targets)
 }
 
 // pullImages fetches each distinct image and platform of the services once.
@@ -184,7 +241,10 @@ func (r *Runtime) Images(cfg *Config, names []string) ([]ImageState, error) {
 	if err != nil {
 		return nil, err
 	}
-	e := r.engine()
+	e, err := r.engineFor(cfg)
+	if err != nil {
+		return nil, err
+	}
 	var out []ImageState
 	for _, s := range targets {
 		_, err := e.command(context.Background(), "image", "inspect", s.Image)
@@ -297,8 +357,10 @@ func (r *Runtime) Down(group string) (SyncResult, error) {
 		return SyncResult{}, err
 	}
 	served := proxyRuns()
-	if err := r.engine().removeProject(group); err != nil {
-		return SyncResult{}, err
+	for _, e := range r.eachEngine() {
+		if err := e.removeProject(group); err != nil {
+			return SyncResult{}, err
+		}
 	}
 	if err := r.Machine.Unregister(group); err != nil {
 		return SyncResult{}, err
@@ -337,7 +399,11 @@ func (r *Runtime) StartServices(cfg *Config, names []string) (SyncResult, error)
 	if err := r.checkDomainsFree(cfg); err != nil {
 		return SyncResult{}, err
 	}
-	if err := r.engine().start(cfg, targets, false); err != nil {
+	engine, err := r.engineFor(cfg)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	if err := engine.start(cfg, targets, false); err != nil {
 		return SyncResult{}, err
 	}
 	res, err := r.sync(containerNames(targets))
@@ -358,8 +424,10 @@ func (r *Runtime) StopServices(group string, names []string) (SyncResult, error)
 	if err := r.ownsSetup(); err != nil {
 		return SyncResult{}, err
 	}
-	if err := r.engine().stopProject(group, names); err != nil {
-		return SyncResult{}, err
+	for _, e := range r.eachEngine() {
+		if err := e.stopProject(group, names); err != nil {
+			return SyncResult{}, err
+		}
 	}
 	return r.sync(nil)
 }
@@ -375,7 +443,11 @@ func (r *Runtime) RestartServices(cfg *Config, names []string) (SyncResult, erro
 	if err := r.checkDomainsFree(cfg); err != nil {
 		return SyncResult{}, err
 	}
-	if err := r.engine().start(cfg, targets, true); err != nil {
+	engine, err := r.engineFor(cfg)
+	if err != nil {
+		return SyncResult{}, err
+	}
+	if err := engine.start(cfg, targets, true); err != nil {
 		return SyncResult{}, err
 	}
 	res, err := r.sync(containerNames(targets))

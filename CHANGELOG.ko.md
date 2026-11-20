@@ -2,6 +2,14 @@
 
 동작 변경과 각 변경에 대해 실행한 검증을 기록한다. 날짜는 변경한 날이다.
 
+## 2026-11-20
+
+### 프로젝트는 자신의 컨테이너를 만들 엔진을 지정한다
+
+모든 프로젝트의 컨테이너를 있는 엔진 중 첫째에 만들었으므로, 엔진 둘을 가진 머신에서 다른 엔진은 이 도구의 무엇도 실행하지 않았고 필요한 프로젝트는 그것을 말할 수 없었다. 프로젝트는 이제 `x-bay.engine`(`container` 또는 `docker`)로 자신의 엔진을 이름한다. 엔진을 가리키지 않는 값은 파일을 읽을 때 거부되고, 이 머신에 없는 엔진은 무엇이든 바뀌기 전에 거부된다. 엔진을 바꾼 프로젝트는 다음 `up`에서 떠난 엔진에 남은 컨테이너를 제거한다. 도메인은 머신마다 한 번만 주장되고 남은 컨테이너가 그 주장을 쥐기 때문이다. `down`, `stop`, 중단된 실행의 정리는 이제 프로젝트의 컨테이너를 모든 엔진에서 읽고 제거하므로 다른 엔진에 남은 것도 내린다.
+
+검증: `go test ./internal/stack -run 'TestAProjectNamesItsEngine|TestTheEngineKeyIsReadAndRefusesAnUnknownEngine|TestAProjectThatSwitchesEnginesLosesItsOldContainers|TestAProjectsContainersAreReadFromEveryEngine' -count=1` 통과, `make check` 통과. 실제 컨테이너로는 실행하지 않았다.
+
 ## 2026-11-19
 
 ### 실패한 서비스의 로그는 프로젝트의 엔진으로 읽는다

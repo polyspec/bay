@@ -185,7 +185,7 @@ func (e *serviceEngine) createArguments(group string, s *Service, fingerprint st
 
 // createArgumentsWith returns the create arguments for a service started as l.
 func (e *serviceEngine) createArgumentsWith(group string, s *Service, fingerprint string, l launch) []string {
-	args := serviceHead(group, s, fingerprint)
+	args := serviceHead(e.engine, group, s, fingerprint)
 	args = append(args, trustArguments(e.dir, s)...)
 	args = append(args, certArguments(e.dir, s)...)
 	if e.engine == DockerEngine {
