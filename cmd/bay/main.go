@@ -132,6 +132,8 @@ func dispatch(cmd string) error {
 		return serviceAction(m, cmd, flag.Args()[1:])
 	case "logs":
 		return logs(m, flag.Args()[1:])
+	case "tunnel":
+		return tunnel(m, flag.Args()[1:])
 	case "exec":
 		return execIn(m, flag.Args()[1:])
 	case "status":
@@ -313,6 +315,23 @@ func logs(m *stack.Machine, args []string) error {
 		return fmt.Errorf("logs needs exactly one service; this group has %d", len(targets))
 	}
 	return stack.Logs(targets[0].ContainerName, *follow, *tail, os.Stdout)
+}
+
+// tunnel publishes one served domain of the project at a public address:
+// bay tunnel <domain>.
+func tunnel(m *stack.Machine, args []string) error {
+	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
+		return usageError{"tunnel needs exactly one domain: bay tunnel <domain>"}
+	}
+	cfg, err := loadProject(m)
+	if err != nil {
+		return err
+	}
+	rt, err := newRuntime(m)
+	if err != nil {
+		return err
+	}
+	return rt.Tunnel(cfg, args[0], os.Stdout)
 }
 
 // exitStatus is the exit status of a command bay ran for the caller, which bay

@@ -128,6 +128,7 @@ bay brief --json                          # the contract, schemaVersion 1
 | `bay stop [service...]` | Stop services. The containers remain and can be started again. | change | nothing |
 | `bay restart [service...]` | Stop then start services. | change | nothing |
 | `bay logs [-f] [-n N] <service>` | Print one service's output. | read | nothing |
+| `bay tunnel <domain>` | Publish one served domain of this project at a public address, and print the address. | change | nothing |
 | `bay plan [--json]` | Print each service's name, port, domains and certificate paths as up will create them. | read | nothing |
 | `bay job add [-wait] [-key k] [-timeout d] <service> \| list [-peer name] \| show [-peer name] <id> \| logs [-f] [-peer name] <id> \| wait [-peer name] [-timeout d] <id> \| cancel <id> \| schedule \| unschedule` | Queue a project's job services and read how they ran. The machine runs one job at a time, oldest first. | change | nothing |
 | `bay exec [-u user] [-w dir] [-e KEY=VALUE] <service> <command...>` | Run a command in a service's running container and exit with its status. | change | nothing |

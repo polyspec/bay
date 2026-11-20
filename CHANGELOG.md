@@ -5,6 +5,12 @@ the day the change was made.
 
 ## 2026-11-20
 
+### A served domain is published at a public address by one command
+
+A served domain answered on this machine and on approved peers; a reader outside had no way to reach a running service, and the machine publishes one port to the network, the peer link. `bay tunnel <domain>` publishes one served domain: it creates `<project>-tunnel`, an internal service container of the project running the tunnel client `cloudflare/cloudflared:2026.11.1`, which holds one outbound connection to the tunnel service's edge and forwards to the routed service's own address, `<container>.bay.test:<port>`. The command prints the public address, waits up to a minute for it, ends the publication on a signal or the client's own end, and stops and removes its container on every path; `down`, `stop` and the next `up` of the project end it too. The machine opens no port. A domain with no route, a conflicted domain and another project's domain are refused, and a project with a publication running is refused a second one.
+
+Verification: `go test ./internal/stack -run 'TestTunnel' -count=1` passes and `make check` passes, against a stand-in engine; not run against the public tunnel service or a real container.
+
 ### A project names the engine that creates its containers
 
 Every project's containers were created on the first engine present, so on a machine with both engines the other one ran nothing of this tool's, and a project that needed it could not say so. A project now names its engine under `x-bay.engine` (`container` or `docker`). A value that names no engine is refused when the file is read, and a named engine that is not on this machine is refused before anything changes. A project that switches engines has the containers on the engine it left removed by its next `up`, because a domain is claimed once per machine and a container left there holds the claim. `down`, `stop` and an interrupted run's cleanup now read and remove a project's containers on every engine, so what a project left on another engine is taken down too.

@@ -142,6 +142,19 @@ func Commands() []Command {
 			Access:  Reads,
 		},
 		{
+			Name: "tunnel", Args: "<domain>",
+			Summary: "Publish one served domain of this project at a public address, and print the address.",
+			Effect: "Creates one container of this project that runs a tunnel client and forwards to the " +
+				"service's own address; the domain must be one the proxy serves for a running container " +
+				"of this project, and a project with a publication running is refused a second one. " +
+				"The command ends with a signal or with the client, stops and removes its container, " +
+				"and down, stop and the next up of the project end the publication the same way. " +
+				"The machine opens no port: the client holds one outbound connection. " +
+				"The image is fetched when the store lacks it; -no-pull refuses the fetch.",
+			Example: "bay tunnel web.shop.test",
+			Access:  Changes,
+		},
+		{
 			Name: "plan", Args: "[--json]",
 			Summary: "Print each service's name, port, domains and certificate paths as up will create them.",
 			Example: "bay plan --json",

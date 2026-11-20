@@ -18,6 +18,7 @@ verifies that this file matches the code.
 | `stop [service...]` | Stop services. The containers remain and can be started again. | change | No |
 | `restart [service...]` | Stop then start services. | change | No |
 | `logs [-f] [-n N] <service>` | Print one service's output. | read | No |
+| `tunnel <domain>` | Publish one served domain of this project at a public address, and print the address. | change | No |
 | `plan [--json]` | Print each service's name, port, domains and certificate paths as up will create them. | read | No |
 | `job add [-wait] [-key k] [-timeout d] <service> \| list [-peer name] \| show [-peer name] <id> \| logs [-f] [-peer name] <id> \| wait [-peer name] [-timeout d] <id> \| cancel <id> \| schedule \| unschedule` | Queue a project's job services and read how they ran. The machine runs one job at a time, oldest first. | change | No |
 | `exec [-u user] [-w dir] [-e KEY=VALUE] <service> <command...>` | Run a command in a service's running container and exit with its status. | change | No |
@@ -76,6 +77,10 @@ Stops containers and withdraws their routes.
 ### `restart`
 
 Recreates selected owned containers, including explicitly retried initializers, after preparing their dependencies; updates the proxy.
+
+### `tunnel`
+
+Creates one container of this project that runs a tunnel client and forwards to the service's own address; the domain must be one the proxy serves for a running container of this project, and a project with a publication running is refused a second one. The command ends with a signal or with the client, stops and removes its container, and down, stop and the next up of the project end the publication the same way. The machine opens no port: the client holds one outbound connection. The image is fetched when the store lacks it; -no-pull refuses the fetch.
 
 ### `job`
 

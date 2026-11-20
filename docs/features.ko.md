@@ -10,6 +10,7 @@
 
 | 기능 | 상태 | 근거 | 포함 |
 | --- | --- | --- | --- |
+| 제공되는 도메인을 명령 하나로 공개 주소에 게시한다 | 구현됨 | `go test ./internal/stack -run 'TestTunnel' -count=1` 통과: 게시는 라우팅된 컨테이너의 엔진에서 service의 network와 주소로 만들어지고, 공개 주소가 출력되며, client가 끝나면 컨테이너가 제거되고, route가 없는 도메인과 충돌된 도메인과 다른 프로젝트의 도메인은 거부되며, 실행 중인 게시는 두 번째를 거부한다. 공개 터널 서비스로는 실행하지 않았다 | 예 |
 | 프로젝트가 자신의 컨테이너를 만들 엔진을 지정한다 | 구현됨 | `go test ./internal/stack -run 'TestAProjectNamesItsEngine\|TestTheEngineKeyIsRead\|TestAProjectThatSwitchesEngines\|TestAProjectsContainersAreRead' -count=1` 통과: 있는 엔진을 지정하면 그 엔진으로 만들고, 이 머신에 없는 엔진은 오류이며, 엔진을 가리키지 않는 값은 읽기에서 거부되고, 전환은 옛 엔진의 컨테이너만 제거하며 프로젝트가 실행되는 엔진에는 아무것도 묻지 않고, 프로젝트의 컨테이너를 모든 엔진에서 읽는다. 실제 컨테이너로는 실행하지 않았다 | 예 |
 | 새 목록을 만드는 동안 DNS 질의에 컨테이너의 마지막 목록으로 답한다 | 구현됨 | `go test -race ./cmd/bayd -run 'TestIndex|TestRefresh'`: 끝나지 않는 목록으로 `TestIndexAnswersFromLastListWhileNewListRuns`가 변경 전에 `index waited for the new list for more than 100 ms`로 실패했고 변경 후 통과한다. 실패한 새 목록은 마지막 목록을 남기고, 새 목록은 마지막 목록을 바꾼다. 설치된 build는 `container`가 반환하지 않는 동안 질의 8개 중 8개에 답했다 | 예 |
 | 서비스의 `stop_grace_period`로 중지하고, down은 실행 중인 모든 컨테이너를 제거 전에 중지한다 | 구현됨 | `go test ./internal/stack -run 'TestStopGrace\|TestStopServicesPasses\|TestDownStopsEvery\|TestDownKeeps\|TestUnsetGrace'`이 교체의 초 단위 `--time`, stop의 기록된 label, down의 제거 전 중지, 실패한 중지가 컨테이너를 남기는 경우, 거부되는 잘못된 값을 검사한다. 이 장비에서 실제 컨테이너에 대해서는 실행하지 않았다 | 설치: `f310f36` |

@@ -161,6 +161,12 @@ browser
 Plain HTTP on port 80 returns 308 to the HTTPS address, except
 `/__bay/health`, which returns the configuration generation.
 
+A tunnel is a second request path, for a reader outside: `bay tunnel <domain>`
+forwards the public address a tunnel service hands out to the routed service
+container's own address, over one outbound connection the client holds. The
+machine opens no port, so rule 7 stands. [Tunnels](tunnels.md) state it in
+full.
+
 ## Routing state
 
 A proxy's configuration is generated from labels on running containers, not

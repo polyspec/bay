@@ -147,6 +147,11 @@ macOS의 머신 설정은 `/etc/resolver` 아래의 resolver 항목, 로그인 �
 80번 포트의 일반 HTTP는 HTTPS 주소로 308을 반환한다.
 `/__bay/health`는 예외이며 설정 generation을 반환한다.
 
+터널은 바깥의 읽는이를 위한 두 번째 요청 경로다. `bay tunnel <domain>`은
+터널 서비스가 내어 준 공개 주소를 라우팅된 service 컨테이너 자신의 주소로,
+client가 유지하는 나가는 연결 하나로 전달한다. 머신은 port를 열지 않으므로
+규칙 7은 그대로다. [터널](tunnels.ko.md)이 이를 전부 적는다.
+
 ## 라우팅 상태
 
 프록시 설정은 Compose 파일이 아니라 실행 중인 컨테이너의 라벨에서 생성한다.
